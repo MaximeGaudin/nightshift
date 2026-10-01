@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { MAX_PARALLEL, ensureDoneColumn, isDoneColumn, type Column, type ProjectSnapshot, type SkillInfo } from "../shared/types.ts";
 import { api } from "./api.ts";
-import { ColumnIcon, Icon } from "./icons.tsx";
+import { ColumnGlyph, Icon } from "./icons.tsx";
 import { ErrorBanner, Modal } from "./ui.tsx";
 
 /** Up/down chevron for the reorder buttons (icons.tsx has no arrow glyph). */
@@ -22,6 +22,21 @@ function Chevron({ up }: { up?: boolean }) {
     >
       <path d={up ? "M3.5 8.75L7 5.25l3.5 3.5" : "M3.5 5.25L7 8.75l3.5-3.5"} />
     </svg>
+  );
+}
+
+const EMOJI_TITLE = "Emoji optionnel — tapez ou collez-en un (macOS : Ctrl+Cmd+Espace). Vide = icône de type.";
+
+function EmojiInput({ value, onChange }: { value: string | undefined; onChange: (v: string) => void }) {
+  return (
+    <input
+      className="col-emoji-input"
+      aria-label="Emoji"
+      placeholder="·"
+      title={EMOJI_TITLE}
+      value={value ?? ""}
+      onChange={(e) => onChange(e.target.value)}
+    />
   );
 }
 
@@ -104,7 +119,7 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
       </label>
       <p className="hint">
         Une colonne <strong>skill</strong> exécute le skill choisi sur chaque fiche qui y arrive. Chaque colonne skill a sa propre
-        limite d'agents en parallèle (1 par défaut), sous le plafond global des réglages. Le skill peut modifier la fiche puis l'envoyer à la colonne suivante.
+        limite d'agents en parallèle (1 par défaut), sous le plafond global des réglages. Le skill peut modifier la fiche puis l'envoyer à la colonne suivante. Le champ emoji (optionnel) remplace l'icône de type de la colonne.
       </p>
       <ol className="col-editor">
         {cols.map((c, i) =>
@@ -113,6 +128,7 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
               <div className="col-editor-row">
                 <span className="order">{i + 1}</span>
                 <Icon name="lock" />
+                <EmojiInput value={c.emoji} onChange={(v) => patch(i, { emoji: v })} />
                 <span className="locked-name">Done</span>
                 <span className="locked-label">Colonne système</span>
               </div>
@@ -121,7 +137,8 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
           <li key={c.key} className={c.type}>
             <div className="col-editor-row">
               <span className="order">{i + 1}</span>
-              <ColumnIcon type={c.type} />
+              <ColumnGlyph col={c} />
+              <EmojiInput value={c.emoji} onChange={(v) => patch(i, { emoji: v })} />
               <input aria-label="Nom" value={c.name} onChange={(e) => patch(i, { name: e.target.value })} />
               <select aria-label="Type" value={c.type} onChange={(e) => patch(i, { type: e.target.value as Column["type"] })}>
                 <option value="inert">Inerte</option>
