@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { api } from "./api.ts";
+import { Button } from "./components/ui/button.tsx";
+import { Textarea } from "./components/ui/textarea.tsx";
 
 export function FeedbackForm({
   project,

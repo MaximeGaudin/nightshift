@@ -1,13 +1,5 @@
 import { Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
 import {
   type Board,
   type Card,
@@ -23,8 +15,16 @@ import { api, useServerEvents } from "./api.ts";
 import { SequenceBadge } from "./CardTile.tsx";
 import { attempt, deleteThenClose, sendThenClear } from "./cardActions.ts";
 import { AppDialog } from "./components/app-dialog.tsx";
+import { Alert, AlertDescription } from "./components/ui/alert.tsx";
+import { Button } from "./components/ui/button.tsx";
+import { Input } from "./components/ui/input.tsx";
+import { Label } from "./components/ui/label.tsx";
+import { Skeleton } from "./components/ui/skeleton.tsx";
+import { Tabs, TabsList, TabsTrigger } from "./components/ui/tabs.tsx";
+import { Textarea } from "./components/ui/textarea.tsx";
 import { FeedbackForm } from "./FeedbackForm.tsx";
 import { StatusIcon } from "./icons.tsx";
+import { cn } from "./lib/utils.ts";
 import { Markdown } from "./markdown.tsx";
 import { NextColumnButton } from "./NextColumnButton.tsx";
 import { notifyError } from "./notify.ts";

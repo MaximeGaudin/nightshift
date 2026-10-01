@@ -1,12 +1,12 @@
 import { Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import type { Card, LogLine } from "../shared/types.ts";
 import { safeHttpUrl } from "../shared/urls.ts";
 import { api, useServerEvents } from "./api.ts";
+import { Button } from "./components/ui/button.tsx";
+import { Input } from "./components/ui/input.tsx";
+import { Label } from "./components/ui/label.tsx";
+import { Textarea } from "./components/ui/textarea.tsx";
 import { notifyError } from "./notify.ts";
 
 /** Runs the card's test command (set by an agent, editable here) and streams its output. */
