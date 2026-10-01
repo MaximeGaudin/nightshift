@@ -1,3 +1,7 @@
+[install]
+# bun-plugin-tailwind peer-depends on "bun"; installing it would shadow the runtime in `bun run` scripts.
+peer = false
+
 [serve.static]
 plugins = ["bun-plugin-tailwind"]
 
