@@ -2,8 +2,11 @@ import { randomBytes } from "node:crypto";
 import { cpSync, existsSync, lstatSync, mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-/** Template skills shipped with Nightshift, copied into every new project. Overridable for tests. */
-export const TEMPLATE_SKILLS_DIR = process.env.NIGHTSHIFT_TEMPLATE_SKILLS ?? join(import.meta.dir, "..", "..", "skills");
+/**
+ * Template skills shipped with Nightshift, copied into every new project. They live in this repository's own
+ * `.claude/skills`, so the same files are the skills Nightshift runs on itself. Overridable for tests.
+ */
+export const TEMPLATE_SKILLS_DIR = process.env.NIGHTSHIFT_TEMPLATE_SKILLS ?? join(import.meta.dir, "..", "..", ".claude", "skills");
 
 export interface TemplateCopyResult {
   copied: string[];

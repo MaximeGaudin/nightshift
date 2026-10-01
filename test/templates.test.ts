@@ -3,7 +3,7 @@ import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileS
 import { join } from "node:path";
 import { type ChildServer, removeTempDirs, startChildServer, tempDir } from "./helpers.ts";
 
-const REPO_SKILLS = join(import.meta.dir, "..", "skills");
+const REPO_SKILLS = join(import.meta.dir, "..", ".claude", "skills");
 const NAMES = ["nightshift-grill", "nightshift-implement", "nightshift-merge", "nightshift-plan", "nightshift-review"];
 
 let srv: ChildServer;

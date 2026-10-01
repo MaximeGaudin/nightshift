@@ -72,7 +72,7 @@ Errors are `{ "error": "..." }`: 400 for an invalid body, 404 when the project h
 
 ## Template skills
 
-Nightshift ships five template skills in the repository `skills/` folder: `nightshift-grill`, `nightshift-plan`, `nightshift-implement`, `nightshift-review` and `nightshift-merge`.
+Nightshift ships five template skills in the repository's own `.claude/skills/` folder: `nightshift-grill`, `nightshift-plan`, `nightshift-implement`, `nightshift-review` and `nightshift-merge`. They are both the skills Nightshift runs on its own board and the templates for other projects: edit them there.
 
 - When a new project gets its `nightshift.json` (the first time you open a folder), they are copied into `<project>/.claude/skills/`. A skill folder that already exists is never overwritten, and existing projects are left untouched.
 - Project skills shadow the skills in `~/.claude/skills` (`NIGHTSHIFT_USER_SKILLS` overrides that user directory). Delete `<project>/.claude/skills/<name>` to fall back to your user skill of the same name.
@@ -124,7 +124,7 @@ Scripts: `bun run lint` (Biome), `bun run format`, `bun run typecheck`, `bun tes
 - `src/server/`: `store.ts` (board file), `orchestrator.ts` (queue, `claude` processes, questions), `skills.ts`, `settings.ts`, `server.ts` (HTTP + WebSocket API, serves the UI).
 - `src/web/`: React UI bundled by Bun.
 - `src/web/i18n/`: in-house translation layer, `en/` and `fr/` message files per namespace.
-- `skills/`: template skills copied into new projects.
+- `.claude/skills/`: the skills Nightshift runs on its own board, also the templates copied into new projects.
 - `docs/assets/`: README banner and screenshot.
 - `docs/logo/`: logo source.
 - `test/`: tests, with `fake-claude.ts` standing in for the CLI.

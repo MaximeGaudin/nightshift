@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const SKILLS = join(import.meta.dir, "..", "skills");
+const SKILLS = join(import.meta.dir, "..", ".claude", "skills");
 const dirs = readdirSync(SKILLS).filter((d) => d.startsWith("nightshift-"));
 
 function stepsSection(md: string): string {
