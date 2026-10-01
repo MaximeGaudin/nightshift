@@ -4,7 +4,7 @@ import type { LogLine, ProjectSnapshot, ServerEvent, Settings, SkillInfo } from 
 async function call<T = any>(method: string, url: string, body?: unknown): Promise<T> {
   const res = await fetch(url, {
     method,
-    headers: body ? { "content-type": "application/json" } : undefined,
+    headers: body || method === "POST" || method === "PUT" || method === "PATCH" ? { "content-type": "application/json" } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
   const data = await res.json().catch(() => ({}));

@@ -1,7 +1,7 @@
 import { readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import type { ServerWebSocket } from "bun";
+import type { Server, ServerWebSocket } from "bun";
 import {
   type Card,
   type Column,
@@ -13,6 +13,7 @@ import {
   type ServerEvent,
 } from "../shared/types.ts";
 import index from "../web/index.html";
+import { checkRequest } from "./guard.ts";
 import { Orchestrator } from "./orchestrator.ts";
 import { removeScreenshots, resolveScreenshot } from "./screenshots.ts";
 import { getSettings, updateSettings } from "./settings.ts";
@@ -41,6 +42,8 @@ export function startServer({ port, development, agents = true }: { port: number
   const h =
     (fn: (body: any, url: URL, req: Request & { params: Record<string, string> }) => unknown) =>
     async (req: Request & { params: Record<string, string> }) => {
+      const denied = checkRequest(req, server.port as number);
+      if (denied) return denied;
       try {
         const url = new URL(req.url);
         const body = req.method === "GET" || req.method === "DELETE" ? {} : await req.json().catch(() => ({}));
@@ -53,8 +56,9 @@ export function startServer({ port, development, agents = true }: { port: number
 
   const project = (body: any, url: URL) => orch.get(body.project ?? url.searchParams.get("project") ?? "");
 
-  const server = Bun.serve({
+  const server: Server<undefined> = Bun.serve({
     port,
+    hostname: "127.0.0.1",
     development: development ? { hmr: true, console: true } : false,
     routes: {
       "/": index,
@@ -74,7 +78,13 @@ export function startServer({ port, development, agents = true }: { port: number
       "/api/fs": {
         GET: h((_b, url) => {
           const dir = resolve(url.searchParams.get("dir") || homedir());
-          const dirs = readdirSync(dir)
+          let entries: string[];
+          try {
+            entries = readdirSync(dir);
+          } catch {
+            throw new Error("Cannot read directory");
+          }
+          const dirs = entries
             .filter((n) => !n.startsWith("."))
             .filter((n) => {
               try {
@@ -232,7 +242,8 @@ export function startServer({ port, development, agents = true }: { port: number
         PUT: h((b, url) => saveSkill(project(b, url).path, String(b.name), String(b.content))),
       },
 
-      "/ws": (req, srv) => (srv.upgrade(req) ? undefined : new Response("Upgrade failed", { status: 400 })),
+      "/ws": (req, srv) =>
+        checkRequest(req, server.port as number) ?? (srv.upgrade(req) ? undefined : new Response("Upgrade failed", { status: 400 })),
     },
     fetch() {
       return new Response("Not found", { status: 404 });
