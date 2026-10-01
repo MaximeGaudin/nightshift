@@ -24,7 +24,7 @@ import { COLUMN_KEYS, newId, unknownFields } from "./store.ts";
 export function startServer({ port, development, agents = true }: { port: number; development?: boolean; agents?: boolean }) {
   // `bun --hot` re-runs this module on every change. Reuse the orchestrator from the previous run:
   // a new one would schedule every card a second time next to the old one, which keeps its watchers.
-  const g = globalThis as { __nightshift?: { orch: Orchestrator; sockets: Set<ServerWebSocket<unknown>> } };
+  const g = globalThis as { __nightshift?: { orch: Orchestrator; sockets: Set<ServerWebSocket<unknown>>; opened: Set<string> } };
   if (!g.__nightshift) {
     const orch = new Orchestrator({ agents });
     const sockets = new Set<ServerWebSocket<unknown>>();
@@ -32,9 +32,11 @@ export function startServer({ port, development, agents = true }: { port: number
       const msg = JSON.stringify(e);
       for (const ws of sockets) ws.send(msg);
     });
-    g.__nightshift = { orch, sockets };
+    g.__nightshift = { orch, sockets, opened: new Set() };
   }
   const { orch, sockets } = g.__nightshift;
+  // Projects opened through POST /api/projects/open: the only ones other routes may address.
+  const opened = (g.__nightshift.opened ??= new Set());
 
   const json = (data: unknown, status = 200) => Response.json(data, { status });
   const fail = (e: any) => json({ error: e?.message ?? String(e) }, 400);
@@ -52,6 +54,15 @@ export function startServer({ port, development, agents = true }: { port: number
     return data;
   };
 
+  /** DELETE may carry a body with the project; a bad one is ignored (the query string still works). */
+  const lenientBody = (text: string): any => {
+    try {
+      return parseBody(text);
+    } catch {
+      return {};
+    }
+  };
+
   /** Wraps a handler: parses the JSON body and turns thrown errors into 400s. */
   const h =
     (fn: (body: any, url: URL, req: Request & { params: Record<string, string> }) => unknown) =>
@@ -60,7 +71,7 @@ export function startServer({ port, development, agents = true }: { port: number
       if (denied) return denied;
       try {
         const url = new URL(req.url);
-        const body = req.method === "GET" || req.method === "DELETE" ? {} : parseBody(await req.text());
+        const body = req.method === "GET" ? {} : req.method === "DELETE" ? lenientBody(await req.text()) : parseBody(await req.text());
         const out = await fn(body, url, req);
         return out instanceof Response ? out : json(out ?? { ok: true });
       } catch (e) {
@@ -68,7 +79,13 @@ export function startServer({ port, development, agents = true }: { port: number
       }
     };
 
-  const project = (body: any, url: URL) => orch.get(body.project ?? url.searchParams.get("project") ?? "");
+  const project = (body: any, url: URL) => {
+    const raw = body.project ?? url.searchParams.get("project");
+    if (typeof raw !== "string" || !raw) throw new Error("Missing project");
+    const path = resolve(raw);
+    if (!opened.has(path)) throw new Error("Unknown project");
+    return orch.get(path);
+  };
 
   const server: Server<undefined> = Bun.serve({
     port,
@@ -83,7 +100,11 @@ export function startServer({ port, development, agents = true }: { port: number
       },
 
       "/api/projects/open": {
-        POST: h((b) => orch.snapshot(orch.open(String(b.path ?? "")))),
+        POST: h((b) => {
+          const p = orch.open(String(b.path ?? ""));
+          opened.add(p.path);
+          return orch.snapshot(p);
+        }),
       },
       "/api/project": {
         GET: h((_b, url) => orch.snapshot(project({}, url))),

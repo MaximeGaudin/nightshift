@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { type ChildServer, startChildServer } from "./helpers.ts";
 
@@ -33,4 +33,18 @@ test("routes-invalid-json non-object bodies are refused, empty body is accepted"
   // Empty body is {}: the handler runs.
   expect((await raw("/api/settings", "PUT", "")).status).toBe(200);
   expect((await snapshot()).board.cards).toHaveLength(0);
+});
+
+test("routes-unknown-project unknown or missing project is refused and writes nothing", async () => {
+  const other = mkdtempSync(join(srv.tmp, "other-"));
+  const unknown = await srv.call(`/api/project?project=${encodeURIComponent(other)}`);
+  expect(unknown.status).toBe(400);
+  expect((await unknown.json()).error).toBe("Unknown project");
+  const write = await srv.call("/api/cards", { body: { project: other, title: "x" } });
+  expect(write.status).toBe(400);
+  const missing = await srv.call("/api/project");
+  expect(missing.status).toBe(400);
+  expect((await missing.json()).error).toBe("Missing project");
+  expect(existsSync(join(other, "nightshift.json"))).toBe(false);
+  expect(existsSync(join(srv.tmp, "nightshift.json"))).toBe(false);
 });
