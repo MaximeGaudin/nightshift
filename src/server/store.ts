@@ -223,6 +223,8 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
 export class Project {
   readonly path: string;
   readonly file: string;
+  /** True only when this instance wrote a brand-new board file. */
+  readonly created: boolean;
   board!: Board;
   private listeners = new Set<() => void>();
   private watcher: FSWatcher | null = null;
@@ -234,11 +236,12 @@ export class Project {
   constructor(path: string) {
     this.path = path;
     this.file = join(path, BOARD_FILE);
-    if (existsSync(this.file)) {
-      this.read();
-    } else {
+    this.created = !existsSync(this.file);
+    if (this.created) {
       this.board = defaultBoard(basename(path));
       this.write();
+    } else {
+      this.read();
     }
     this.watch();
   }

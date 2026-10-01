@@ -26,6 +26,7 @@ import { SequenceController } from "./sequence.ts";
 import { getSettings, NIGHTSHIFT_HOME, onSettingsChange, rememberProject } from "./settings.ts";
 import { findSkill } from "./skills.ts";
 import { isRaw, needsRun, Project, type Raw } from "./store.ts";
+import { copyTemplateSkills } from "./templates.ts";
 
 /** One block of an assistant message in `claude -p --output-format stream-json` (only what Nightshift reads). */
 interface StreamBlock {
@@ -243,6 +244,8 @@ export function resolveModel(column: Column, settings: Settings): string | undef
 
 export class Orchestrator {
   private projects = new Map<string, Project>();
+  /** Template skills that could not be copied into a new project, reported once by the next open response. */
+  private templateFailures = new Map<string, string[]>();
   private jobs = new Map<string, Job>();
   private logs = new Map<string, LogLine[]>();
   private listeners = new Set<(e: ServerEvent) => void>();
@@ -315,12 +318,23 @@ export class Orchestrator {
     for (const l of this.listeners) l(e);
   }
 
+  /** Returns the template skills not copied for this project, once: the list is cleared by the call. */
+  takeTemplateFailures(path: string): string[] {
+    const failed = this.templateFailures.get(path) ?? [];
+    this.templateFailures.delete(path);
+    return failed;
+  }
+
   open(rawPath: string): Project {
     const path = resolve(rawPath.replace(/^~(?=\/|$)/, process.env.HOME ?? "~"));
     let p = this.projects.get(path);
     if (p) return p;
     if (!existsSync(path)) throw new Error(`Folder not found: ${path}`);
     p = new Project(path);
+    if (p.created) {
+      const { failed } = copyTemplateSkills(path);
+      if (failed.length > 0) this.templateFailures.set(path, failed);
+    }
     if (this.agents) this.acquireLock(p);
     this.projects.set(path, p);
     p.onChange(() => {

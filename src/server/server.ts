@@ -131,7 +131,8 @@ export function startServer({ port, development, agents = true }: { port: number
         POST: h((b) => {
           const p = orch.open(String(b.path ?? ""));
           opened.add(p.path);
-          return orch.snapshot(p);
+          const failed = orch.takeTemplateFailures(p.path);
+          return failed.length > 0 ? { ...orch.snapshot(p), templateSkillsNotCopied: failed } : orch.snapshot(p);
         }),
       },
       "/api/project": {
