@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, renameSync, statSync, watch, writeFileSync, type FSWatcher } from "node:fs";
 import { basename, join } from "node:path";
-import { normalizeColumnParallel, type Board, type Card, type Column, type ColumnType, type HistoryEntry } from "../shared/types.ts";
+import { doneColumn, ensureDoneColumn, normalizeColumnParallel, type Board, type Card, type Column, type ColumnType, type HistoryEntry } from "../shared/types.ts";
 
 export const BOARD_FILE = "nightshift.json";
 
@@ -16,7 +16,7 @@ export function defaultBoard(name: string): Board {
     name,
     columns: [
       { id: newId("col"), name: "Backlog", type: "inert" },
-      { id: newId("col"), name: "Done", type: "inert" },
+      doneColumn(),
     ],
     cards: [],
     nextCardNumber: 1,
@@ -61,6 +61,12 @@ export function numberingChanged(raw: any, board: Board): boolean {
   return board.cards.some((c) => rawById.get(c.id)?.number !== c.number);
 }
 
+/** True when normalization had to repair the raw columns (missing, duplicated or misplaced Done column). */
+export function doneColumnChanged(raw: any, board: Board): boolean {
+  const rawCols: any[] = Array.isArray(raw?.columns) ? raw.columns : [];
+  return JSON.stringify(rawCols) !== JSON.stringify(board.columns);
+}
+
 export const COLUMN_KEYS = ["id", "name", "type", "skill", "instructions", "model", "maxParallel"];
 const CARD_KEYS = ["id", "number", "title", "description", "columnId", "createdAt", "updatedAt", "enteredColumnAt", "lastRun", "pendingAnswer", "test", "history"];
 const BOARD_KEYS = ["version", "name", "columns", "cards", "nextCardNumber"];
@@ -96,6 +102,7 @@ export function normalizeBoard(raw: any, fallbackName: string): Board {
         })
     : [];
   if (columns.length === 0) columns.push(...defaultBoard(fallbackName).columns);
+  columns.splice(0, columns.length, ...ensureDoneColumn(columns));
   const colIds = new Set(columns.map((c) => c.id));
   const rawCards: any[] = Array.isArray(raw?.cards) ? raw.cards.filter((c: any) => c && typeof c.id === "string") : [];
   const cards: Card[] = rawCards.map((c: any) => ({
@@ -148,7 +155,7 @@ export class Project {
   private read() {
     const raw = JSON.parse(readFileSync(this.file, "utf8"));
     this.board = normalizeBoard(raw, basename(this.path));
-    if (numberingChanged(raw, this.board)) this.write();
+    if (numberingChanged(raw, this.board) || doneColumnChanged(raw, this.board)) this.write();
   }
 
   private write() {

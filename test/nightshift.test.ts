@@ -14,10 +14,10 @@ process.env.FAKE_ARGS_LOG = argsLog;
 
 const { parseFrontmatter, listSkills, createSkill } = await import("../src/server/skills.ts");
 const { splitArgs, resolveModel } = await import("../src/server/orchestrator.ts");
-const { needsRun, normalizeBoard, numberingChanged, Project } = await import("../src/server/store.ts");
+const { defaultBoard, needsRun, normalizeBoard, numberingChanged, Project } = await import("../src/server/store.ts");
 const { startServer } = await import("../src/server/server.ts");
 const { updateSettings } = await import("../src/server/settings.ts");
-const { columnMaxParallel } = await import("../src/shared/types.ts");
+const { columnMaxParallel, DONE_COLUMN_ID } = await import("../src/shared/types.ts");
 
 test("parseFrontmatter handles folded descriptions", () => {
   const fm = parseFrontmatter("---\nname: x\ndescription: >\n  hello\n  world\n---\nbody");
@@ -782,3 +782,80 @@ test(
   },
   10000,
 );
+
+// ---- system Done column -------------------------------------------------------
+
+test("done column: defaultBoard is Backlog then col_done", () => {
+  const cols = defaultBoard("x").columns;
+  expect(cols.map((c) => c.name)).toEqual(["Backlog", "Done"]);
+  expect(cols[1]).toEqual({ id: DONE_COLUMN_ID, name: "Done", type: "inert" });
+});
+
+test("done column: normalizeBoard keeps a user column named Done and puts col_done after it", () => {
+  const b = normalizeBoard({ columns: [{ id: "u", name: "Done", type: "inert" }, { id: "w", name: "W", type: "inert" }], cards: [] }, "x");
+  expect(b.columns.map((c) => c.id)).toEqual(["u", "w", DONE_COLUMN_ID]);
+  expect(b.columns[0]!.name).toBe("Done");
+});
+
+test("done column: load writes col_done back once, then leaves the file alone", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "ns-done-"));
+  const file = join(dir, "nightshift.json");
+  writeFileSync(file, JSON.stringify({ version: 1, name: "d", columns: [{ id: "a", name: "A", type: "inert" }], cards: [], nextCardNumber: 1 }));
+  new Project(dir).close();
+  const onDisk = JSON.parse(readFileSync(file, "utf8"));
+  expect(onDisk.columns.map((c: any) => c.id)).toEqual(["a", DONE_COLUMN_ID]);
+  const before = { text: readFileSync(file, "utf8"), mtime: statSync(file).mtimeMs };
+  await Bun.sleep(20);
+  new Project(dir).close();
+  expect(readFileSync(file, "utf8")).toBe(before.text);
+  expect(statSync(file).mtimeMs).toBe(before.mtime);
+});
+
+test("done column: PUT /api/board repairs col_done and refuses a board without user columns", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "ns-doneput-"));
+  const snap = await post("/api/projects/open", { path: dir });
+  const [backlog] = snap.board.columns;
+  const card = await post("/api/cards", { project: dir, columnId: DONE_COLUMN_ID, title: "finished" });
+
+  const omitted = await post("/api/board", { project: dir, columns: [{ id: backlog.id, name: "Backlog", type: "inert" }] }, "PUT");
+  expect(omitted.error).toBeUndefined();
+  expect(omitted.board.columns.map((c: any) => c.id)).toEqual([backlog.id, DONE_COLUMN_ID]);
+
+  const renamed = await post(
+    "/api/board",
+    { project: dir, columns: [{ id: DONE_COLUMN_ID, name: "Shipped", type: "skill", skill: "enrich" }, { id: backlog.id, name: "Backlog", type: "inert" }] },
+    "PUT",
+  );
+  expect(renamed.error).toBeUndefined();
+  const last = renamed.board.columns.at(-1);
+  expect(renamed.board.columns.map((c: any) => c.id)).toEqual([backlog.id, DONE_COLUMN_ID]);
+  expect(last).toEqual({ id: DONE_COLUMN_ID, name: "Done", type: "inert" });
+  expect(renamed.board.cards.find((c: any) => c.id === card.id).columnId).toBe(DONE_COLUMN_ID);
+
+  const alone = await post("/api/board", { project: dir, columns: [{ id: DONE_COLUMN_ID, name: "Done", type: "inert" }] }, "PUT");
+  expect(alone.error).toBe("A board needs at least one column");
+});
+
+test("done column: next from the last user column lands in col_done with no run and no attention", async () => {
+  const b = await attentionBoard([{ name: "Work", type: "skill", skill: "enrich" }]);
+  try {
+    const [work] = b.cols;
+    const runs = argsEntries().length;
+    const { id } = await post("/api/cards", { project: b.dir, columnId: work.id, title: "go" });
+    await waitFor(async () => (await b.card(id))?.columnId === DONE_COLUMN_ID && (await b.idle(id)));
+    await Bun.sleep(150);
+    expect(argsEntries().length).toBe(runs + 1);
+    expect(b.forCard(id)).toEqual([]);
+    expect((await b.card(id)).lastRun.columnId).toBe(work.id);
+  } finally {
+    b.stop();
+  }
+});
+
+test("done column: nextColumn from col_done is undefined", () => {
+  const dir = mkdtempSync(join(tmpdir(), "ns-donenext-"));
+  const p = new Project(dir);
+  p.close();
+  expect(p.nextColumn(DONE_COLUMN_ID)).toBeUndefined();
+  expect(p.nextColumn(p.board.columns[0]!.id)!.id).toBe(DONE_COLUMN_ID);
+});

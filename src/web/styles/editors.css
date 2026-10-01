@@ -95,3 +95,8 @@ textarea.code { font: var(--fs-md)/1.55 var(--font-mono); padding: var(--sp-4); 
 /* Per-column model and parallelism fields. */
 .col-model { flex-direction: row; align-items: center; gap: var(--sp-3); margin-left: 26px; }
 .col-model input { flex: 0 1 260px; }
+
+/* Locked system column (Done). */
+.col-editor li.locked { opacity: .85; }
+.col-editor-row .locked-name { font-weight: 500; }
+.col-editor-row .locked-label { color: var(--muted); font-size: var(--fs-sm); }

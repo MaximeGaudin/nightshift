@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import type { Subprocess } from "bun";
 import { spawn, type ChildProcess } from "node:child_process";
 import type { AttentionKind, Board, Card, Column, LiveStatus, LogLine, ProjectSnapshot, RunStatus, ServerEvent, Settings } from "../shared/types.ts";
-import { cardRef, columnMaxParallel } from "../shared/types.ts";
+import { cardRef, columnMaxParallel, isDoneColumn } from "../shared/types.ts";
 import { getSettings, NIGHTSHIFT_HOME, onSettingsChange, rememberProject } from "./settings.ts";
 import { needsRun, Project } from "./store.ts";
 import { findSkill } from "./skills.ts";
@@ -561,7 +561,7 @@ export class Orchestrator {
       if (target && target.id !== card.columnId) {
         p.moveCard(board, card.id, target.id, undefined, "Agent");
         this.log(p, job.cardId, "info", `Moved to "${target.name}".`);
-        if (target.type === "inert") attention = "inert";
+        if (target.type === "inert" && !isDoneColumn(target)) attention = "inert";
       }
     });
     if (attention) this.broadcast({ type: "attention", project: p.path, cardId: job.cardId, kind: attention });

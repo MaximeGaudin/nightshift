@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { MAX_PARALLEL, type Column, type ProjectSnapshot, type SkillInfo } from "../shared/types.ts";
+import { MAX_PARALLEL, ensureDoneColumn, isDoneColumn, type Column, type ProjectSnapshot, type SkillInfo } from "../shared/types.ts";
 import { api } from "./api.ts";
 import { ColumnIcon, Icon } from "./icons.tsx";
 import { ErrorBanner, Modal } from "./ui.tsx";
@@ -37,7 +37,7 @@ function clampParallel(raw: string): number | undefined {
 
 export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClose: () => void }) {
   const [name, setName] = useState(snap.board.name);
-  const [cols, setCols] = useState<Draft[]>(snap.board.columns.map((c) => ({ ...c, key: c.id })));
+  const [cols, setCols] = useState<Draft[]>(() => ensureDoneColumn(snap.board.columns).map((c) => ({ ...c, key: c.id })));
   const [skills, setSkills] = useState<SkillInfo[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -48,6 +48,8 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
   const patch = (i: number, p: Partial<Column>) => setCols((cs) => cs.map((c, j) => (j === i ? { ...c, ...p } : c)));
   const move = (i: number, d: number) =>
     setCols((cs) => {
+      const target = i + d;
+      if (isDoneColumn(cs[i]!) || target < 0 || target >= cs.length - 1) return cs;
       const next = [...cs];
       const [c] = next.splice(i, 1);
       next.splice(i + d, 0, c!);
@@ -78,7 +80,11 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
         <>
           <button
             onClick={() =>
-              setCols((cs) => [...cs, { id: "", key: crypto.randomUUID(), name: "Nouvelle colonne", type: "inert" }])
+              setCols((cs) => [
+                ...cs.slice(0, -1),
+                { id: "", key: crypto.randomUUID(), name: "Nouvelle colonne", type: "inert" },
+                cs[cs.length - 1]!,
+              ])
             }
           >
             <Icon name="plus" /> Colonne
@@ -101,7 +107,17 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
         limite d'agents en parallèle (1 par défaut), sous le plafond global des réglages. Le skill peut modifier la fiche puis l'envoyer à la colonne suivante.
       </p>
       <ol className="col-editor">
-        {cols.map((c, i) => (
+        {cols.map((c, i) =>
+          isDoneColumn(c) ? (
+            <li key={c.key} className="locked">
+              <div className="col-editor-row">
+                <span className="order">{i + 1}</span>
+                <Icon name="lock" />
+                <span className="locked-name">Done</span>
+                <span className="locked-label">Colonne système</span>
+              </div>
+            </li>
+          ) : (
           <li key={c.key} className={c.type}>
             <div className="col-editor-row">
               <span className="order">{i + 1}</span>
@@ -132,7 +148,7 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
               <button className="icon-btn" disabled={i === 0} onClick={() => move(i, -1)} aria-label="Monter">
                 <Chevron up />
               </button>
-              <button className="icon-btn" disabled={i === cols.length - 1} onClick={() => move(i, 1)} aria-label="Descendre">
+              <button className="icon-btn" disabled={i >= cols.length - 2} onClick={() => move(i, 1)} aria-label="Descendre">
                 <Chevron />
               </button>
               <button
@@ -180,7 +196,8 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
               </>
             )}
           </li>
-        ))}
+          ),
+        )}
       </ol>
       <datalist id="column-models">
         {["fable", "opus", "sonnet", "haiku"].map((m) => (

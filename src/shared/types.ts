@@ -102,6 +102,32 @@ export function normalizeColumnParallel(type: ColumnType, raw: unknown): number 
   return Math.min(n, MAX_PARALLEL);
 }
 
+export const DONE_COLUMN_ID = "col_done";
+export const DONE_COLUMN_NAME = "Done";
+
+/** The canonical Done column. */
+export function doneColumn(): Column {
+  return { id: DONE_COLUMN_ID, name: DONE_COLUMN_NAME, type: "inert" };
+}
+
+export function isDoneColumn(colOrId: Pick<Column, "id"> | string): boolean {
+  return (typeof colOrId === "string" ? colOrId : colOrId.id) === DONE_COLUMN_ID;
+}
+
+/**
+ * Returns columns with exactly one Done column, last. Pure and idempotent.
+ * Extra unknown fields of the first existing Done column are kept; skill fields are dropped.
+ */
+export function ensureDoneColumn(columns: Column[]): Column[] {
+  const existing = columns.find(isDoneColumn);
+  const done: Column = { ...(existing ?? {}), ...doneColumn() };
+  delete done.skill;
+  delete done.instructions;
+  delete done.model;
+  delete done.maxParallel;
+  return [...columns.filter((c) => !isDoneColumn(c)), done];
+}
+
 /** Values accepted by `claude --permission-mode`. */
 export const PERMISSION_MODES = ["auto", "acceptEdits", "dontAsk", "bypassPermissions", "manual", "plan"] as const;
 export type PermissionMode = (typeof PERMISSION_MODES)[number];

@@ -3,7 +3,7 @@ import { dirname, join, resolve } from "node:path";
 import { homedir } from "node:os";
 import type { ServerWebSocket } from "bun";
 import index from "../web/index.html";
-import { normalizeColumnParallel, type Column, type ColumnType, type ServerEvent } from "../shared/types.ts";
+import { ensureDoneColumn, isDoneColumn, normalizeColumnParallel, type Column, type ColumnType, type ServerEvent } from "../shared/types.ts";
 import { Orchestrator } from "./orchestrator.ts";
 import { getSettings, updateSettings } from "./settings.ts";
 import { COLUMN_KEYS, newId, unknownFields } from "./store.ts";
@@ -85,7 +85,7 @@ export function startServer({ port, development, agents = true }: { port: number
           p.mutate((board) => {
             if (typeof b.name === "string" && b.name.trim()) board.name = b.name.trim();
             if (Array.isArray(b.columns)) {
-              const cols: Column[] = b.columns.map((c: any) => {
+              const userCols: Column[] = b.columns.map((c: any) => {
                 const type: ColumnType = c.type === "skill" ? "skill" : "inert";
                 const maxParallel = normalizeColumnParallel(type, c.maxParallel);
                 return {
@@ -99,7 +99,8 @@ export function startServer({ port, development, agents = true }: { port: number
                   ...(maxParallel !== undefined ? { maxParallel } : {}),
                 };
               });
-              if (cols.length === 0) throw new Error("A board needs at least one column");
+              if (userCols.filter((c) => !isDoneColumn(c)).length === 0) throw new Error("A board needs at least one column");
+              const cols = ensureDoneColumn(userCols);
               const ids = new Set(cols.map((c) => c.id));
               const orphan = board.cards.find((c) => !ids.has(c.columnId));
               if (orphan) throw new Error(`Column still holds cards (e.g. "${orphan.title}"): move them first`);

@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { cardRef, columnMaxParallel, type Card, type Column, type LiveStatus, type ProjectSnapshot } from "../shared/types.ts";
+import { cardRef, columnMaxParallel, isDoneColumn, DONE_COLUMN_ID, type Card, type Column, type LiveStatus, type ProjectSnapshot } from "../shared/types.ts";
 import { api, useServerEvents, useSettings } from "./api.ts";
 import { CardModal } from "./CardModal.tsx";
 import { CompactColumnBand, compactColumnTitle, isCompactColumn } from "./compactColumn.tsx";
+import { DoneColumn } from "./DoneColumn.tsx";
+import { readDoneCollapsed, writeDoneCollapsed } from "./doneColumn.ts";
 import { ColumnsEditor } from "./ColumnsEditor.tsx";
 import { ProjectPicker } from "./ProjectPicker.tsx";
 import { SettingsModal } from "./SettingsModal.tsx";
@@ -177,16 +179,59 @@ function Board({
   const [drop, setDrop] = useState<{ col: string; index: number } | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
 
+  const [doneCollapsed, setDoneCollapsed] = useState(() => readDoneCollapsed(window.localStorage, snap.path));
+  useEffect(() => {
+    setDoneCollapsed(readDoneCollapsed(window.localStorage, snap.path));
+  }, [snap.path]);
+  const toggleDone = () => {
+    const next = !doneCollapsed;
+    setDoneCollapsed(next);
+    writeDoneCollapsed(window.localStorage, snap.path, next);
+  };
+
   const onDrop = (col: Column) => {
     if (drag && drop) guard(api.moveCard(snap.path, drag, col.id, drop.index));
     setDrag(null);
     setDrop(null);
   };
+  const onDropDone = () => {
+    if (drag) guard(api.moveCard(snap.path, drag, DONE_COLUMN_ID));
+    setDrag(null);
+    setDrop(null);
+  };
+  const tile = (card: Card) => (
+    <CardTile
+      card={card}
+      live={snap.live[card.id]}
+      dragging={drag === card.id}
+      onOpen={() => onOpen(card.id)}
+      onDragStart={() => setDrag(card.id)}
+      onDragEnd={() => {
+        setDrag(null);
+        setDrop(null);
+      }}
+    />
+  );
 
   return (
     <main className="board">
       {snap.board.columns.map((col) => {
         const cards = snap.board.cards.filter((c) => c.columnId === col.id);
+        if (isDoneColumn(col))
+          return (
+            <DoneColumn
+              key={col.id}
+              cards={cards}
+              dragging={drag !== null}
+              dropActive={drop?.col === col.id}
+              onDragOverDone={() => drop?.col !== col.id && setDrop({ col: col.id, index: 0 })}
+              onDragLeaveDone={() => setDrop(null)}
+              onDropDone={onDropDone}
+              collapsed={doneCollapsed}
+              onToggle={toggleDone}
+              renderCard={tile}
+            />
+          );
         const compact = isCompactColumn(cards.length, expanded === col.id);
         return (
           <section
