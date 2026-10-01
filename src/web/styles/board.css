@@ -148,3 +148,15 @@ button.add-card:hover:not(:disabled) { color: var(--text); }
   margin-left: auto; color: var(--muted); font-size: var(--fs-sm); font-variant-numeric: tabular-nums;
   padding: 1px 6px; border-radius: 99px; border: 1px solid var(--border);
 }
+
+/* ---------- Done column ---------- */
+.column.done-collapsed {
+  flex: 0 0 44px; align-items: center; gap: var(--sp-3); padding: var(--sp-3) 0; cursor: pointer;
+  border-color: var(--border, transparent);
+}
+.column.done-collapsed:hover, .column.done-collapsed:focus-visible { background: var(--accent-soft); }
+.done-strip-label {
+  writing-mode: vertical-rl; font-size: var(--fs-md); font-weight: 500; letter-spacing: 0.04em;
+}
+.done-head { cursor: pointer; }
+.done-chevron { display: inline-block; width: 1em; color: var(--muted, inherit); }
