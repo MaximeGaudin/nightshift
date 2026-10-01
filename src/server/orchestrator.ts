@@ -3,12 +3,13 @@ import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import type { Subprocess } from "bun";
 import { spawn, type ChildProcess } from "node:child_process";
-import type { AttentionKind, Board, Card, Column, LiveStatus, LogLine, ProjectSnapshot, RunStatus, ServerEvent, Settings } from "../shared/types.ts";
-import { cardRef, columnMaxParallel, isDoneColumn } from "../shared/types.ts";
+import type { AttentionKind, Board, Card, Column, LiveStatus, LogLine, ProjectSnapshot, RunProgress, RunStatus, ServerEvent, Settings } from "../shared/types.ts";
+import { canSendFeedback, cardRef, columnMaxParallel, isDoneColumn } from "../shared/types.ts";
 import { persistScreenshots } from "./screenshots.ts";
 import { getSettings, NIGHTSHIFT_HOME, onSettingsChange, rememberProject } from "./settings.ts";
 import { needsRun, Project } from "./store.ts";
 import { findSkill } from "./skills.ts";
+import { parseProgressMarker, progressFromTodos } from "./progress.ts";
 
 interface Job {
   key: string;
@@ -19,6 +20,16 @@ interface Job {
   proc?: Subprocess;
   cancelled: boolean;
   done: boolean;
+  /** Skill of the session this job runs (column skill for a new run, session skill when resuming). */
+  skill?: string;
+  /** Started in a skill column: such a job is stopped if the column stops being a skill column. */
+  startedInSkillColumn: boolean;
+  /** Claude session of the current process, from its init event (known even if it dies before a result). */
+  sessionId?: string;
+  /** Live progress of the current process; reset at each spawn, never persisted. */
+  progress?: RunProgress;
+  /** A valid marker was seen in the current process: TodoWrite no longer counts. */
+  markerSeen?: boolean;
 }
 
 const MAX_LOG_LINES = 3000;
@@ -68,12 +79,23 @@ export const RESULT_SCHEMA = {
   additionalProperties: false,
 };
 
+const PROGRESS_MARKER = "[nightshift-progress]";
+
+/** Sent when resuming a session that stopped before returning its structured result. */
+export const RECOVER_PROMPT = `Your previous run in this session stopped before returning Nightshift's structured output (it may have been interrupted, or it only returned interim results while background work was running).
+Check the actual state of your work first (worktrees, branches, commits, background tasks). If work remains, finish it. Then return the structured output exactly once, describing the final state.
+Progress: on resume, emit the progress marker again (a line \`${PROGRESS_MARKER} N/M label\`) at the start of the step you are on, and at each following step.`;
+
+function formatColumns(board: Board): string {
+  return board.columns
+    .map((c, i) => `  ${i + 1}. ${c.name} (id: ${c.id}, ${c.type === "skill" ? `skill: ${c.skill}` : "inert"})`)
+    .join("\n");
+}
+
 export function buildPrompt(board: Board, card: Card, column: Column, skillPath: string | undefined): string {
   const idx = board.columns.findIndex((c) => c.id === column.id);
   const next = board.columns[idx + 1];
-  const columns = board.columns
-    .map((c, i) => `  ${i + 1}. ${c.name} (id: ${c.id}, ${c.type === "skill" ? `skill: ${c.skill}` : "inert"})`)
-    .join("\n");
+  const columns = formatColumns(board);
   return `You are an automated worker driven by Nightshift, a kanban board that orchestrates AI agents.
 A card has landed in the column "${column.name}". Your job is to process this card by applying the skill "${column.skill}".
 
@@ -93,13 +115,57 @@ Rules:
 - Work autonomously and pick sensible defaults. Do not use the AskUserQuestion tool.
 - If you truly cannot continue without human decisions, first explore everything you can on your own, then return the structured output with "questions" (and move "stay"); the answers will be sent back to you in this same session.
 - Each round-trip with the user is slow: put EVERY question you need answered in that single list (self-contained, one decision per question, suggest a default when you have one). Never ask one question now and keep others for later.
+- Progress: at the start, split your work into steps. At the start of each step, write a line on its own, exactly \`${PROGRESS_MARKER} N/M label\` (N = current step, M = total steps, label = short description). If the card description has a numbered \`## Progress\` section, use its numbering and total.
 - Never edit nightshift.json yourself; the board is updated from your structured output.
+- Never kill processes by name or pattern (pkill -f, killall, kill $(pgrep …)): other agents run on this machine and their processes can match. Only kill PIDs you started yourself.
+- Return the structured output exactly once, at the very end. If you started background work (subagents, background shells), wait until all of it has finished first. Never return an interim or "in progress" result.
 - When finished, return the structured output:
   - title / description: the updated card content (you may enrich the description with your results, links to files you created, etc.).
   - move: "next" to send the card to ${next ? `"${next.name}"` : "(there is no next column, so this behaves like stay)"}, "stay" to keep it in "${column.name}", or a column id.
   - summary: a short summary of what you did.
   - questions: only when you need the user's input (see above).
   - test: optional, a command (and url) a human can run to try what you produced; the card shows a "Tester" button that runs it.`;
+}
+
+/** Prompt resuming a session with free feedback from the user, in whatever column the card is now. */
+export function buildFeedbackPrompt(board: Board, card: Card, column: Column, skill: string | undefined, skillPath: string | undefined): string {
+  const idx = board.columns.findIndex((c) => c.id === column.id);
+  const next = board.columns[idx + 1];
+  const skillName = skill ? `the skill "${skill}"` : "the skill you applied earlier in this session";
+  return `You are an automated worker driven by Nightshift, a kanban board that orchestrates AI agents.
+The user sent you feedback on the work you did earlier in this session:
+
+<feedback>
+${card.pendingAnswer?.text ?? ""}
+</feedback>
+
+Address this feedback on the card below. Follow ${skillName}${skill && skillPath ? ` (its definition lives at ${skillPath})` : ""}, as in your earlier work in this session.
+
+<card id="${card.id}" ref="${cardRef(card)}">
+<title>${card.title}</title>
+<description>
+${card.description}
+</description>
+</card>
+
+The card may have moved since your session ran; it is now in column "${column.name}" (id: ${column.id}, ${column.type === "skill" ? `skill: ${column.skill}` : "inert"}).
+${column.instructions ? `\nAdditional instructions for this column:\n${column.instructions}\n` : ""}
+Board columns, in order:
+${formatColumns(board)}
+
+Rules:
+- Work autonomously and pick sensible defaults. Do not use the AskUserQuestion tool.
+- If you truly cannot continue without human decisions, first explore everything you can on your own, then return the structured output with "questions" (and move "stay"); the answers will be sent back to you in this same session.
+- Each round-trip with the user is slow: put EVERY question you need answered in that single list (self-contained, one decision per question, suggest a default when you have one). Never ask one question now and keep others for later.
+- Never edit nightshift.json yourself; the board is updated from your structured output.
+- Never kill processes by name or pattern (pkill -f, killall, kill $(pgrep …)): other agents run on this machine and their processes can match. Only kill PIDs you started yourself.
+- Return the structured output exactly once, at the very end. If you started background work (subagents, background shells), wait until all of it has finished first. Never return an interim or "in progress" result.
+- When finished, return the structured output:
+  - title / description: the updated card content.
+  - move: "stay" keeps the card in "${column.name}", "next" sends it to ${next ? `"${next.name}"` : "(there is no next column, so this behaves like stay)"}, or give a column id.
+  - summary: a short summary of what you did.
+  - questions: only when you need the user's input (see above).
+  - test: optional, a command (and url) a human can run to try what you produced.`;
 }
 
 /** Splits a shell-like argument string, honouring single and double quotes. */
@@ -220,7 +286,12 @@ export class Orchestrator {
     }
     const lockedBy = this.lockedBy.get(p.path);
     const testing = [...this.tests.values()].filter((t) => t.project === p).map((t) => t.cardId);
-    return { path: p.path, board: p.board, live, testing, ...(lockedBy ? { lockedBy } : {}), ...(this.agents ? {} : { agentsDisabled: true }) };
+    const progress: Record<string, RunProgress> = {};
+    for (const card of p.board.cards) {
+      const job = this.jobs.get(this.key(p, card.id));
+      if (job?.progress && !job.done) progress[card.id] = job.progress;
+    }
+    return { path: p.path, board: p.board, live, testing, progress, ...(lockedBy ? { lockedBy } : {}), ...(this.agents ? {} : { agentsDisabled: true }) };
   }
 
   private key(p: Project, cardId: string) {
@@ -292,7 +363,8 @@ export class Orchestrator {
       // Full column: this card waits, cards of other columns can still start.
       const column = p.column(card.columnId);
       if (!column) continue;
-      if (this.runningIn(p, card.columnId) >= columnMaxParallel(column)) continue;
+      // The per-column limit only concerns skill columns; a job in an inert column (feedback) only counts globally.
+      if (column.type === "skill" && this.runningIn(p, card.columnId) >= columnMaxParallel(column)) continue;
       this.start(p, card);
       started = true;
     }
@@ -310,7 +382,7 @@ export class Orchestrator {
       if (job.project !== p || job.cancelled || job.done) continue;
       const card = p.card(job.cardId);
       const col = card && p.column(card.columnId);
-      if (!card || card.columnId !== job.columnId || card.enteredColumnAt !== job.enteredAt || col?.type !== "skill") {
+      if (!card || card.columnId !== job.columnId || card.enteredColumnAt !== job.enteredAt || (job.startedInSkillColumn && col?.type !== "skill")) {
         this.log(p, job.cardId, "info", "Card moved or deleted during the run: stopping agent.");
         this.kill(job);
       }
@@ -344,6 +416,7 @@ export class Orchestrator {
       delete card.lastRun;
       delete card.pendingAnswer;
       p.addHistory(card, "edited", "Retry requested by user");
+      p.addQueued(card);
     });
   }
 
@@ -361,13 +434,50 @@ export class Orchestrator {
         .join("\n\n");
       card.pendingAnswer = { text, sessionId: lr.sessionId, at: new Date().toISOString() };
       p.addHistory(card, "edited", `Answered ${answers.filter((a) => a.trim()).length} question(s)`);
+      p.addQueued(card);
     });
+  }
+
+  /** Sends free feedback to the card's last session, whatever the column. The agent decides where the card goes. */
+  feedback(p: Project, cardId: string, text: string) {
+    const trimmed = (text ?? "").trim();
+    if (!trimmed) throw new Error("Empty feedback");
+    p.mutate(() => {
+      const card = p.card(cardId);
+      if (!card) throw new Error("Unknown card");
+      const live: LiveStatus | undefined = this.jobs.has(this.key(p, cardId)) ? "running" : needsRun(p.board, card) ? "queued" : undefined;
+      if (!canSendFeedback(card, live)) throw new Error("This card has no session to send feedback to");
+      card.pendingAnswer = { text: trimmed, sessionId: card.lastRun!.sessionId!, at: new Date().toISOString(), kind: "feedback" };
+      p.addHistory(card, "edited", "Feedback sent to agent");
+    });
+  }
+
+  /** Skill of the session being resumed: the one recorded by its last run, else the skill column it ran in, else the current one. */
+  private sessionSkill(p: Project, card: Card): string | undefined {
+    const skillOf = (id: string | undefined) => {
+      const c = id ? p.column(id) : undefined;
+      return c?.type === "skill" ? c.skill : undefined;
+    };
+    return card.lastRun?.skill ?? skillOf(card.lastRun?.columnId) ?? skillOf(card.columnId);
   }
 
   /**
    * Agent runs in the loop window since the user last touched the card (create, move, edit, answer, retry).
    * Runs stopped by the guard itself are not counted, so a retry is never blocked by stale history.
    */
+  /** Resumes the session of a failed run so the agent finishes its work, instead of starting over. */
+  resumeSession(p: Project, cardId: string) {
+    p.mutate(() => {
+      const card = p.card(cardId);
+      const lr = card?.lastRun;
+      if (!card || !lr?.sessionId || lr.columnId !== card.columnId || lr.status === "success")
+        throw new Error("This card has no interrupted session to resume");
+      card.pendingAnswer = { text: "Resume the interrupted session", sessionId: lr.sessionId, at: new Date().toISOString(), kind: "resume" };
+      p.addHistory(card, "edited", "Session resume requested by user");
+      p.addQueued(card);
+    });
+  }
+
   private recentRuns(card: Card) {
     let since = new Date(Date.now() - LOOP_WINDOW_MS).toISOString();
     for (const h of card.history) {
@@ -385,10 +495,13 @@ export class Orchestrator {
       cardId: card.id,
       columnId: column.id,
       enteredAt: card.enteredColumnAt,
+      skill: card.pendingAnswer ? this.sessionSkill(p, card) : column.skill,
+      startedInSkillColumn: column.type === "skill",
       cancelled: false,
       done: false,
     };
     this.jobs.set(job.key, job);
+    p.mutate(() => p.addHistory(card, "started", `Agent started in ${column.name}`, column.id));
     // A resumed session (answer to a question) keeps the log of the run that asked it.
     if (!card.pendingAnswer) {
       this.logs.set(job.key, []);
@@ -408,22 +521,76 @@ export class Orchestrator {
     if (this.recentRuns(card) >= LOOP_MAX_RUNS) {
       return this.finish(job, "error", { error: `Stopped: ${LOOP_MAX_RUNS} agent runs in 10 minutes without user action (loop guard). Click retry to run again.` });
     }
-    const skill = findSkill(p.path, column.skill!);
-    if (!skill) {
+    const answer = card.pendingAnswer;
+    // A new run needs its column's skill; a resumed session only uses it to tell the agent where the definition lives.
+    const skill = job.skill ? findSkill(p.path, job.skill) : undefined;
+    if (!answer && !skill) {
       return this.finish(job, "error", { error: `Skill "${column.skill}" not found in project or user skills.` });
     }
+    const skillRef = job.skill ? `the skill "${job.skill}"` : "the skill you applied earlier in this session";
+    let prompt = !answer
+      ? buildPrompt(p.board, card, column, skill!.path)
+      : answer.kind === "resume"
+        ? RECOVER_PROMPT
+        : answer.kind === "feedback"
+          ? buildFeedbackPrompt(p.board, card, column, job.skill, skill?.path)
+          : `The user answered your questions:\n\n${answer.text}\n\nRe-emit the progress marker (\`${PROGRESS_MARKER} N/M label\`) as you resume and at each step. Continue processing the card "${card.title}" with ${skillRef}, then return the structured output as before (title, description, move, summary). Only ask new questions if the answers raise new blocking decisions, and then ask them all at once.`;
+    if (answer?.kind === "feedback") this.log(p, card.id, "info", `Retour utilisateur : ${answer.text}`);
+    else if (answer && answer.kind !== "resume") this.log(p, card.id, "info", `User answer: ${answer.text}`);
+    let resumeId = answer?.sessionId;
+    let costUsd = 0;
+
+    // One automatic recovery: an agent that stops without its structured result (interrupted, or it
+    // returned only interim results while background work was running) is resumed once to collect it.
+    for (let attempt = 0; ; attempt++) {
+      const verb = attempt > 0 ? "Recovering" : !answer ? "Starting" : "Resuming";
+      const r = await this.spawnAgent(job, card, column, prompt, resumeId, verb);
+      if ("startError" in r) return this.finish(job, "error", { error: r.startError });
+      if (job.cancelled) return this.finish(job, "cancelled", {});
+      const result = r.result;
+      costUsd += Number(result?.total_cost_usd) || 0;
+      const sessionId: string | undefined = result?.session_id ?? job.sessionId;
+      const out = result?.structured_output;
+      if (result && !result.is_error && out) {
+        const questions = Array.isArray(out.questions) ? out.questions.map(String).map((q: string) => q.trim()).filter(Boolean) : [];
+        out.questions = questions;
+        return this.finish(job, questions.length > 0 ? "question" : "success", { output: out, costUsd, ...(sessionId ? { sessionId } : {}) });
+      }
+      const reason = !result
+        ? `Agent exited without a result (${r.exit}).${r.stderr.trim() ? ` ${r.stderr.trim()}` : ""}`
+        : result.is_error
+          ? String(result.result || result.subtype || "Agent returned an error")
+          : "Agent finished without returning its structured result.";
+      if (attempt === 0 && sessionId && !result?.is_error) {
+        this.log(p, card.id, "info", `${reason} Resuming the session once to collect it.`);
+        prompt = RECOVER_PROMPT;
+        resumeId = sessionId;
+        continue;
+      }
+      return this.finish(job, "error", { error: reason.slice(0, 2000), ...(costUsd ? { costUsd } : {}), ...(sessionId ? { sessionId } : {}) });
+    }
+  }
+
+  /** Runs one `claude -p` process to completion. The prompt goes through stdin, never argv: see below. */
+  private async spawnAgent(
+    job: Job,
+    card: Card,
+    column: Column,
+    prompt: string,
+    resumeId: string | undefined,
+    verb: string,
+  ): Promise<{ startError: string } | { result: any; stderr: string; exit: string }> {
+    const p = job.project;
+    job.progress = undefined;
+    job.markerSeen = false;
     const settings = getSettings();
-    const answer = card.pendingAnswer;
-    const prompt = answer
-      ? `The user answered your questions:\n\n${answer.text}\n\nContinue processing the card "${card.title}" with the skill "${column.skill}", then return the structured output as before (title, description, move, summary). Only ask new questions if the answers raise new blocking decisions, and then ask them all at once.`
-      : buildPrompt(p.board, card, column, skill.path);
-    if (answer) this.log(p, card.id, "info", `User answer: ${answer.text}`);
     const model = resolveModel(column, settings);
+    // The prompt holds the card text. Passed as an argument it would show in every process list, and an
+    // agent running `pkill -f "bun test"` would kill any sibling agent whose card mentions `bun test`.
     const args = [
       settings.claudePath || "claude",
       "-p",
-      prompt,
-      ...(answer ? ["--resume", answer.sessionId] : []),
+      ...(resumeId ? ["--resume", resumeId] : []),
       "--disallowedTools",
       "AskUserQuestion",
       "--output-format",
@@ -438,12 +605,18 @@ export class Orchestrator {
       ...(model ? ["--model", model] : []),
       ...splitArgs(settings.extraArgs),
     ];
-    this.log(p, card.id, "info", `${answer ? "Resuming" : "Starting"} skill "${column.skill}" in "${column.name}" (permission mode: ${settings.permissionMode}, model: ${model ?? "default"}).`);
+    this.log(p, card.id, "info", `${verb} ${job.skill ? `skill "${job.skill}"` : "session"} in "${column.name}" (permission mode: ${settings.permissionMode}, model: ${model ?? "default"}).`);
 
     let result: any = null;
     let stderr = "";
     try {
-      const proc = Bun.spawn(args, { cwd: p.path, env: process.env, stdout: "pipe", stderr: "pipe", stdin: "ignore" });
+      const proc = Bun.spawn(args, {
+        cwd: p.path,
+        env: process.env,
+        stdout: "pipe",
+        stderr: "pipe",
+        stdin: new TextEncoder().encode(prompt),
+      });
       job.proc = proc;
       if (job.cancelled) proc.kill();
       const readStderr = new Response(proc.stderr).text().then((t) => (stderr = t));
@@ -464,43 +637,52 @@ export class Orchestrator {
             continue;
           }
           if (ev.type === "result") result = ev;
-          else this.handleEvent(p, card.id, ev);
+          else this.handleEvent(job, ev);
         }
       }
       await proc.exited;
       await readStderr;
+      const exit = proc.signalCode ? `signal ${proc.signalCode}` : `exit code ${proc.exitCode}`;
+      return { result, stderr, exit };
     } catch (e: any) {
-      return this.finish(job, "error", { error: `Could not start "${settings.claudePath}": ${e?.message ?? e}` });
+      return { startError: `Could not start "${settings.claudePath}": ${e?.message ?? e}` };
     }
-
-    if (job.cancelled) return this.finish(job, "cancelled", {});
-    if (!result) {
-      return this.finish(job, "error", { error: (stderr.trim() || "Agent exited without a result.").slice(0, 2000) });
-    }
-    const out = result.structured_output;
-    if (result.is_error || !out) {
-      return this.finish(job, "error", {
-        error: String(result.result || result.subtype || "Agent returned an error").slice(0, 2000),
-        costUsd: result.total_cost_usd,
-        sessionId: result.session_id,
-      });
-    }
-    const questions = Array.isArray(out.questions) ? out.questions.map(String).map((q: string) => q.trim()).filter(Boolean) : [];
-    out.questions = questions;
-    const asked = questions.length > 0;
-    this.finish(job, asked ? "question" : "success", { output: out, costUsd: result.total_cost_usd, sessionId: result.session_id });
   }
 
-  private handleEvent(p: Project, cardId: string, ev: any) {
+  private handleEvent(job: Job, ev: any) {
+    const p = job.project;
+    const cardId = job.cardId;
     if (ev.type === "assistant") {
+      // Subagent messages carry parent_tool_use_id: they are logged but never drive the card's progress.
+      const own = !ev.parent_tool_use_id;
       for (const block of ev.message?.content ?? []) {
-        if (block.type === "text" && block.text?.trim()) this.log(p, cardId, "text", block.text.trim());
-        else if (block.type === "tool_use" && block.name !== "StructuredOutput")
+        if (block.type === "text" && block.text?.trim()) {
+          this.log(p, cardId, "text", block.text.trim());
+          const m = own ? parseProgressMarker(block.text) : undefined;
+          if (m) {
+            job.markerSeen = true;
+            this.setProgress(job, m, "marker");
+          }
+        } else if (block.type === "tool_use" && block.name !== "StructuredOutput") {
           this.log(p, cardId, "tool", summarizeToolInput(block.name, block.input));
+          if (own && block.name === "TodoWrite" && !job.markerSeen) {
+            const t = progressFromTodos(block.input);
+            if (t) this.setProgress(job, t, "todo");
+          }
+        }
       }
     } else if (ev.type === "system" && ev.subtype === "init") {
+      if (ev.session_id) job.sessionId = ev.session_id;
       this.log(p, cardId, "info", `Session ${ev.session_id} (model ${ev.model ?? "default"})`);
     }
+  }
+
+  /** Stores a new progress value and broadcasts the board, unless nothing changed. */
+  private setProgress(job: Job, v: { step: number; total: number; label: string }, source: RunProgress["source"]) {
+    const cur = job.progress;
+    if (cur && cur.step === v.step && cur.total === v.total && cur.label === v.label) return;
+    job.progress = { step: v.step, total: v.total, label: v.label, source, at: new Date().toISOString() };
+    this.broadcast({ type: "board", project: job.project.path, snapshot: this.snapshot(job.project) });
   }
 
   private finish(
@@ -522,6 +704,9 @@ export class Orchestrator {
     p.mutate((board) => {
       const now = new Date().toISOString();
       const out = data.output;
+      // A resumed run that dies without a session id (cancelled, failed to start) keeps the session it resumed,
+      // so feedback or answers can be sent again.
+      const sessionId = data.sessionId ?? (card.pendingAnswer ? job.sessionId ?? card.pendingAnswer.sessionId : undefined);
       delete card.pendingAnswer;
       card.lastRun = {
         columnId: job.columnId,
@@ -531,7 +716,8 @@ export class Orchestrator {
         ...(status === "question" ? { questions: out.questions as string[] } : {}),
         ...(data.error ? { error: data.error } : {}),
         ...(data.costUsd !== undefined ? { costUsd: data.costUsd } : {}),
-        ...(data.sessionId ? { sessionId: data.sessionId } : {}),
+        ...(sessionId ? { sessionId } : {}),
+        ...(job.skill ? { skill: job.skill } : {}),
       };
       const colName = p.column(job.columnId)?.name ?? "?";
       p.addHistory(

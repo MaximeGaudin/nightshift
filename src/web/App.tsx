@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { cardRef, columnMaxParallel, isDoneColumn, DONE_COLUMN_ID, type Card, type Column, type LiveStatus, type ProjectSnapshot } from "../shared/types.ts";
+import { cardRef, columnMaxParallel, isDoneColumn, DONE_COLUMN_ID, type Card, type Column, type LiveStatus, type RunProgress as RunProgressData, type ProjectSnapshot } from "../shared/types.ts";
+import { RunProgress } from "./RunProgress.tsx";
 import { api, useServerEvents, useSettings } from "./api.ts";
 import { CardModal } from "./CardModal.tsx";
 import { CardThumbnail } from "./CardThumbnail.tsx";
@@ -10,7 +11,7 @@ import { ColumnsEditor } from "./ColumnsEditor.tsx";
 import { ProjectPicker } from "./ProjectPicker.tsx";
 import { SettingsModal } from "./SettingsModal.tsx";
 import { SkillsModal } from "./SkillsModal.tsx";
-import { ColumnIcon, Icon, StatusIcon } from "./icons.tsx";
+import { ColumnGlyph, Icon, StatusIcon } from "./icons.tsx";
 import { toPlainText } from "./markdown.tsx";
 import { installAudioUnlock, notifyAttention } from "./sound.ts";
 import { ErrorBanner } from "./ui.tsx";
@@ -144,7 +145,7 @@ export function App() {
       )}
       <Board snap={snap} onOpen={setOpenCard} guard={guard} />
 
-      {card && <CardModal project={snap.path} card={card} board={snap.board} live={snap.live[card.id]} testing={snap.testing?.includes(card.id) ?? false} onClose={() => setOpenCard(null)} />}
+      {card && <CardModal project={snap.path} card={card} board={snap.board} live={snap.live[card.id]} progress={snap.progress?.[card.id]} testing={snap.testing?.includes(card.id) ?? false} onClose={() => setOpenCard(null)} />}
       {modal === "columns" && <ColumnsEditor snap={snap} onClose={() => setModal(null)} />}
       {modal === "skills" && <SkillsModal project={snap.path} onClose={() => setModal(null)} />}
       {modal === "settings" && settings && <SettingsModal settings={settings} onClose={() => setModal(null)} />}
@@ -205,6 +206,7 @@ function Board({
       project={snap.path}
       card={card}
       live={snap.live[card.id]}
+      progress={snap.progress?.[card.id]}
       dragging={drag === card.id}
       onOpen={() => onOpen(card.id)}
       onDragStart={() => setDrag(card.id)}
@@ -268,7 +270,7 @@ function Board({
               <>
               <header className="column-head">
                 <div className="column-title">
-                  <ColumnIcon type={col.type} />
+                  <ColumnGlyph col={col} />
                   <h2>{col.name}</h2>
                   <span className="count">{cards.length}</span>
                   {col.type === "skill" && (
@@ -300,6 +302,7 @@ function Board({
                       project={snap.path}
                       card={card}
                       live={snap.live[card.id]}
+                      progress={snap.progress?.[card.id]}
                       dragging={drag === card.id}
                       onOpen={() => onOpen(card.id)}
                       onDragStart={() => setDrag(card.id)}
@@ -336,6 +339,7 @@ function CardTile({
   project,
   card,
   live,
+  progress,
   dragging,
   onOpen,
   onDragStart,
@@ -344,6 +348,7 @@ function CardTile({
   project: string;
   card: Card;
   live?: LiveStatus;
+  progress?: RunProgressData;
   dragging: boolean;
   onOpen: () => void;
   onDragStart: () => void;
@@ -389,6 +394,7 @@ function CardTile({
           )}
         </div>
       )}
+      <RunProgress progress={progress} live={live} />
     </article>
   );
 }

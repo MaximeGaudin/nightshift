@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { mkdtempSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -113,7 +113,8 @@ async function waitFor(fn: () => Promise<boolean>, ms = 8000) {
 
 test("pipeline: skill column without maxParallel runs one card at a time, respects limit, moves them on", async () => {
   const snap = await post("/api/projects/open", { path: proj });
-  const [backlog, done] = snap.board.columns;
+  const backlog = snap.board.columns[0];
+  const done = snap.board.columns.at(-1);
   const res = await post(
     "/api/board",
     { project: proj, columns: [backlog, { name: "Enrich", type: "skill", skill: "enrich" }, done] },
@@ -191,7 +192,7 @@ test("a project locked by another live process runs no agents", async () => {
 
 test("loop guard ignores runs before the last user action", async () => {
   const snap = await post("/api/projects/open", { path: proj });
-  const enrich = snap.board.columns[1];
+  const enrich = snap.board.columns.find((c: any) => c.name === "Enrich");
   const { id } = await post("/api/cards", { project: proj, columnId: enrich.id, title: "guarded" });
   const get = async () => (await fetch(`${base}/api/project?project=${encodeURIComponent(proj)}`).then((r) => r.json())).board.cards.find((c: any) => c.id === id);
   await waitFor(async () => (await get()).columnId !== enrich.id);
@@ -200,6 +201,8 @@ test("loop guard ignores runs before the last user action", async () => {
     const card = srv.orch.get(proj).card(id)!;
     for (let i = 0; i < 20; i++) srv.orch.get(proj).addHistory(card, "run", "Enrich: stale");
   });
+  // The user move must be strictly later than the stale runs (same-millisecond entries count as recent).
+  await Bun.sleep(5);
   await post(`/api/cards/${id}/move`, { project: proj, columnId: enrich.id });
   await waitFor(async () => (await get()).columnId !== enrich.id);
   expect((await get()).lastRun?.error).toBeUndefined();
@@ -394,6 +397,38 @@ test("--no-agents instance never runs agents nor takes the lock", async () => {
   const lock = join(home, "locks", `${createHash("sha1").update(dir).digest("hex").slice(0, 12)}.lock`);
   expect(require("node:fs").existsSync(lock)).toBe(false);
   passive.shutdown();
+});
+
+test("an agent that stops without its result is resumed once to collect it", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "ns-recover-"));
+  await post("/api/projects/open", { path: dir });
+  const res = await post("/api/board", { project: dir, columns: [{ name: "S", type: "skill", skill: "enrich" }, { name: "D", type: "inert" }] }, "PUT");
+  const [s, d] = res.board.columns;
+  for (const title of ["no-output", "die"]) await post("/api/cards", { project: dir, columnId: s.id, title });
+  const get = async () => (await fetch(`${base}/api/project?project=${encodeURIComponent(dir)}`).then((r) => r.json())).board.cards;
+  await waitFor(async () => (await get()).every((c: any) => c.columnId === d.id));
+  for (const c of await get()) {
+    expect(c.title).toBe("answered");
+    expect(c.description).toContain("stopped before returning");
+  }
+});
+
+test("prompt goes through stdin, never argv", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "ns-stdin-"));
+  const argsLog = join(dir, "args.jsonl");
+  const previous = process.env.FAKE_ARGS_LOG;
+  process.env.FAKE_ARGS_LOG = argsLog;
+  try {
+    await post("/api/projects/open", { path: dir });
+    const res = await post("/api/board", { project: dir, columns: [{ name: "S", type: "skill", skill: "enrich" }, { name: "D", type: "inert" }] }, "PUT");
+    await post("/api/cards", { project: dir, columnId: res.board.columns[0].id, title: "argv-check" });
+    await waitFor(async () => existsSync(argsLog) && readFileSync(argsLog, "utf8").includes("argv-check"));
+  } finally {
+    if (previous === undefined) delete process.env.FAKE_ARGS_LOG;
+    else process.env.FAKE_ARGS_LOG = previous;
+  }
+  const entry = readFileSync(argsLog, "utf8").trim().split("\n").map((l) => JSON.parse(l)).find((e) => e.title === "argv-check");
+  expect(entry.argvHasCard).toBe(false);
 });
 
 test("removing a column that still holds cards is refused", async () => {
@@ -785,10 +820,73 @@ test(
 
 // ---- system Done column -------------------------------------------------------
 
-test("done column: defaultBoard is Backlog then col_done", () => {
-  const cols = defaultBoard("x").columns;
-  expect(cols.map((c) => c.name)).toEqual(["Backlog", "Done"]);
-  expect(cols[1]).toEqual({ id: DONE_COLUMN_ID, name: "Done", type: "inert" });
+test("defaultBoard has the Nightshift pipeline", () => {
+  const b = defaultBoard("x");
+  expect(b.columns.map((c) => c.name)).toEqual(["Backlog", "Grill", "Plan", "Implement", "Review", "To Test", "Merged", "Done"]);
+  const noId = b.columns.map(({ id: _id, ...rest }) => rest);
+  expect(noId).toEqual([
+    { name: "Backlog", type: "inert" },
+    { name: "Grill", type: "skill", skill: "nightshift-grill", model: "opus", maxParallel: 3 },
+    { name: "Plan", type: "skill", skill: "nightshift-plan", model: "opus", maxParallel: 3 },
+    { name: "Implement", type: "skill", skill: "nightshift-implement", model: "sonnet", maxParallel: 3 },
+    { name: "Review", type: "skill", skill: "nightshift-review", model: "opus", maxParallel: 1 },
+    { name: "To Test", type: "inert" },
+    { name: "Merged", type: "skill", skill: "nightshift-merge", model: "sonnet", maxParallel: 1 },
+    { name: "Done", type: "inert" },
+  ]);
+  expect(b.columns.at(-1)).toEqual({ id: DONE_COLUMN_ID, name: "Done", type: "inert" });
+  for (const c of b.columns) expect("instructions" in c).toBe(false);
+  expect(b.cards).toEqual([]);
+  expect(b.nextCardNumber).toBe(1);
+});
+
+test("defaultBoard ids are fresh", () => {
+  const ids = (b: ReturnType<typeof defaultBoard>) => b.columns.slice(0, -1).map((c) => c.id);
+  const a = ids(defaultBoard("x"));
+  const b = ids(defaultBoard("x"));
+  expect(a.length).toBe(7);
+  expect(new Set(a).size).toBe(7);
+  expect(new Set(b).size).toBe(7);
+  for (const id of [...a, ...b]) {
+    expect(id.startsWith("col_")).toBe(true);
+    expect(id).not.toBe(DONE_COLUMN_ID);
+  }
+  expect(a.filter((id) => b.includes(id))).toEqual([]);
+});
+
+test("opening an empty folder writes the pipeline", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "ns-empty-"));
+  new Project(dir).close();
+  const file = join(dir, "nightshift.json");
+  const disk = JSON.parse(readFileSync(file, "utf8"));
+  expect(disk.columns.map((c: any) => c.name)).toEqual(["Backlog", "Grill", "Plan", "Implement", "Review", "To Test", "Merged", "Done"]);
+  expect(disk.columns.at(-1).id).toBe(DONE_COLUMN_ID);
+  const text = readFileSync(file, "utf8");
+  const mtime = statSync(file).mtimeMs;
+  await Bun.sleep(20);
+  new Project(dir).close();
+  expect(readFileSync(file, "utf8")).toBe(text);
+  expect(statSync(file).mtimeMs).toBe(mtime);
+});
+
+test("existing custom columns are untouched", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "ns-custom-"));
+  const file = join(dir, "nightshift.json");
+  const board = { version: 1, name: "c", columns: [{ id: "a", name: "A", type: "inert" }, { id: DONE_COLUMN_ID, name: "Done", type: "inert" }], cards: [], nextCardNumber: 1 };
+  writeFileSync(file, JSON.stringify(board, null, 2) + "\n");
+  const text = readFileSync(file, "utf8");
+  const mtime = statSync(file).mtimeMs;
+  await Bun.sleep(20);
+  const p = new Project(dir);
+  p.close();
+  expect(readFileSync(file, "utf8")).toBe(text);
+  expect(statSync(file).mtimeMs).toBe(mtime);
+  expect(p.board.columns.map((c) => c.name)).toEqual(["A", "Done"]);
+});
+
+test("file without columns gets the pipeline", () => {
+  const b = normalizeBoard({ cards: [] }, "x");
+  expect(b.columns.map((c) => c.name)).toEqual(["Backlog", "Grill", "Plan", "Implement", "Review", "To Test", "Merged", "Done"]);
 });
 
 test("done column: normalizeBoard keeps a user column named Done and puts col_done after it", () => {
@@ -857,5 +955,300 @@ test("done column: nextColumn from col_done is undefined", () => {
   const p = new Project(dir);
   p.close();
   expect(p.nextColumn(DONE_COLUMN_ID)).toBeUndefined();
-  expect(p.nextColumn(p.board.columns[0]!.id)!.id).toBe(DONE_COLUMN_ID);
+  expect(p.nextColumn(p.board.columns.at(-2)!.id)!.id).toBe(DONE_COLUMN_ID);
+});
+
+// ---- user feedback ----------------------------------------------------------
+
+/** Project where a card runs through "Work" and lands in the inert "To Test", ready to receive feedback. */
+async function feedbackBoard(extra: object[] = []) {
+  const b = await attentionBoard([{ name: "Work", type: "skill", skill: "enrich" }, { name: "To Test", type: "inert" }, ...extra]);
+  const [work, toTest] = b.cols;
+  const landed = async (title: string) => {
+    const { id } = await post("/api/cards", { project: b.dir, columnId: work.id, title });
+    await waitFor(async () => (await b.card(id))?.columnId === toTest.id && (await b.idle(id)));
+    return id as string;
+  };
+  const send = (id: string, text: string) => post(`/api/cards/${id}/feedback`, { project: b.dir, text });
+  const settled = (id: string, ok: (c: any) => boolean) => waitFor(async () => ok(await b.card(id)) && (await b.idle(id)));
+  return { ...b, work, toTest, landed, send, settled };
+}
+
+test("feedback in inert column resumes the session and applies move", async () => {
+  const b = await feedbackBoard();
+  try {
+    const id = await b.landed("go");
+    const before = argsEntries().length;
+    expect((await b.send(id, "fix FAKE_MOVE=stay")).error).toBeUndefined();
+    await b.settled(id, (c) => c.title === "feedback done");
+    const card = await b.card(id);
+    expect(argsEntries().slice(before).filter((e) => e.resumed)).toHaveLength(1);
+    expect(card.columnId).toBe(b.toTest.id);
+    expect(card.lastRun.columnId).toBe(b.toTest.id);
+    expect(card.lastRun.status).toBe("success");
+    expect(card.lastRun.sessionId).toBeDefined();
+    expect(card.lastRun.skill).toBe("enrich");
+    expect(card.pendingAnswer).toBeUndefined();
+    expect(card.description).toContain("<feedback>\nfix FAKE_MOVE=stay\n</feedback>");
+    expect(card.description).toContain(`(id: ${b.toTest.id}, inert)`);
+    expect(card.description).toContain("Board columns, in order:");
+    expect(card.description).toContain(`1. Work (id: ${b.work.id}, skill: enrich)`);
+    expect(card.description).toContain('the skill "enrich"');
+    expect(card.history.some((h: any) => h.text === "Feedback sent to agent")).toBe(true);
+    const log = await fetch(`${base}/api/cards/${id}/log?project=${encodeURIComponent(b.dir)}`).then((r) => r.json());
+    expect(log.some((l: any) => l.text.startsWith("Retour utilisateur : fix"))).toBe(true);
+  } finally {
+    b.stop();
+  }
+});
+
+test("feedback move next goes to the column after the current one", async () => {
+  const b = await feedbackBoard([{ name: "Review", type: "skill", skill: "enrich" }]);
+  try {
+    const review = b.cols[2];
+    const id = await b.landed("go");
+    await b.send(id, "ship it FAKE_MOVE=next");
+    await b.settled(id, (c) => c.columnId !== b.toTest.id && c.lastRun?.columnId === review.id);
+    const entries = argsEntries().filter((e) => e.title === "feedback done ✓" || e.title === "feedback done");
+    expect(entries.some((e) => !e.resumed)).toBe(true);
+    expect((await b.card(id)).history.some((h: any) => h.kind === "run" && h.text.startsWith("Review:"))).toBe(true);
+  } finally {
+    b.stop();
+  }
+});
+
+test("second feedback keeps the session skill", async () => {
+  const b = await feedbackBoard();
+  try {
+    const id = await b.landed("go");
+    await b.send(id, "one FAKE_MOVE=stay");
+    await b.settled(id, (c) => c.lastRun?.summary === "feedback applied");
+    await b.send(id, "two FAKE_MOVE=stay");
+    await b.settled(id, (c) => c.description.includes("<feedback>\ntwo"));
+    const card = await b.card(id);
+    expect(card.columnId).toBe(b.toTest.id);
+    expect(card.description).toContain('Follow the skill "enrich"');
+    expect(card.lastRun.skill).toBe("enrich");
+  } finally {
+    b.stop();
+  }
+});
+
+test("feedback question in inert column can be answered", async () => {
+  const b = await feedbackBoard();
+  try {
+    const id = await b.landed("go");
+    await b.send(id, "hmm FAKE_ASK");
+    await b.settled(id, (c) => c.lastRun?.status === "question");
+    let card = await b.card(id);
+    expect(card.columnId).toBe(b.toTest.id);
+    expect(card.lastRun.questions).toEqual(["Which one?"]);
+    const before = argsEntries().length;
+    expect((await post(`/api/cards/${id}/answer`, { project: b.dir, answers: ["the blue one"] })).error).toBeUndefined();
+    await b.settled(id, (c) => c.lastRun?.status === "success" && c.lastRun.summary === "resumed");
+    card = await b.card(id);
+    expect(argsEntries().slice(before).filter((e) => e.resumed)).toHaveLength(1);
+    expect(card.description).toContain("A1: the blue one");
+    expect(card.description).toContain('with the skill "enrich"');
+  } finally {
+    b.stop();
+  }
+});
+
+test("feedback in inert column ignores the column limit and survives cancelStaleJobs", async () => {
+  updateSettings({ maxParallel: 3 });
+  const b = await feedbackBoard();
+  try {
+    const ids = [await b.landed("go1"), await b.landed("go2")];
+    let maxRunning = 0;
+    await Promise.all(ids.map((id) => b.send(id, "both FAKE_MOVE=stay")));
+    await waitFor(async () => {
+      const s = await getProject(b.dir);
+      maxRunning = Math.max(maxRunning, Object.values(s.live).filter((v) => v === "running").length);
+      return Object.keys(s.live).length === 0;
+    });
+    expect(maxRunning).toBe(2);
+    for (const id of ids) {
+      const card = await b.card(id);
+      expect(card.lastRun.status).toBe("success");
+      expect(card.lastRun.summary).toBe("feedback applied");
+      expect(card.columnId).toBe(b.toTest.id);
+      const log = await fetch(`${base}/api/cards/${id}/log?project=${encodeURIComponent(b.dir)}`).then((r) => r.json());
+      expect(log.some((l: any) => l.text.includes("stopping agent"))).toBe(false);
+    }
+  } finally {
+    updateSettings({ maxParallel: 2 });
+    b.stop();
+  }
+});
+
+test("feedback is refused without session or while queued", async () => {
+  const b = await feedbackBoard();
+  try {
+    const fresh = await post("/api/cards", { project: b.dir, columnId: b.toTest.id, title: "fresh" });
+    expect((await b.send(fresh.id, "hello")).error).toBe("This card has no session to send feedback to");
+    const id = await b.landed("go");
+    expect((await b.send(id, "   ")).error).toBe("Empty feedback");
+    expect((await b.send(id, "first FAKE_MOVE=stay")).error).toBeUndefined();
+    expect((await b.send(id, "second")).error).toBe("This card has no session to send feedback to");
+    await b.settled(id, (c) => c.lastRun?.summary === "feedback applied");
+    expect((await b.send(id, "third FAKE_MOVE=stay")).error).toBeUndefined();
+    await b.settled(id, (c) => c.description.includes("<feedback>\nthird"));
+  } finally {
+    b.stop();
+  }
+});
+
+test("failed feedback leaves the card in place", async () => {
+  const b = await feedbackBoard();
+  try {
+    const id = await b.landed("go");
+    await b.send(id, "break FAKE_FAIL");
+    await b.settled(id, (c) => c.lastRun?.status === "error");
+    let card = await b.card(id);
+    expect(card.columnId).toBe(b.toTest.id);
+    expect(card.pendingAnswer).toBeUndefined();
+    expect(card.lastRun.sessionId).toBeDefined();
+    expect((await b.send(id, "again FAKE_MOVE=stay")).error).toBeUndefined();
+    await b.settled(id, (c) => c.lastRun?.status === "success");
+    card = await b.card(id);
+    expect(card.columnId).toBe(b.toTest.id);
+  } finally {
+    b.stop();
+  }
+});
+
+test("cancelled feedback keeps the session so feedback can be sent again", async () => {
+  const b = await feedbackBoard();
+  try {
+    const id = await b.landed("go");
+    await b.send(id, "wait FAKE_SLOW FAKE_MOVE=stay");
+    await waitFor(async () => (await getProject(b.dir)).live[id] === "running");
+    expect((await post(`/api/cards/${id}/cancel`, { project: b.dir })).cancelled).toBe(true);
+    await b.settled(id, (c) => c.lastRun?.status === "cancelled");
+    const card = await b.card(id);
+    expect(card.columnId).toBe(b.toTest.id);
+    expect(card.lastRun.sessionId).toBeDefined();
+    expect((await b.send(id, "again FAKE_MOVE=stay")).error).toBeUndefined();
+    await b.settled(id, (c) => c.lastRun?.status === "success");
+  } finally {
+    b.stop();
+  }
+});
+
+// ---- time transitions recorded in card history ---------------------------------
+
+
+async function openSkillBoard(prefix: string, maxParallel?: number) {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  await post("/api/projects/open", { path: dir });
+  const res = await post(
+    "/api/board",
+    {
+      project: dir,
+      columns: [
+        { name: "Backlog", type: "inert" },
+        { name: "Enrich", type: "skill", skill: "enrich", ...(maxParallel ? { maxParallel } : {}) },
+        { name: "Done", type: "inert" },
+      ],
+    },
+    "PUT",
+  );
+  return { dir, backlog: res.board.columns[0], enrich: res.board.columns[1], done: res.board.columns[2] };
+}
+
+test("pipeline writes transitions: moved, queued, started, run", async () => {
+  const { dir, backlog, enrich } = await openSkillBoard("ns-trans-");
+  const { id } = await post("/api/cards", { project: dir, columnId: backlog.id, title: "trans" });
+  await post(`/api/cards/${id}/move`, { project: dir, columnId: enrich.id });
+  await waitFor(async () => (await getProject(dir)).board.cards.find((c: any) => c.id === id)?.lastRun?.status === "success");
+  const card = (await getProject(dir)).board.cards.find((c: any) => c.id === id);
+  const kinds = card.history.map((h: any) => h.kind).slice(0, 5);
+  expect(kinds).toEqual(["created", "moved", "queued", "started", "run"]);
+  for (const h of card.history.slice(0, 5)) {
+    if (h.kind === "run") expect(h.columnId).toBeUndefined();
+    else expect(h.columnId).toBe(h.kind === "created" ? backlog.id : enrich.id);
+  }
+});
+
+test("queue time is due to the column limit", async () => {
+  const { cardTimeSlices } = await import("../src/shared/timeline.ts");
+  const { dir, enrich } = await openSkillBoard("ns-queuetime-", 1);
+  await post("/api/cards", { project: dir, columnId: enrich.id, title: "q1" });
+  await post("/api/cards", { project: dir, columnId: enrich.id, title: "q2" });
+  await waitFor(async () => Object.keys((await getProject(dir)).live).length === 0);
+  const board = (await getProject(dir)).board;
+  const [c1, c2] = board.cards.filter((c: any) => c.title.startsWith("q"));
+  const run1 = c1.history.find((h: any) => h.kind === "run");
+  const started2 = c2.history.find((h: any) => h.kind === "started");
+  expect(started2.at >= run1.at).toBe(true);
+  const slices = cardTimeSlices(c2, board.columns, Date.now());
+  expect(slices.find((s) => s.columnId === enrich.id && s.part === "queued")!.ms).toBeGreaterThan(0);
+});
+
+test("answer and retry put the card back in the queue", async () => {
+  const { dir, enrich, done } = await openSkillBoard("ns-requeue-");
+  const { id } = await post("/api/cards", { project: dir, columnId: enrich.id, title: "ask" });
+  const card = async () => (await getProject(dir)).board.cards.find((c: any) => c.id === id);
+  await waitFor(async () => (await card()).lastRun?.status === "question");
+  await post(`/api/cards/${id}/answer`, { project: dir, answers: ["blue", ""] });
+  await waitFor(async () => (await card()).columnId === done.id);
+  let h = (await card()).history;
+  const i = h.findIndex((e: any) => e.text.startsWith("Answered"));
+  expect(h[i].kind).toBe("edited");
+  expect(h[i + 1]).toMatchObject({ kind: "queued", columnId: enrich.id });
+
+  const f = await post("/api/cards", { project: dir, columnId: enrich.id, title: "fail" });
+  const failed = async () => (await getProject(dir)).board.cards.find((c: any) => c.id === f.id);
+  await waitFor(async () => (await failed()).lastRun?.status === "error");
+  await post(`/api/cards/${f.id}/retry`, { project: dir });
+  h = (await failed()).history;
+  const r = h.findIndex((e: any) => e.text.startsWith("Retry requested"));
+  expect(h[r].kind).toBe("edited");
+  expect(h[r + 1]).toMatchObject({ kind: "queued", columnId: enrich.id });
+  await waitFor(async () => Object.keys((await getProject(dir)).live).length === 0);
+});
+
+test("history cap keeps the time in timeBase", async () => {
+  const { cardTimeSlices } = await import("../src/shared/timeline.ts");
+  const dir = mkdtempSync(join(tmpdir(), "ns-cap-"));
+  const p = new Project(dir);
+  const [a, b] = p.board.columns.filter((c) => c.type === "inert");
+  const card = p.board.cards[0] ?? (p.mutate((bd) => bd.cards.push({ id: "k", number: 1, title: "t", description: "", columnId: a!.id, createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z", enteredColumnAt: "2026-01-01T00:00:00.000Z", history: [] })), p.card("k")!);
+  const t0 = Date.parse("2026-01-01T00:00:00.000Z");
+  const at = (i: number) => new Date(t0 + i * 60_000).toISOString();
+  const full: any[] = [{ at: at(0), kind: "created", text: `Created in ${a!.name}`, columnId: a!.id }];
+  for (let i = 1; i <= 60; i++) {
+    const [from, to] = i % 2 ? [a!, b!] : [b!, a!];
+    full.push({ at: at(i), kind: "moved", text: `Moved by user: ${from.name} → ${to.name}`, columnId: to.id });
+  }
+  const before = cardTimeSlices({ ...card, createdAt: at(0), history: full, timeBase: undefined } as any, p.board.columns, t0 + 100 * 60_000);
+  card.createdAt = at(0);
+  card.history = [];
+  for (const e of full) {
+    p.addHistory(card, e.kind, e.text, e.columnId);
+    card.history[card.history.length - 1]!.at = e.at;
+  }
+  expect(card.history.length).toBeLessThanOrEqual(50);
+  expect(card.timeBase).toBeDefined();
+  const after = cardTimeSlices(card, p.board.columns, t0 + 100 * 60_000);
+  expect(after).toEqual(before);
+  p.close();
+});
+
+test("--no-agents instance records queued but never started", async () => {
+  const { Orchestrator } = await import("../src/server/orchestrator.ts");
+  const dir = mkdtempSync(join(tmpdir(), "ns-noagents-hist-"));
+  writeFileSync(
+    join(dir, "nightshift.json"),
+    JSON.stringify({ version: 1, name: "n", columns: [{ id: "i", name: "I", type: "inert" }, { id: "s", name: "S", type: "skill", skill: "enrich" }], cards: [{ id: "k", title: "t", columnId: "i", history: [] }] }),
+  );
+  const passive = new Orchestrator({ agents: false });
+  const p = passive.open(dir);
+  p.mutate((board) => p.moveCard(board, "k", "s", undefined, "Moved by user"));
+  await Bun.sleep(300);
+  const kinds = p.card("k")!.history.map((h) => h.kind);
+  expect(kinds).toContain("queued");
+  expect(kinds).not.toContain("started");
+  passive.shutdown();
 });

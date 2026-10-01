@@ -28,8 +28,10 @@ export const api = {
   deleteCard: (project: string, id: string) => call("DELETE", `/api/cards/${id}?${q(project)}`),
   moveCard: (project: string, id: string, columnId: string, index?: number) =>
     call("POST", `/api/cards/${id}/move`, { project, columnId, index }),
+  resumeSession: (project: string, id: string) => call("POST", `/api/cards/${id}/resume`, { project }),
   retry: (project: string, id: string) => call("POST", `/api/cards/${id}/retry`, { project }),
   answer: (project: string, id: string, answers: string[]) => call("POST", `/api/cards/${id}/answer`, { project, answers }),
+  sendFeedback: (project: string, id: string, text: string) => call("POST", `/api/cards/${id}/feedback`, { project, text }),
   testLog: (project: string, id: string) => call<LogLine[]>("GET", `/api/cards/${id}/test?${q(project)}`),
   setTest: (project: string, id: string, command: string, url: string) =>
     call("PUT", `/api/cards/${id}/test`, { project, command, url }),
