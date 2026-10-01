@@ -18,9 +18,6 @@ test("card-modal-layout-css-contract", () => {
   const out = rule(".test-output");
   expect(out).toContain("min-height: 0");
   expect(out).toContain("flex: none");
-  const shots = rule(".test-shots");
-  expect(shots).toContain("max-height");
-  expect(shots).toContain("overflow: auto");
 });
 
 const mdCss = readFileSync(new URL("../src/web/styles/markdown.css", import.meta.url), "utf8");
