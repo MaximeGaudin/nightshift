@@ -36,6 +36,8 @@ export function persistScreenshots(cardId: string, description: string): string 
     if (!dest.includes(MARKER.replaceAll(sep, "/")) || dest.startsWith(dir + sep)) continue;
     try {
       if (!existsSync(dest)) throw new Error("file is missing");
+      // The real file must sit in a captures folder: `..` or symlinks must not reach other files.
+      if (!realpathSync(dest).includes(MARKER)) throw new Error("not inside a nightshift-screenshots folder");
       const st = statSync(dest);
       if (!st.isFile() || st.size > MAX_BYTES) throw new Error("not a regular file or larger than 8 MB");
       mkdirSync(dir, { recursive: true });
