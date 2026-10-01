@@ -943,22 +943,28 @@ test("attention: answering emits nothing, resumed run follows the rules", async 
 
 test("defaultBoard has the Nightshift pipeline", () => {
   const b = defaultBoard("x");
-  expect(b.columns.map((c) => c.name)).toEqual(["Backlog", "Grill", "Plan", "Implement", "Review", "To Test", "Merged", "Done"]);
+  expect(b.columns.map((c) => c.name)).toEqual(["Backlog", "Grill", "Plan", "Implement", "Review", "To Test", "Merge", "Done"]);
   const noId = b.columns.map(({ id: _id, ...rest }) => rest);
   expect(noId).toEqual([
     { name: "Backlog", type: "inert" },
-    { name: "Grill", type: "skill", skill: "nightshift-grill", model: "opus", maxParallel: 3 },
-    { name: "Plan", type: "skill", skill: "nightshift-plan", model: "opus", maxParallel: 3 },
-    { name: "Implement", type: "skill", skill: "nightshift-implement", model: "sonnet", maxParallel: 3 },
-    { name: "Review", type: "skill", skill: "nightshift-review", model: "opus", maxParallel: 1 },
-    { name: "To Test", type: "inert" },
-    { name: "Merged", type: "skill", skill: "nightshift-merge", model: "sonnet", maxParallel: 1 },
+    { name: "Grill", type: "skill", skill: "nightshift-grill", model: "opus", maxParallel: 3, emoji: "🔥" },
+    { name: "Plan", type: "skill", skill: "nightshift-plan", model: "opus", maxParallel: 3, emoji: "🗺️" },
+    { name: "Implement", type: "skill", skill: "nightshift-implement", model: "sonnet", maxParallel: 3, emoji: "🧑‍💻" },
+    { name: "Review", type: "skill", skill: "nightshift-review", model: "opus", maxParallel: 3, emoji: "🧐" },
+    { name: "To Test", type: "inert", emoji: "🪲" },
+    { name: "Merge", type: "skill", skill: "nightshift-merge", model: "sonnet", maxParallel: 1, emoji: "🎉" },
     { name: "Done", type: "inert" },
   ]);
   expect(b.columns.at(-1)).toEqual({ id: DONE_COLUMN_ID, name: "Done", type: "inert" });
   for (const c of b.columns) expect("instructions" in c).toBe(false);
   expect(b.cards).toEqual([]);
   expect(b.nextCardNumber).toBe(1);
+});
+
+test("defaultBoard emojis match nightshift.json and survive normalization", () => {
+  const b = defaultBoard("x");
+  expect(b.columns.map((c) => c.emoji)).toEqual([undefined, "\u{1F525}", "\u{1F5FA}\uFE0F", "\u{1F9D1}\u200D\u{1F4BB}", "\u{1F9D0}", "\u{1FAB2}", "\u{1F389}", undefined]);
+  expect(JSON.stringify(normalizeBoard(b, "x"))).toBe(JSON.stringify(b));
 });
 
 test("defaultBoard ids are fresh", () => {
@@ -980,7 +986,7 @@ test("opening an empty folder writes the pipeline", async () => {
   new Project(dir).close();
   const file = join(dir, "nightshift.json");
   const disk = JSON.parse(readFileSync(file, "utf8"));
-  expect(disk.columns.map((c: Column) => c.name)).toEqual(["Backlog", "Grill", "Plan", "Implement", "Review", "To Test", "Merged", "Done"]);
+  expect(disk.columns.map((c: Column) => c.name)).toEqual(["Backlog", "Grill", "Plan", "Implement", "Review", "To Test", "Merge", "Done"]);
   expect(disk.columns.at(-1).id).toBe(DONE_COLUMN_ID);
   const text = readFileSync(file, "utf8");
   utimesSync(file, PAST, PAST);
@@ -1016,7 +1022,7 @@ test("existing custom columns are untouched", async () => {
 
 test("file without columns gets the pipeline", () => {
   const b = normalizeBoard({ cards: [] }, "x");
-  expect(b.columns.map((c) => c.name)).toEqual(["Backlog", "Grill", "Plan", "Implement", "Review", "To Test", "Merged", "Done"]);
+  expect(b.columns.map((c) => c.name)).toEqual(["Backlog", "Grill", "Plan", "Implement", "Review", "To Test", "Merge", "Done"]);
 });
 
 test("done column: normalizeBoard keeps a user column named Done and puts col_done after it", () => {
@@ -1110,7 +1116,7 @@ test("done column: nextColumn from col_done is undefined", () => {
 
 /** Project where a card runs through "Work" and lands in the inert "To Test", ready to receive feedback. */
 async function feedbackBoard(extra: object[] = []) {
-  const b = await attentionBoard([{ name: "Work", type: "skill", skill: "enrich" }, { name: "To Test", type: "inert" }, ...extra]);
+  const b = await attentionBoard([{ name: "Work", type: "skill", skill: "enrich" }, { name: "To Test", type: "inert", emoji: "🪲" }, ...extra]);
   const [work, toTest] = b.cols;
   const landed = async (title: string) => {
     const { id } = await post("/api/cards", { project: b.dir, columnId: work.id, title });
