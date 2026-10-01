@@ -265,8 +265,10 @@ export class Project {
     try {
       const mtime = statSync(this.file).mtimeMs;
       if (mtime === this.lastWrittenMtime) return;
+      const written = this.lastWrittenMtime;
       this.read();
-      this.lastWrittenMtime = mtime;
+      // read() may rewrite the file (numbering migration), which already recorded the new mtime.
+      if (this.lastWrittenMtime === written) this.lastWrittenMtime = mtime;
       this.emit();
     } catch (e) {
       // Partial write or invalid JSON: keep the in-memory board, retry on the next change, and remember that

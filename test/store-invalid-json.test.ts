@@ -1,5 +1,5 @@
 import { expect, spyOn, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Project } from "../src/server/store.ts";
@@ -16,17 +16,30 @@ test("store-invalid-json: invalid external edit is retried, then backed up befor
   const file = join(dir, "nightshift.json");
   const p = new Project(dir);
   const err = spyOn(console, "error").mockImplementation(() => {});
+  // Other tests in this process may log errors too: only count the store's own.
+  // Filesystem timestamps are coarse: give every external edit a distinct mtime so the watcher sees a change.
+  let tick = Date.now();
+  const edit = (content: string) => {
+    writeFileSync(file, content);
+    tick += 10000;
+    utimesSync(file, new Date(tick), new Date(tick));
+  };
+  // fs.watch arms asynchronously and may miss an edit made right after open: re-apply the edit until it is noticed.
+  const editUntil = (content: string, done: () => boolean) =>
+    waitFor(() => {
+      if (!done()) edit(content);
+      return done();
+    });
+  const failures = () => err.mock.calls.filter((c) => String(c[0]).includes("nightshift.json invalide")).length;
   try {
-    writeFileSync(file, "<<<<<<< HEAD\n{}\n=======\n");
-    await waitFor(() => err.mock.calls.length >= 1);
+    await editUntil("<<<<<<< HEAD\n{}\n=======\n", () => failures() >= 1);
     // Fixing the file is picked up: the failed read did not memorise the mtime.
-    writeFileSync(file, JSON.stringify({ version: 1, name: "fixed", columns: [{ id: "a", name: "A", type: "inert" }], cards: [] }));
-    await waitFor(() => p.board.name === "fixed");
+    const fixed = JSON.stringify({ version: 1, name: "fixed", columns: [{ id: "a", name: "A", type: "inert" }], cards: [] });
+    await editUntil(fixed, () => p.board.name === "fixed");
     // A new invalid edit followed by an in-memory mutation must not lose the user's content.
     const broken = "{ conflict";
-    const failures = err.mock.calls.length;
-    writeFileSync(file, broken);
-    await waitFor(() => err.mock.calls.length > failures);
+    const before = failures();
+    await editUntil(broken, () => failures() > before);
     p.mutate(() => {});
     expect(readFileSync(`${file}.invalid`, "utf8")).toBe(broken);
     expect(existsSync(file)).toBe(true);
