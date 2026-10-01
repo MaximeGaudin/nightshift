@@ -19,7 +19,46 @@ export function defaultBoard(name: string): Board {
       { id: newId("col"), name: "Done", type: "inert" },
     ],
     cards: [],
+    nextCardNumber: 1,
   };
+}
+
+const validNumber = (n: unknown): n is number => Number.isInteger(n) && (n as number) >= 1;
+
+/**
+ * Gives every card a unique number and fixes the counter. Visits cards oldest first (ties by
+ * array order) without reordering them: an older card keeps a duplicated number, the newer one
+ * and unnumbered cards get fresh numbers after the highest kept one. The counter is never lowered.
+ */
+function assignNumbers(cards: Card[], rawNumbers: unknown[], rawNext: unknown): number {
+  const order = cards.map((_, i) => i);
+  order.sort((a, b) => {
+    const ca = cards[a]!.createdAt;
+    const cb = cards[b]!.createdAt;
+    return ca < cb ? -1 : ca > cb ? 1 : a - b;
+  });
+  const seen = new Set<number>();
+  const queue: number[] = [];
+  let maxKept = 0;
+  for (const i of order) {
+    const n = rawNumbers[i];
+    if (validNumber(n) && !seen.has(n)) {
+      seen.add(n);
+      cards[i]!.number = n;
+      if (n > maxKept) maxKept = n;
+    } else queue.push(i);
+  }
+  let counter = Math.max(validNumber(rawNext) ? rawNext : 1, maxKept + 1);
+  for (const i of queue) cards[i]!.number = counter++;
+  return counter;
+}
+
+/** True when normalization changed the numbering of a raw board, so it must be written back. */
+export function numberingChanged(raw: any, board: Board): boolean {
+  if (raw?.nextCardNumber !== board.nextCardNumber) return true;
+  const rawById = new Map<string, any>();
+  if (Array.isArray(raw?.cards)) for (const c of raw.cards) if (c && typeof c.id === "string" && !rawById.has(c.id)) rawById.set(c.id, c);
+  return board.cards.some((c) => rawById.get(c.id)?.number !== c.number);
 }
 
 /** Normalizes a parsed board so the rest of the code can trust its shape. */
@@ -37,23 +76,22 @@ export function normalizeBoard(raw: any, fallbackName: string): Board {
     : [];
   if (columns.length === 0) columns.push(...defaultBoard(fallbackName).columns);
   const colIds = new Set(columns.map((c) => c.id));
-  const cards: Card[] = Array.isArray(raw?.cards)
-    ? raw.cards
-        .filter((c: any) => c && typeof c.id === "string")
-        .map((c: any) => ({
-          id: c.id,
-          title: String(c.title ?? ""),
-          description: String(c.description ?? ""),
-          columnId: colIds.has(c.columnId) ? c.columnId : columns[0]!.id,
-          createdAt: c.createdAt ?? now(),
-          updatedAt: c.updatedAt ?? now(),
-          enteredColumnAt: c.enteredColumnAt ?? c.updatedAt ?? now(),
-          ...(c.lastRun ? { lastRun: c.lastRun } : {}),
-          ...(c.pendingAnswer ? { pendingAnswer: c.pendingAnswer } : {}),
-          history: Array.isArray(c.history) ? c.history.slice(-50) : [],
-        }))
-    : [];
-  return { version: 1, name: String(raw?.name ?? fallbackName), columns, cards };
+  const rawCards: any[] = Array.isArray(raw?.cards) ? raw.cards.filter((c: any) => c && typeof c.id === "string") : [];
+  const cards: Card[] = rawCards.map((c: any) => ({
+    id: c.id,
+    number: 0,
+    title: String(c.title ?? ""),
+    description: String(c.description ?? ""),
+    columnId: colIds.has(c.columnId) ? c.columnId : columns[0]!.id,
+    createdAt: c.createdAt ?? now(),
+    updatedAt: c.updatedAt ?? now(),
+    enteredColumnAt: c.enteredColumnAt ?? c.updatedAt ?? now(),
+    ...(c.lastRun ? { lastRun: c.lastRun } : {}),
+    ...(c.pendingAnswer ? { pendingAnswer: c.pendingAnswer } : {}),
+    history: Array.isArray(c.history) ? c.history.slice(-50) : [],
+  }));
+  const nextCardNumber = assignNumbers(cards, rawCards.map((c) => c.number), raw?.nextCardNumber);
+  return { version: 1, name: String(raw?.name ?? fallbackName), columns, cards, nextCardNumber };
 }
 
 /**
