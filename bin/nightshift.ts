@@ -1,22 +1,20 @@
 #!/usr/bin/env bun
 import { resolve } from "node:path";
+import { type CliOptions, parseArgs, USAGE } from "../src/server/cli.ts";
 import { startServer } from "../src/server/server.ts";
 
-const argv = process.argv.slice(2);
-let port = Number(process.env.PORT) || 4545;
-let dir: string | undefined;
-let open = true;
-let agents = true;
-for (let i = 0; i < argv.length; i++) {
-  const a = argv[i]!;
-  if (a === "--port" || a === "-p") port = Number(argv[++i]);
-  else if (a === "--no-open") open = false;
-  else if (a === "--no-agents") agents = false;
-  else if (a === "--help" || a === "-h") {
-    console.log("Usage: nightshift [project-dir] [--port 4545] [--no-open] [--no-agents]");
-    process.exit(0);
-  } else dir = a;
+let opts: CliOptions;
+try {
+  opts = parseArgs(process.argv.slice(2), process.env);
+} catch (e: any) {
+  console.error(e.message);
+  process.exit(2);
 }
+if (opts.help) {
+  console.log(USAGE);
+  process.exit(0);
+}
+const { port, dir, open, agents } = opts;
 
 const { server, orch } = startServer({ port, agents, development: process.env.NODE_ENV !== "production" });
 const project = resolve(dir ?? process.cwd());
