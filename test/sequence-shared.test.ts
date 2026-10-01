@@ -62,11 +62,12 @@ test("seq-shared-failure", () => {
   expect(
     sequenceFailure(b, card({ columnId: "col_totest", lastRun: run({ columnId: "col_totest", status: "success" }) }), false),
   ).toBeUndefined();
-  expect(sequenceFailure(b, card({ lastRun: run({ status: "error", error: "boom".repeat(100) }) }), false)).toBe(
-    `en erreur : ${"boom".repeat(100).slice(0, 120)}`,
-  );
-  expect(sequenceFailure(b, card({ lastRun: run({ status: "cancelled" }) }), false)).toBe("run annulé");
-  expect(sequenceFailure(b, card({ lastRun: run() }), false)).toBe("l'agent a gardé la carte dans Merge");
+  expect(sequenceFailure(b, card({ lastRun: run({ status: "error", error: "boom".repeat(100) }) }), false)).toEqual({
+    code: "error",
+    error: "boom".repeat(100).slice(0, 120),
+  });
+  expect(sequenceFailure(b, card({ lastRun: run({ status: "cancelled" }) }), false)).toEqual({ code: "cancelled" });
+  expect(sequenceFailure(b, card({ lastRun: run() }), false)).toEqual({ code: "kept", column: "Merge" });
 });
 
 test("seq-shared-label", () => {

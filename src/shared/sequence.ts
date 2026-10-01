@@ -10,8 +10,21 @@ export interface SequenceState {
   status: SequenceStatus;
   /** Card currently going through the sequence. */
   cardId?: string;
-  /** Why the sequence is paused (French, shown to the user). */
-  notice?: string;
+  /** Why the sequence stopped; the web client turns it into text in the user's language. */
+  notice?: SequenceNotice;
+}
+
+/** Structured reason so the wording stays on the client, which knows the UI language. */
+export type SequenceNotice =
+  | { code: "backlogEmpty" | "finished" | "cardDeleted" }
+  | { code: "cardReturned" | "kept"; ref: string; column: string }
+  | { code: "error"; ref: string; error: string }
+  | { code: "cancelled"; ref: string };
+
+export type SequenceFailure = { code: "error"; error: string } | { code: "cancelled" } | { code: "kept"; column: string };
+
+export function sameNotice(a?: SequenceNotice, b?: SequenceNotice): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
 }
 
 const ERROR_MAX = 120;
@@ -40,18 +53,18 @@ export function autoMergeSkipIds(columns: Column[], card: Pick<Card, "skipColumn
   return normalizeSkipColumnIds(columns, [...(card.skipColumnIds ?? []), ...inert]);
 }
 
-/** French reason why the card stalled in its column, or undefined when the sequence can go on. */
-export function sequenceFailure(board: Board, card: Card, running: boolean): string | undefined {
+/** Why the card stalled in its column, or undefined when the sequence can go on. */
+export function sequenceFailure(board: Board, card: Card, running: boolean): SequenceFailure | undefined {
   if (running || card.pendingAnswer || needsRun(board, card)) return undefined;
   const lr = card.lastRun;
   if (!lr || lr.columnId !== card.columnId || lr.at < card.enteredColumnAt) return undefined;
   const col = board.columns.find((c) => c.id === card.columnId);
   if (lr.status === "error") {
     const err = (lr.error ?? "").trim();
-    return `en erreur : ${err.length > ERROR_MAX ? err.slice(0, ERROR_MAX) : err}`;
+    return { code: "error", error: err.length > ERROR_MAX ? err.slice(0, ERROR_MAX) : err };
   }
-  if (lr.status === "cancelled") return "run annulé";
-  if (lr.status === "success" && col?.type === "skill") return `l'agent a gardé la carte dans ${col.name}`;
+  if (lr.status === "cancelled") return { code: "cancelled" };
+  if (lr.status === "success" && col?.type === "skill") return { code: "kept", column: col.name };
   return undefined;
 }
 

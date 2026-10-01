@@ -66,7 +66,7 @@ test("seq-ctl-play-launch", () => {
 test("seq-ctl-empty", () => {
   const { p, ctl, calls } = setup([]);
   ctl.play(p);
-  expect(ctl.get(p)).toEqual({ status: "stopped", notice: "Backlog vide" });
+  expect(ctl.get(p)).toEqual({ status: "stopped", notice: { code: "backlogEmpty" } });
   expect(p.board.cards).toHaveLength(0);
   expect(calls.state).toBe(1);
 });
@@ -80,7 +80,7 @@ test("seq-ctl-chain", async () => {
   expect(ctl.get(p)).toEqual({ status: "active", cardId: "B" });
   move("B", "col_done");
   await tick();
-  expect(ctl.get(p)).toEqual({ status: "stopped", notice: "Séquence terminée : backlog vide" });
+  expect(ctl.get(p)).toEqual({ status: "stopped", notice: { code: "finished" } });
 });
 
 test("seq-ctl-pause", async () => {
@@ -110,7 +110,7 @@ test("seq-ctl-failure-resume", async () => {
   const s = ctl.get(p);
   expect(s.status).toBe("stopped");
   expect(s.cardId).toBe("A");
-  expect(s.notice).toContain(`#${card("A").number}`);
+  expect(s.notice).toEqual({ code: "error", ref: `#${card("A").number}`, error: "boom" });
   expect(calls.attention).toEqual(["A"]);
   p.mutate(() => {
     delete card("A").lastRun;
@@ -146,5 +146,5 @@ test("seq-ctl-manual", async () => {
     b.cards = b.cards.filter((c) => c.id !== "A");
   });
   await two.tick();
-  expect(two.ctl.get(two.p)).toEqual({ status: "stopped", notice: "Séquence arrêtée : carte supprimée" });
+  expect(two.ctl.get(two.p)).toEqual({ status: "stopped", notice: { code: "cardDeleted" } });
 });

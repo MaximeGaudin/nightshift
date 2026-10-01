@@ -1,7 +1,7 @@
 import { Columns3, Info, Moon, Pause, Play, Settings as SettingsIcon, Sparkles, TriangleAlert } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { sequenceLabel } from "../shared/sequence.ts";
+import { type SequenceNotice as Notice, sequenceLabel } from "../shared/sequence.ts";
 import type { ProjectSnapshot } from "../shared/types.ts";
 import { api, useServerEvents, useSettings } from "./api.ts";
 import { Board } from "./Board.tsx";
@@ -15,7 +15,7 @@ import { Alert } from "./components/ui/alert.tsx";
 import { Button } from "./components/ui/button.tsx";
 import { Kbd } from "./components/ui/kbd.tsx";
 import { Skeleton } from "./components/ui/skeleton.tsx";
-import { resolveLocale, setLocale, useT } from "./i18n/index.ts";
+import { type MessageKey, resolveLocale, setLocale, useT } from "./i18n/index.ts";
 import { NewCardDialog } from "./NewCardDialog.tsx";
 import { notifyError } from "./notify.ts";
 import { ProjectPicker } from "./ProjectPicker.tsx";
@@ -353,12 +353,25 @@ export function SequenceButton({ snap, guard }: { snap: ProjectSnapshot; guard: 
   );
 }
 
+const NOTICE_KEYS: Record<Notice["code"], MessageKey> = {
+  backlogEmpty: "board.sequence.notice.backlogEmpty",
+  finished: "board.sequence.notice.finished",
+  cardDeleted: "board.sequence.notice.cardDeleted",
+  cardReturned: "board.sequence.notice.cardReturned",
+  error: "board.sequence.notice.error",
+  cancelled: "board.sequence.notice.cancelled",
+  kept: "board.sequence.notice.kept",
+};
+
 export function SequenceNotice({ snap }: { snap: Pick<ProjectSnapshot, "sequence"> }) {
-  if (!snap.sequence.notice) return null;
+  const { t } = useT();
+  const notice = snap.sequence.notice;
+  if (!notice) return null;
+  const { code, ...params } = notice;
   return (
     <Alert role="status" variant="warn" className="sequence-notice">
       <TriangleAlert aria-hidden="true" />
-      {snap.sequence.notice}
+      {t(NOTICE_KEYS[code], params)}
     </Alert>
   );
 }

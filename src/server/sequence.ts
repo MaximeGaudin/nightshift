@@ -1,7 +1,15 @@
 // Sequential mode: runs the top card of the source column through the board, one at a time.
 // Held in memory per project (never written to nightshift.json). All transitions are synchronous.
 
-import { autoMergeSkipIds, type SequenceState, sequenceColumns, sequenceFailure, topSourceCard } from "../shared/sequence.ts";
+import {
+  autoMergeSkipIds,
+  type SequenceNotice,
+  type SequenceState,
+  sameNotice,
+  sequenceColumns,
+  sequenceFailure,
+  topSourceCard,
+} from "../shared/sequence.ts";
 import { cardRef, DONE_COLUMN_ID } from "../shared/types.ts";
 import { HttpError } from "./guard.ts";
 import type { Project } from "./store.ts";
@@ -30,10 +38,10 @@ export class SequenceController {
   private set(p: Project, next: SequenceState) {
     const prev = this.get(p);
     this.states.set(p.path, next);
-    if (prev.status !== next.status || prev.cardId !== next.cardId || prev.notice !== next.notice) this.deps.onState(p);
+    if (prev.status !== next.status || prev.cardId !== next.cardId || !sameNotice(prev.notice, next.notice)) this.deps.onState(p);
   }
 
-  private stop(p: Project, notice?: string, keepCard = false) {
+  private stop(p: Project, notice?: SequenceNotice, keepCard = false) {
     const cardId = keepCard ? this.get(p).cardId : undefined;
     this.set(p, { status: "stopped", ...(cardId ? { cardId } : {}), ...(notice ? { notice } : {}) });
   }
@@ -49,7 +57,7 @@ export class SequenceController {
   }
 
   play(p: Project) {
-    if (!this.deps.canRunAgents(p)) throw new HttpError(409, "Cette instance ne lance pas d'agents pour ce projet");
+    if (!this.deps.canRunAgents(p)) throw new HttpError(409, "This instance does not run agents for this project");
     const state = this.get(p);
     if (state.status === "active") return;
     if (state.status === "paused") {
@@ -64,7 +72,7 @@ export class SequenceController {
       this.reconcile(p);
       return;
     }
-    if (!this.launchNext(p)) this.stop(p, "Backlog vide");
+    if (!this.launchNext(p)) this.stop(p, { code: "backlogEmpty" });
   }
 
   pause(p: Project) {
@@ -79,18 +87,18 @@ export class SequenceController {
     const board = p.board;
     const cols = sequenceColumns(board.columns);
     const card = state.cardId ? board.cards.find((c) => c.id === state.cardId) : undefined;
-    if (!cols || !card) return this.stop(p, "Séquence arrêtée : carte supprimée");
+    if (!cols || !card) return this.stop(p, { code: "cardDeleted" });
     if (card.columnId === cols.source.id) {
-      return this.stop(p, `Séquence arrêtée : ${cardRef(card)} ramenée dans ${cols.source.name}`);
+      return this.stop(p, { code: "cardReturned", ref: cardRef(card), column: cols.source.name });
     }
     if (card.columnId === DONE_COLUMN_ID) {
       if (state.status === "paused") return this.stop(p);
-      if (!this.launchNext(p)) this.stop(p, "Séquence terminée : backlog vide");
+      if (!this.launchNext(p)) this.stop(p, { code: "finished" });
       return;
     }
     const reason = sequenceFailure(board, card, this.deps.isRunning(p, card.id));
     if (reason) {
-      this.stop(p, `Séquence arrêtée : ${cardRef(card)} ${reason}`, true);
+      this.stop(p, { ...reason, ref: cardRef(card) }, true);
       this.deps.onAttention(p, card.id);
     }
   }

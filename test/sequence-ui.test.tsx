@@ -31,10 +31,12 @@ test("seq-ui-button", () => {
   expect(render(snapWith({ sequence: { status: "stopped" }, agentsDisabled: true }))).toMatch(/<button[^>]*\sdisabled(=|\s|>)/);
   expect(render(snapWith({ sequence: { status: "stopped" }, lockedBy: 42 }))).toMatch(/<button[^>]*\sdisabled(=|\s|>)/);
 
-  const notice = render(snapWith({ sequence: { status: "paused", cardId: "card_1", notice: "en erreur : boom" } }));
+  const notice = render(
+    snapWith({ sequence: { status: "paused", cardId: "card_1", notice: { code: "error", ref: "#7", error: "boom" } } }),
+  );
   expect(notice).toMatch(/class="[^"]*sequence-notice[^"]*"/);
   expect(notice).toContain('role="status"');
-  expect(notice).toContain("en erreur : boom");
+  expect(notice).toContain("Séquence arrêtée : #7 en erreur : boom");
 });
 
 test("seq-ui-badge", () => {

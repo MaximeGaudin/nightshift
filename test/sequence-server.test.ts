@@ -67,7 +67,7 @@ test("seq-srv-routes refuses play on an agents:false instance", async () => {
   const dir = await open(idle);
   const r = await idle.call("/api/sequence/play", { body: { project: dir } });
   expect(r.status).toBe(409);
-  expect((await r.json()).error).toBe("Cette instance ne lance pas d'agents pour ce projet");
+  expect((await r.json()).error).toBe("This instance does not run agents for this project");
   const snap = await idle.call(`/api/project?project=${encodeURIComponent(dir)}`).then((x) => x.json());
   expect(snap.sequence).toEqual({ status: "stopped" });
 });

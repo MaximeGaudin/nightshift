@@ -21,7 +21,7 @@ mock.module(new URL("../src/web/components/ui/dialog.tsx", import.meta.url).path
 }));
 
 // App first: Board and App import each other.
-const { SequenceButton } = await import("../src/web/App.tsx");
+const { SequenceButton, SequenceNotice } = await import("../src/web/App.tsx");
 const { Board: BoardView } = await import("../src/web/Board.tsx");
 const { CardModal } = await import("../src/web/CardModal.tsx");
 const { SettingsContent, SettingsModal } = await import("../src/web/SettingsModal.tsx");
@@ -109,6 +109,9 @@ const surfaces: Record<string, () => ReactNode> = {
   ),
   "shortcuts help": () => <ShortcutsHelp onClose={noop} />,
   "sequence button": () => <SequenceButton snap={snap} guard={noop} />,
+  "sequence notice": () => (
+    <SequenceNotice snap={{ sequence: { status: "stopped", cardId: "c1", notice: { code: "kept", ref: "#3", column: "Review" } } }} />
+  ),
   "time panel": () => <TimePanelView card={cards[2]} board={board} nowMs={Date.parse("2026-01-04T05:00:00Z")} />,
 };
 
