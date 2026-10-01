@@ -65,6 +65,8 @@
   accent-color: var(--accent);
   pointer-events: none;
 }
+/* Read-only boxes stay legible: cancel the base faded look of disabled fields. */
+.md li.task > input[type="checkbox"]:disabled { opacity: 1; }
 
 /* Code */
 .md code {
