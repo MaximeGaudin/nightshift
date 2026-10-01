@@ -1,8 +1,25 @@
 # Nightshift
 
-A kanban board that orchestrates Claude Code agents. One folder = one board; the whole board state lives in a single file, `nightshift.json`, at the folder root (commit it in your projects; this repository ignores its own, see Files).
+A kanban board that orchestrates Claude Code agents. One folder is one board: the whole board state lives in a single file, `nightshift.json`, at the folder root. Drop a card in a skill column and a `claude -p` agent picks it up in your project folder, reports progress, asks you questions when it is blocked, and hands the card to the next column. Leave it running and review the results in the morning.
 
-## Run
+![Nightshift board](nightshift-screenshots/01-home.png)
+
+## Prerequisites
+
+- [Bun](https://bun.sh) >= 1.4.2
+- [Claude Code CLI](https://docs.claude.com/en/docs/claude-code) installed and logged in
+- git
+- macOS and Linux are supported; Windows is untested.
+
+## Quick start
+
+```sh
+git clone <repo-url> nightshift && cd nightshift && bun install && bun start <project>
+```
+
+`<project>` is the folder you want a board for (it defaults to the current directory).
+
+## Usage
 
 ```sh
 bun install
@@ -29,9 +46,22 @@ Development scripts: `bun run lint` (Biome), `bun run format`, `bun run typechec
 - **Progression**: a running card shows live progress (step N/M and a label). Agents emit a line `[nightshift-progress] N/M label` at each step (a numbered `## Progress` section in the card sets numbering and total); until a marker is seen, the agent's TodoWrite list is used instead. Last value wins, it resets at each (re)start of the agent and is never saved in `nightshift.json`.
 - Skills are read from `<project>/.claude/skills` (project, committable) and `~/.claude/skills` (user). Project skills shadow user skills. New skills are created in the project.
 
-## Mode séquentiel
+## Template skills
 
-Un bouton lecture/pause du tableau fait avancer les cartes une par une : « lecture » déplace la première carte de la première colonne (le backlog) dans la deuxième, saute les colonnes inertes (hors Done), puis lance la suivante quand la carte arrive dans Done. « Pause » laisse la carte en cours finir mais ne lance pas la suivante. La séquence s'arrête (avec un message) si le backlog est vide, si la carte est supprimée ou ramenée dans le backlog, ou si son run échoue, est annulé ou laisse la carte sur place ; une question en attente ne l'arrête pas. Un nouvel appui sur lecture reprend la carte arrêtée. L'état est en mémoire (jamais dans `nightshift.json`) ; routes `POST /api/sequence/play` et `/api/sequence/pause` (`{project}`), refusées (409) sur une instance sans agents.
+Nightshift ships five template skills in the repository `skills/` folder: `nightshift-grill`, `nightshift-plan`, `nightshift-implement`, `nightshift-review` and `nightshift-merge`.
+
+- When a new project gets its `nightshift.json` (the first time you open a folder), they are copied into `<project>/.claude/skills/`. A skill folder that already exists is never overwritten, and existing projects are left untouched.
+- Project skills shadow the skills in `~/.claude/skills` (`NIGHTSHIFT_USER_SKILLS` overrides that user directory). Delete `<project>/.claude/skills/<name>` to fall back to your user skill of the same name.
+- Customize a skill by editing its project copy, or in the Skills modal.
+- If a copy fails, the board is still created and a toast names the skills that were not copied.
+
+## Language
+
+The interface is available in English and French. Choose it in Settings -> Language: Auto (follows the browser language), English or Français. The choice is stored as `language` (`auto`, `en` or `fr`) in `~/.nightshift/settings.json` and applies immediately. Server messages, agent prompts and skills stay in English.
+
+## Sequential mode
+
+A play/pause button on the board moves cards one at a time. "Play" moves the first card of the first column (the backlog) into the second one, skips inert columns (except Done), then starts the next card once the current one reaches Done. "Pause" lets the running card finish but does not start the next one. The sequence stops (with a message) if the backlog is empty, if the card is deleted or moved back to the backlog, or if its run fails, is cancelled or leaves the card in place; a pending question does not stop it. Pressing play again resumes the stopped card. The state is kept in memory (never in `nightshift.json`); the routes are `POST /api/sequence/play` and `/api/sequence/pause` (`{project}`), rejected with 409 on an instance without agents.
 
 ## Files
 
@@ -50,4 +80,11 @@ Agents run unattended with the configured `--permission-mode` (default `auto`: C
 - `bin/nightshift.ts`: CLI entry point.
 - `src/server/`: `store.ts` (board file), `orchestrator.ts` (queue, `claude` processes, questions), `skills.ts`, `settings.ts`, `server.ts` (HTTP + WebSocket API, serves the UI).
 - `src/web/`: React UI bundled by Bun.
+- `src/web/i18n/`: in-house translation layer, `en/` and `fr/` message files per namespace.
+- `skills/`: template skills copied into new projects.
 - `test/`: tests, with `fake-claude.ts` standing in for the CLI.
+- `.github/`: CI workflow, issue and pull request templates.
+
+## Questions and bugs
+
+Use [GitHub Issues](../../issues). To contribute, see [CONTRIBUTING.md](CONTRIBUTING.md); the project follows its [Code of Conduct](CODE_OF_CONDUCT.md) and [Security Policy](SECURITY.md). Released under the [MIT License](LICENSE).
