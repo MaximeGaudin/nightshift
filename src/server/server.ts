@@ -110,9 +110,10 @@ export function startServer({ port, development }: { port: number; development?:
           const columnId = b.columnId ?? p.board.columns[0]!.id;
           if (!p.column(columnId)) throw new Error("Unknown column");
           const id = newId("card");
-          p.mutate((board) => {
+          const number = p.mutate((board) => {
             const card = {
               id,
+              number: board.nextCardNumber,
               title: String(b.title || "Untitled").trim(),
               description: String(b.description ?? ""),
               columnId,
@@ -121,10 +122,12 @@ export function startServer({ port, development }: { port: number; development?:
               enteredColumnAt: now,
               history: [] as any[],
             };
+            board.nextCardNumber += 1;
             p.addHistory(card, "created", `Created in ${p.column(columnId)!.name}`);
             board.cards.push(card);
+            return card.number;
           });
-          return { id };
+          return { id, number };
         }),
       },
       "/api/cards/:id": {

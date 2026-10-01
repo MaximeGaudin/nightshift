@@ -37,6 +37,8 @@ export interface HistoryEntry {
 
 export interface Card {
   id: string;
+  /** Short human ref (`#32`): positive integer, unique per board, never changes, never reused. */
+  number: number;
   title: string;
   description: string;
   columnId: string;
@@ -56,6 +58,13 @@ export interface Board {
   name: string;
   columns: Column[];
   cards: Card[];
+  /** Number the next created card receives. Always greater than every card number. */
+  nextCardNumber: number;
+}
+
+/** Quick human ref of a card, e.g. `#32`. */
+export function cardRef(card: Pick<Card, "number">): string {
+  return "#" + card.number;
 }
 
 /** Values accepted by `claude --permission-mode`. */

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import type { Card, Column, LiveStatus, ProjectSnapshot } from "../shared/types.ts";
+import { cardRef, type Card, type Column, type LiveStatus, type ProjectSnapshot } from "../shared/types.ts";
 import { api, useServerEvents, useSettings } from "./api.ts";
 import { CardModal } from "./CardModal.tsx";
 import { ColumnsEditor } from "./ColumnsEditor.tsx";
@@ -276,6 +276,7 @@ function CardTile({
       tabIndex={0}
       onKeyDown={(e) => e.key === "Enter" && onOpen()}
     >
+      <div className="card-ref">{cardRef(card)}</div>
       <h3>{card.title}</h3>
       {card.description && <p className="excerpt">{card.description.slice(0, 160)}</p>}
       {status && (

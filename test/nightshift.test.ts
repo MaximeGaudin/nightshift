@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -14,7 +14,7 @@ process.env.FAKE_ARGS_LOG = argsLog;
 
 const { parseFrontmatter, listSkills, createSkill } = await import("../src/server/skills.ts");
 const { splitArgs, resolveModel } = await import("../src/server/orchestrator.ts");
-const { needsRun, normalizeBoard } = await import("../src/server/store.ts");
+const { needsRun, normalizeBoard, numberingChanged, Project } = await import("../src/server/store.ts");
 const { startServer } = await import("../src/server/server.ts");
 const { updateSettings } = await import("../src/server/settings.ts");
 
@@ -278,4 +278,125 @@ test("resume uses the column model at resume time", async () => {
   const resumed = argsEntries().slice(before).filter((e) => e.resumed);
   expect(resumed).toHaveLength(1);
   expect(resumed[0]!.model).toBe("haiku");
+});
+
+// ---- card numbers -----------------------------------------------------------
+
+const rawCard = (id: string, createdAt: string, number?: unknown) => ({
+  id,
+  title: id,
+  createdAt,
+  ...(number === undefined ? {} : { number }),
+});
+const numbers = (b: { cards: { id: string; number: number }[] }) => Object.fromEntries(b.cards.map((c) => [c.id, c.number]));
+
+test("numbering: fresh board assigns 1,2,3 and never reuses", async () => {
+  const fresh = mkdtempSync(join(tmpdir(), "ns-num-"));
+  const snap = await post("/api/projects/open", { path: fresh });
+  expect(snap.board.nextCardNumber).toBe(1);
+  const ids: string[] = [];
+  for (const t of ["a", "b", "c"]) ids.push((await post("/api/cards", { project: fresh, title: t })).id);
+  const get = () => fetch(`${base}/api/project?project=${encodeURIComponent(fresh)}`).then((r) => r.json());
+  expect(numbers((await get()).board)).toEqual({ [ids[0]!]: 1, [ids[1]!]: 2, [ids[2]!]: 3 });
+  await fetch(`${base}/api/cards/${ids[2]}?project=${encodeURIComponent(fresh)}`, { method: "DELETE" });
+  const { id, number } = await post("/api/cards", { project: fresh, title: "d" });
+  expect(number).toBe(4);
+  const file = JSON.parse(readFileSync(join(fresh, "nightshift.json"), "utf8"));
+  expect(file.cards.find((c: any) => c.id === id).number).toBe(4);
+  expect(file.cards.map((c: any) => c.number)).toEqual([1, 2, 4]);
+  expect(file.nextCardNumber).toBe(5);
+});
+
+test("numbering: migration in createdAt order", () => {
+  const b = normalizeBoard(
+    {
+      cards: [
+        rawCard("late", "2026-01-03T00:00:00Z"),
+        rawCard("tieA", "2026-01-02T00:00:00Z"),
+        rawCard("early", "2026-01-01T00:00:00Z"),
+        rawCard("tieB", "2026-01-02T00:00:00Z"),
+      ],
+    },
+    "x",
+  );
+  expect(b.cards.map((c) => c.id)).toEqual(["late", "tieA", "early", "tieB"]);
+  expect(numbers(b)).toEqual({ early: 1, tieA: 2, tieB: 3, late: 4 });
+  expect(b.nextCardNumber).toBe(5);
+
+  const three = normalizeBoard(
+    { cards: [rawCard("c", "2026-01-03T00:00:00Z"), rawCard("a", "2026-01-01T00:00:00Z"), rawCard("b", "2026-01-02T00:00:00Z")] },
+    "x",
+  );
+  expect(three.cards.map((c) => c.id)).toEqual(["c", "a", "b"]);
+  expect(numbers(three)).toEqual({ a: 1, b: 2, c: 3 });
+  expect(three.nextCardNumber).toBe(4);
+  expect(normalizeBoard({ cards: [] }, "x").nextCardNumber).toBe(1);
+});
+
+test("numbering: partial migration starts after the highest", () => {
+  const b = normalizeBoard(
+    { cards: [rawCard("old", "2026-01-01T00:00:00Z"), rawCard("five", "2026-01-02T00:00:00Z", 5), rawCard("bad", "2026-01-03T00:00:00Z", 1.5)] },
+    "x",
+  );
+  expect(numbers(b)).toEqual({ five: 5, old: 6, bad: 7 });
+  expect(b.nextCardNumber).toBe(8);
+  const simple = normalizeBoard({ cards: [rawCard("five", "2026-01-01T00:00:00Z", 5), rawCard("none", "2026-01-02T00:00:00Z")] }, "x");
+  expect(numbers(simple)).toEqual({ five: 5, none: 6 });
+  expect(simple.nextCardNumber).toBe(7);
+});
+
+test("numbering: duplicate repair keeps the older", () => {
+  const b = normalizeBoard(
+    {
+      nextCardNumber: 4,
+      cards: [rawCard("newer", "2026-01-02T00:00:00Z", 3), rawCard("older", "2026-01-01T00:00:00Z", 3)],
+    },
+    "x",
+  );
+  expect(b.cards.map((c) => c.id)).toEqual(["newer", "older"]);
+  expect(numbers(b)).toEqual({ older: 3, newer: 4 });
+  expect(b.nextCardNumber).toBe(5);
+});
+
+test("numbering: counter too low is raised, higher counter kept", () => {
+  const cards = [rawCard("a", "2026-01-01T00:00:00Z", 7), rawCard("b", "2026-01-02T00:00:00Z", 2)];
+  expect(normalizeBoard({ nextCardNumber: 2, cards }, "x").nextCardNumber).toBe(8);
+  const high = normalizeBoard({ nextCardNumber: 20, cards: [...cards, rawCard("c", "2026-01-03T00:00:00Z")] }, "x");
+  expect(numbers(high)).toEqual({ a: 7, b: 2, c: 20 });
+  expect(high.nextCardNumber).toBe(21);
+  expect(normalizeBoard({ nextCardNumber: 20, cards }, "x").nextCardNumber).toBe(20);
+});
+
+test("numbering: load writes back only when changed", async () => {
+  const legacy = mkdtempSync(join(tmpdir(), "ns-legacy-"));
+  const legacyFile = join(legacy, "nightshift.json");
+  writeFileSync(
+    legacyFile,
+    JSON.stringify({ version: 1, name: "legacy", columns: [{ id: "col", name: "Backlog", type: "inert" }], cards: [rawCard("b", "2026-01-02T00:00:00Z"), rawCard("a", "2026-01-01T00:00:00Z")] }),
+  );
+  const migrated = new Project(legacy);
+  migrated.close();
+  const onDisk = JSON.parse(readFileSync(legacyFile, "utf8"));
+  expect(numbers(onDisk)).toEqual({ a: 1, b: 2 });
+  expect(onDisk.nextCardNumber).toBe(3);
+  expect(numberingChanged(onDisk, normalizeBoard(onDisk, "legacy"))).toBe(false);
+
+  const clean = mkdtempSync(join(tmpdir(), "ns-clean-"));
+  const cleanFile = join(clean, "nightshift.json");
+  writeFileSync(cleanFile, JSON.stringify(onDisk));
+  const before = { text: readFileSync(cleanFile, "utf8"), mtime: statSync(cleanFile).mtimeMs };
+  await Bun.sleep(20);
+  const opened = new Project(clean);
+  opened.close();
+  expect(opened.board.nextCardNumber).toBe(3);
+  expect(readFileSync(cleanFile, "utf8")).toBe(before.text);
+  expect(statSync(cleanFile).mtimeMs).toBe(before.mtime);
+});
+
+test("prompt: includes card ref", async () => {
+  const { buildPrompt } = await import("../src/server/orchestrator.ts");
+  const column = { id: "col", name: "Work", type: "skill" as const, skill: "s" };
+  const card = { id: "card_abc", number: 32, title: "T", description: "D", columnId: "col", createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", enteredColumnAt: "2026-01-01T00:00:00Z", history: [] };
+  const board = { version: 1 as const, name: "x", columns: [column], cards: [card], nextCardNumber: 33 };
+  expect(buildPrompt(board, card, column, undefined)).toContain(`<card id="card_abc" ref="#32">`);
 });

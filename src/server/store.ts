@@ -19,7 +19,46 @@ export function defaultBoard(name: string): Board {
       { id: newId("col"), name: "Done", type: "inert" },
     ],
     cards: [],
+    nextCardNumber: 1,
   };
+}
+
+const validNumber = (n: unknown): n is number => Number.isInteger(n) && (n as number) >= 1;
+
+/**
+ * Gives every card a unique number and fixes the counter. Visits cards oldest first (ties by
+ * array order) without reordering them: an older card keeps a duplicated number, the newer one
+ * and unnumbered cards get fresh numbers after the highest kept one. The counter is never lowered.
+ */
+function assignNumbers(cards: Card[], rawNumbers: unknown[], rawNext: unknown): number {
+  const order = cards.map((_, i) => i);
+  order.sort((a, b) => {
+    const ca = cards[a]!.createdAt;
+    const cb = cards[b]!.createdAt;
+    return ca < cb ? -1 : ca > cb ? 1 : a - b;
+  });
+  const seen = new Set<number>();
+  const queue: number[] = [];
+  let maxKept = 0;
+  for (const i of order) {
+    const n = rawNumbers[i];
+    if (validNumber(n) && !seen.has(n)) {
+      seen.add(n);
+      cards[i]!.number = n;
+      if (n > maxKept) maxKept = n;
+    } else queue.push(i);
+  }
+  let counter = Math.max(validNumber(rawNext) ? rawNext : 1, maxKept + 1);
+  for (const i of queue) cards[i]!.number = counter++;
+  return counter;
+}
+
+/** True when normalization changed the numbering of a raw board, so it must be written back. */
+export function numberingChanged(raw: any, board: Board): boolean {
+  if (raw?.nextCardNumber !== board.nextCardNumber) return true;
+  const rawById = new Map<string, any>();
+  if (Array.isArray(raw?.cards)) for (const c of raw.cards) if (c && typeof c.id === "string" && !rawById.has(c.id)) rawById.set(c.id, c);
+  return board.cards.some((c) => rawById.get(c.id)?.number !== c.number);
 }
 
 /** Normalizes a parsed board so the rest of the code can trust its shape. */
@@ -38,23 +77,22 @@ export function normalizeBoard(raw: any, fallbackName: string): Board {
     : [];
   if (columns.length === 0) columns.push(...defaultBoard(fallbackName).columns);
   const colIds = new Set(columns.map((c) => c.id));
-  const cards: Card[] = Array.isArray(raw?.cards)
-    ? raw.cards
-        .filter((c: any) => c && typeof c.id === "string")
-        .map((c: any) => ({
-          id: c.id,
-          title: String(c.title ?? ""),
-          description: String(c.description ?? ""),
-          columnId: colIds.has(c.columnId) ? c.columnId : columns[0]!.id,
-          createdAt: c.createdAt ?? now(),
-          updatedAt: c.updatedAt ?? now(),
-          enteredColumnAt: c.enteredColumnAt ?? c.updatedAt ?? now(),
-          ...(c.lastRun ? { lastRun: c.lastRun } : {}),
-          ...(c.pendingAnswer ? { pendingAnswer: c.pendingAnswer } : {}),
-          history: Array.isArray(c.history) ? c.history.slice(-50) : [],
-        }))
-    : [];
-  return { version: 1, name: String(raw?.name ?? fallbackName), columns, cards };
+  const rawCards: any[] = Array.isArray(raw?.cards) ? raw.cards.filter((c: any) => c && typeof c.id === "string") : [];
+  const cards: Card[] = rawCards.map((c: any) => ({
+    id: c.id,
+    number: 0,
+    title: String(c.title ?? ""),
+    description: String(c.description ?? ""),
+    columnId: colIds.has(c.columnId) ? c.columnId : columns[0]!.id,
+    createdAt: c.createdAt ?? now(),
+    updatedAt: c.updatedAt ?? now(),
+    enteredColumnAt: c.enteredColumnAt ?? c.updatedAt ?? now(),
+    ...(c.lastRun ? { lastRun: c.lastRun } : {}),
+    ...(c.pendingAnswer ? { pendingAnswer: c.pendingAnswer } : {}),
+    history: Array.isArray(c.history) ? c.history.slice(-50) : [],
+  }));
+  const nextCardNumber = assignNumbers(cards, rawCards.map((c) => c.number), raw?.nextCardNumber);
+  return { version: 1, name: String(raw?.name ?? fallbackName), columns, cards, nextCardNumber };
 }
 
 /**
@@ -65,7 +103,7 @@ export function normalizeBoard(raw: any, fallbackName: string): Board {
 export class Project {
   readonly path: string;
   readonly file: string;
-  board: Board;
+  board!: Board;
   private listeners = new Set<() => void>();
   private watcher: FSWatcher | null = null;
   private lastWrittenMtime = 0;
@@ -74,7 +112,7 @@ export class Project {
     this.path = path;
     this.file = join(path, BOARD_FILE);
     if (existsSync(this.file)) {
-      this.board = this.read();
+      this.read();
     } else {
       this.board = defaultBoard(basename(path));
       this.write();
@@ -82,9 +120,11 @@ export class Project {
     this.watch();
   }
 
-  private read(): Board {
-    const text = readFileSync(this.file, "utf8");
-    return normalizeBoard(JSON.parse(text), basename(this.path));
+  /** Loads the file into `board`. Writes it back at once when numbering had to be migrated or repaired. */
+  private read() {
+    const raw = JSON.parse(readFileSync(this.file, "utf8"));
+    this.board = normalizeBoard(raw, basename(this.path));
+    if (numberingChanged(raw, this.board)) this.write();
   }
 
   private write() {
@@ -110,7 +150,7 @@ export class Project {
       const mtime = statSync(this.file).mtimeMs;
       if (mtime === this.lastWrittenMtime) return;
       this.lastWrittenMtime = mtime;
-      this.board = this.read();
+      this.read();
       this.emit();
     } catch {
       // Partial write or invalid JSON: keep the in-memory board.
