@@ -1,16 +1,17 @@
 /* Card modal zone: layout, description, last run, agent questions, live log. */
 
-.card-modal { display: grid; grid-template-columns: 1.2fr 1fr; gap: var(--sp-6); flex: 1; min-height: 0; }
-.card-edit { display: flex; flex-direction: column; gap: var(--sp-4); min-height: 0; }
-.card-side { display: flex; flex-direction: column; gap: var(--sp-4); min-height: 0; }
+.card-modal { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: var(--sp-6); flex: 1; min-height: 0; min-width: 0; }
+.card-edit { display: flex; flex-direction: column; gap: var(--sp-4); min-height: 0; min-width: 0; }
+.card-side { display: flex; flex-direction: column; gap: var(--sp-4); min-height: 0; min-width: 0; overflow-y: auto; }
+.card-side > .tabs { flex-shrink: 0; }
 
 /* Description: Aperçu / Modifier. Preview and textarea share the same box so switching does not jump. */
-.card-desc { flex: 1; display: flex; flex-direction: column; gap: var(--sp-1); min-height: 0; }
+.card-desc { flex: 1; display: flex; flex-direction: column; gap: var(--sp-1); min-height: 0; min-width: 0; }
 .card-desc-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
 .card-desc-label { font-size: var(--fs-sm); font-weight: 500; color: var(--muted); }
 .card-desc-head .tabs { padding-bottom: 0; border-bottom: 0; }
 .card-desc-body {
-  flex: 1; min-height: 0;
+  flex: 1; min-height: 0; min-width: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface-2);
@@ -28,7 +29,7 @@ textarea.card-desc-body { resize: none; font: var(--fs-md)/1.55 var(--font-mono)
 
 /* Last run */
 .last-run {
-  flex-shrink: 0;
+  flex-shrink: 0; min-width: 0;
   padding: var(--sp-3) var(--sp-4);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -46,7 +47,7 @@ textarea.card-desc-body { resize: none; font: var(--fs-md)/1.55 var(--font-mono)
 
 /* Agent questions */
 .question {
-  flex-shrink: 0; max-height: 60%; overflow: auto;
+  flex-shrink: 0; min-width: 0; max-height: 60%; overflow: auto;
   display: flex; flex-direction: column; gap: var(--sp-3);
   padding: var(--sp-4);
   border: 1px solid var(--warn-soft);
@@ -64,7 +65,7 @@ textarea.card-desc-body { resize: none; font: var(--fs-md)/1.55 var(--font-mono)
 
 /* Live log and history */
 .log {
-  flex: 1; overflow: auto;
+  flex: 1 0 320px; min-height: 320px; overflow: auto;
   padding: var(--sp-3) var(--sp-4);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -80,7 +81,7 @@ textarea.card-desc-body { resize: none; font: var(--fs-md)/1.55 var(--font-mono)
 .log-line.error span { color: var(--err); }
 
 @media (max-width: 800px) {
-  .card-modal { grid-template-columns: 1fr; }
+  .card-modal { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* Card ref in the modal header. */
@@ -94,10 +95,10 @@ textarea.card-desc-body { resize: none; font: var(--fs-md)/1.55 var(--font-mono)
 .test-panel textarea { min-height: 60px; }
 .test-command { margin: 0; padding: var(--sp-2) var(--sp-3); border-radius: var(--radius-sm); background: var(--surface); font: var(--fs-sm)/1.5 var(--font-mono); white-space: pre-wrap; word-break: break-all; }
 .test-panel a { color: var(--accent); font-size: var(--fs-md); }
-.test-shots { display: flex; flex-direction: column; gap: var(--sp-3); }
+.test-shots { display: flex; flex-direction: column; gap: var(--sp-3); max-height: 360px; overflow: auto; }
 .test-shots figure { margin: 0; }
 .test-shots img { width: 100%; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface); }
 .test-shots figcaption { font-size: var(--fs-sm); color: var(--muted); }
 .test-toggle { align-self: flex-start; border: 0; height: auto; background: none; padding: 0; color: var(--muted); font-size: var(--fs-sm); }
 .test-toggle:hover:not(:disabled) { background: none; color: var(--text); }
-.test-output { max-height: 180px; flex: none; background: var(--surface); }
+.test-output { min-height: 0; flex: none; max-height: 180px; background: var(--surface); }
