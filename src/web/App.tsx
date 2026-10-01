@@ -9,7 +9,7 @@ import { ColumnsEditor } from "./ColumnsEditor.tsx";
 import { ProjectPicker } from "./ProjectPicker.tsx";
 import { SettingsModal } from "./SettingsModal.tsx";
 import { SkillsModal } from "./SkillsModal.tsx";
-import { ColumnIcon, Icon, StatusIcon } from "./icons.tsx";
+import { ColumnGlyph, Icon, StatusIcon } from "./icons.tsx";
 import { toPlainText } from "./markdown.tsx";
 import { installAudioUnlock, notifyAttention } from "./sound.ts";
 import { ErrorBanner } from "./ui.tsx";
@@ -266,7 +266,7 @@ function Board({
               <>
               <header className="column-head">
                 <div className="column-title">
-                  <ColumnIcon type={col.type} />
+                  <ColumnGlyph col={col} />
                   <h2>{col.name}</h2>
                   <span className="count">{cards.length}</span>
                   {col.type === "skill" && (
