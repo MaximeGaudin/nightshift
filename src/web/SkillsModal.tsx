@@ -1,4 +1,4 @@
-import { Plus, Search, Zap } from "lucide-react";
+import { Plus, Search, Star, Zap } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import type { SkillInfo } from "../shared/types.ts";
 import { api } from "./api.ts";
@@ -14,8 +14,59 @@ import { notifyError } from "./notify.ts";
 
 const norm = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 
+/** One skills list row: the select button and the favorite star are siblings so no button nests in another. */
+export function SkillRow({
+  skill: s,
+  selected,
+  favorite,
+  scopeLabel,
+  favoriteLabel,
+  onPick,
+  onToggleFavorite,
+}: {
+  skill: SkillInfo;
+  selected: boolean;
+  favorite: boolean;
+  scopeLabel: string;
+  favoriteLabel: string;
+  onPick: () => void;
+  onToggleFavorite: () => void;
+}) {
+  return (
+    <li className="relative">
+      <button
+        type="button"
+        aria-current={selected ? "true" : undefined}
+        className="flex w-full flex-col gap-0.5 rounded-md py-1.5 pr-9 pl-2 text-left transition-colors duration-150 hover:bg-accent aria-[current=true]:bg-accent"
+        onClick={onPick}
+      >
+        <span className="flex items-center gap-1.5">
+          <Zap className="size-3.5 shrink-0 text-primary" />
+          <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{s.name}</span>
+          <Badge variant={s.scope === "project" ? "default" : "secondary"}>{scopeLabel}</Badge>
+        </span>
+        <span className="line-clamp-2 text-xs text-muted-foreground">{s.description}</span>
+      </button>
+      <button
+        type="button"
+        aria-pressed={favorite}
+        aria-label={favoriteLabel}
+        title={favoriteLabel}
+        className="absolute top-1 right-1 flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-accent hover:text-foreground aria-pressed:text-primary"
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggleFavorite();
+        }}
+      >
+        <Star className={favorite ? "size-3.5 fill-current" : "size-3.5"} />
+      </button>
+    </li>
+  );
+}
+
 export function SkillsModal({
   project,
+  favorites,
   onClose,
 }: {
   project: string;
@@ -65,6 +116,9 @@ export function SkillsModal({
     if (name === selected || !confirmDiscard()) return;
     setSelected(name);
   };
+
+  const toggleFavorite = (name: string, favorite: boolean) =>
+    api.toggleFavoriteSkill(project, name, favorite).catch((e) => notifyError(e instanceof Error ? e.message : String(e)));
 
   const save = async () => {
     if (!selected) return;
@@ -136,23 +190,16 @@ export function SkillsModal({
                 </li>
               ) : (
                 shown.map((s) => (
-                  <li key={s.name}>
-                    <button
-                      type="button"
-                      aria-current={s.name === selected ? "true" : undefined}
-                      className="flex w-full flex-col gap-0.5 rounded-md px-2 py-1.5 text-left transition-colors duration-150 hover:bg-accent aria-[current=true]:bg-accent"
-                      onClick={() => pick(s.name)}
-                    >
-                      <span className="flex items-center gap-1.5">
-                        <Zap className="size-3.5 shrink-0 text-primary" />
-                        <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{s.name}</span>
-                        <Badge variant={s.scope === "project" ? "default" : "secondary"}>
-                          {s.scope === "project" ? t("skills.scopeProject") : t("skills.scopeUser")}
-                        </Badge>
-                      </span>
-                      <span className="line-clamp-2 text-xs text-muted-foreground">{s.description}</span>
-                    </button>
-                  </li>
+                  <SkillRow
+                    key={s.name}
+                    skill={s}
+                    selected={s.name === selected}
+                    favorite={favorites.includes(s.name)}
+                    scopeLabel={s.scope === "project" ? t("skills.scopeProject") : t("skills.scopeUser")}
+                    favoriteLabel={favorites.includes(s.name) ? t("skills.favoriteRemove") : t("skills.favoriteAdd")}
+                    onPick={() => pick(s.name)}
+                    onToggleFavorite={() => toggleFavorite(s.name, !favorites.includes(s.name))}
+                  />
                 ))
               )}
             </ul>
