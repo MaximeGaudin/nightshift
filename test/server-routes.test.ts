@@ -138,3 +138,16 @@ test("routes-validation skills: bad name refused, PUT /api/skill needs string na
   expect(ok.status).toBe(200);
   expect((await read()).content).toBe(`${before}more`);
 });
+
+test("routes-validation settings and moves: non-object settings body and unknown target column are refused", async () => {
+  const before = await srv.call("/api/settings").then((r) => r.text());
+  const arr = await raw("/api/settings", "PUT", "[1]");
+  expect(arr.status).toBe(400);
+  expect(await srv.call("/api/settings").then((r) => r.text())).toBe(before);
+
+  const { id } = await srv.call("/api/cards", { body: { project: dir, title: "mover" } }).then((r) => r.json());
+  const move = await srv.call(`/api/cards/${id}/move`, { body: { project: dir, columnId: "nope" } });
+  expect(move.status).toBe(400);
+  const card = (await snapshot()).board.cards.find((c: { id: string }) => c.id === id);
+  expect(card.columnId).not.toBe("nope");
+});
