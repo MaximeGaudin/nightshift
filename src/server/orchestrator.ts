@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import type { Subprocess } from "bun";
 import { spawn, type ChildProcess } from "node:child_process";
 import type { Board, Card, Column, LiveStatus, LogLine, ProjectSnapshot, RunStatus, ServerEvent, Settings } from "../shared/types.ts";
-import { cardRef } from "../shared/types.ts";
+import { cardRef, columnMaxParallel } from "../shared/types.ts";
 import { getSettings, NIGHTSHIFT_HOME, onSettingsChange, rememberProject } from "./settings.ts";
 import { needsRun, Project } from "./store.ts";
 import { findSkill } from "./skills.ts";
@@ -281,9 +281,12 @@ export class Orchestrator {
     candidates.sort((a, b) => a.card.enteredColumnAt.localeCompare(b.card.enteredColumnAt));
     let started = false;
     for (const { p, card } of candidates) {
+      // Global cap over all projects: nothing else can start.
       if (this.jobs.size >= max) break;
-      const colMax = p.column(card.columnId)?.maxParallel;
-      if (colMax && this.runningIn(p, card.columnId) >= colMax) continue;
+      // Full column: this card waits, cards of other columns can still start.
+      const column = p.column(card.columnId);
+      if (!column) continue;
+      if (this.runningIn(p, card.columnId) >= columnMaxParallel(column)) continue;
       this.start(p, card);
       started = true;
     }
