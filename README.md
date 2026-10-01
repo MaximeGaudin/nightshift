@@ -14,7 +14,7 @@ bun test
 ## Concepts
 
 - **Inert column**: cards just sit there.
-- **Skill column**: every card that enters it is processed by `claude -p` running the chosen skill, in the project folder. Cards run in parallel, capped by the global "parallel agents" setting (default 3, shared by all open projects).
+- **Skill column**: every card that enters it is processed by `claude -p` running the chosen skill, in the project folder. Each skill column has its own parallel agent limit (default 1, set in the columns editor); a global cap (default 3, shared by all open projects) bounds the total number of running agents.
 - When done, the agent returns structured output (`--json-schema`): updated title/description, `move` (`next`, `stay` or a column id) and a summary. Nightshift applies it to the card and, if moved into another skill column, the next skill starts automatically.
 - **Questions**: when an agent is blocked on human decisions, it returns all its `questions` at once and the card waits in its column ("Question pour vous"). Answering in the card resumes the same Claude session (`claude --resume`) with every Q/A pair. `AskUserQuestion` is disabled for agents.
 - A card is (re)run when it enters a skill column; "Relancer" forces a new run. Moving or deleting a card during a run stops its agent.
@@ -23,7 +23,7 @@ bun test
 ## Files
 
 - `<project>/nightshift.json`: columns and cards (commit it). External edits (e.g. `git pull`) are picked up live.
-- `~/.nightshift/settings.json`: global settings (parallelism, permission mode, model, extra `claude` args, recent projects).
+- `~/.nightshift/settings.json`: global settings (global cap on parallel agents, permission mode, model, extra `claude` args, recent projects).
 - `~/.nightshift/logs/`: last agent log per card.
 
 ## Permissions

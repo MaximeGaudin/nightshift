@@ -17,6 +17,7 @@ const { splitArgs, resolveModel } = await import("../src/server/orchestrator.ts"
 const { needsRun, normalizeBoard, numberingChanged, Project } = await import("../src/server/store.ts");
 const { startServer } = await import("../src/server/server.ts");
 const { updateSettings } = await import("../src/server/settings.ts");
+const { columnMaxParallel } = await import("../src/shared/types.ts");
 
 test("parseFrontmatter handles folded descriptions", () => {
   const fm = parseFrontmatter("---\nname: x\ndescription: >\n  hello\n  world\n---\nbody");
@@ -110,7 +111,7 @@ async function waitFor(fn: () => Promise<boolean>, ms = 8000) {
   throw new Error("timeout");
 }
 
-test("pipeline: skill column processes cards in parallel, respects limit, moves them on", async () => {
+test("pipeline: skill column without maxParallel runs one card at a time, respects limit, moves them on", async () => {
   const snap = await post("/api/projects/open", { path: proj });
   const [backlog, done] = snap.board.columns;
   const res = await post(
@@ -127,8 +128,8 @@ test("pipeline: skill column processes cards in parallel, respects limit, moves 
     maxRunning = Math.max(maxRunning, Object.values(s.live).filter((v) => v === "running").length);
     return Object.keys(s.live).length === 0;
   });
-  expect(maxRunning).toBeLessThanOrEqual(2);
-  expect(maxRunning).toBeGreaterThan(0);
+  // No maxParallel on the column: default 1, even though the global cap is 2.
+  expect(maxRunning).toBe(1);
 
   const file = JSON.parse(readFileSync(join(proj, "nightshift.json"), "utf8"));
   const byTitle = Object.fromEntries(file.cards.map((c: any) => [c.title, c]));
@@ -221,6 +222,84 @@ test("column maxParallel caps agents in that column", async () => {
     return Object.keys(s.live).length === 0;
   });
   expect(maxRunning).toBe(1);
+});
+
+const liveRunning = async (project: string) => {
+  const s = await fetch(`${base}/api/project?project=${encodeURIComponent(project)}`).then((r) => r.json());
+  return { running: Object.values(s.live).filter((v) => v === "running").length, idle: Object.keys(s.live).length === 0, board: s.board };
+};
+
+test("column maxParallel > 1 runs several cards", async () => {
+  const p = mkdtempSync(join(tmpdir(), "ns-colpar-"));
+  await post("/api/projects/open", { path: p });
+  const res = await post(
+    "/api/board",
+    { project: p, columns: [{ name: "Work", type: "skill", skill: "enrich", maxParallel: 2 }, { name: "Done", type: "inert" }] },
+    "PUT",
+  );
+  expect(res.board.columns[0].maxParallel).toBe(2);
+  for (const t of ["par1", "par2", "par3", "par4"]) await post("/api/cards", { project: p, columnId: res.board.columns[0].id, title: t });
+  let maxRunning = 0;
+  await waitFor(async () => {
+    const s = await liveRunning(p);
+    maxRunning = Math.max(maxRunning, s.running);
+    return s.idle && s.board.cards.every((c: any) => c.columnId === res.board.columns[1].id);
+  });
+  expect(maxRunning).toBe(2);
+});
+
+test("global cap cuts below the sum of column limits", async () => {
+  const p = mkdtempSync(join(tmpdir(), "ns-globalcap-"));
+  await post("/api/projects/open", { path: p });
+  const res = await post(
+    "/api/board",
+    {
+      project: p,
+      columns: [
+        { name: "A", type: "skill", skill: "enrich", maxParallel: 2 },
+        { name: "B", type: "skill", skill: "enrich", maxParallel: 2 },
+        { name: "Done", type: "inert" },
+      ],
+    },
+    "PUT",
+  );
+  const [a, b, done] = res.board.columns;
+  for (const t of ["a1", "a2", "a3"]) await post("/api/cards", { project: p, columnId: a.id, title: t });
+  for (const t of ["b1", "b2", "b3"]) await post("/api/cards", { project: p, columnId: b.id, title: t });
+  let maxRunning = 0;
+  await waitFor(async () => {
+    const s = await liveRunning(p);
+    maxRunning = Math.max(maxRunning, s.running);
+    return s.idle && s.board.cards.length === 6 && s.board.cards.every((c: any) => c.columnId === done.id);
+  }, 15000);
+  // Column limits sum to 4, but the global cap (2) bounds the total.
+  expect(maxRunning).toBeLessThanOrEqual(2);
+  expect(maxRunning).toBeGreaterThan(0);
+});
+
+test("column maxParallel normalization", async () => {
+  const p = mkdtempSync(join(tmpdir(), "ns-colnorm-"));
+  await post("/api/projects/open", { path: p });
+  const cols = [
+    { name: "Big", type: "skill", skill: "enrich", maxParallel: 99 },
+    { name: "Empty", type: "skill", skill: "enrich", maxParallel: "" },
+    { name: "Zero", type: "skill", skill: "enrich", maxParallel: 0 },
+    { name: "Text", type: "skill", skill: "enrich", maxParallel: "abc" },
+    { name: "Inert", type: "inert", maxParallel: 3 },
+  ];
+  const check = (columns: any[]) => {
+    expect(columns[0].maxParallel).toBe(32);
+    for (const c of columns.slice(1)) expect("maxParallel" in c).toBe(false);
+  };
+  const res = await post("/api/board", { project: p, columns: cols }, "PUT");
+  check(res.board.columns);
+  check(normalizeBoard({ columns: cols.map((c, i) => ({ id: `c${i}`, ...c })), cards: [] }, "x").columns);
+  expect(normalizeBoard({ columns: [{ id: "s", name: "S", type: "skill", skill: "s", maxParallel: "5" }], cards: [] }, "x").columns[0]!.maxParallel).toBe(5);
+});
+
+test("columnMaxParallel default", () => {
+  expect(columnMaxParallel({})).toBe(1);
+  expect(columnMaxParallel({ maxParallel: 5 })).toBe(5);
 });
 
 test("agent test command is stored on the card and can be started and stopped", async () => {
