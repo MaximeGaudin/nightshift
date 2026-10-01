@@ -1,6 +1,6 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Subprocess } from "bun";
 import { resolveNextColumn } from "../shared/skip.ts";
@@ -12,6 +12,8 @@ import type {
   LiveStatus,
   LogLine,
   ProjectSnapshot,
+  QuickRun,
+  QuickRunResult,
   RunProgress,
   RunStatus,
   ServerEvent,
@@ -21,11 +23,12 @@ import { canSendFeedback, cardRef, columnMaxParallel, isDoneColumn } from "../sh
 import { safeHttpUrl } from "../shared/urls.ts";
 import { HttpError } from "./guard.ts";
 import { parseProgressMarker, progressFromTodos } from "./progress.ts";
+import { buildQuickRunPrompt, parseQuickOutput, QUICK_INSTRUCTION_MAX, QUICK_RESULT_SCHEMA } from "./quickrun.ts";
 import { persistScreenshots } from "./screenshots.ts";
 import { SequenceController } from "./sequence.ts";
 import { getSettings, NIGHTSHIFT_HOME, onSettingsChange, rememberProject } from "./settings.ts";
 import { findSkill } from "./skills.ts";
-import { isRaw, needsRun, Project, type Raw } from "./store.ts";
+import { isRaw, needsRun, newId, Project, type Raw } from "./store.ts";
 import { copyTemplateSkills } from "./templates.ts";
 
 /** One block of an assistant message in `claude -p --output-format stream-json` (only what Nightshift reads). */
@@ -53,19 +56,11 @@ interface StreamEvent {
 /** Structured output of an agent (--json-schema). Untrusted: every field is checked before use; `questions` is normalized. */
 type AgentOutput = Raw & { questions: string[] };
 
-interface Job {
-  key: string;
+/** What a spawned `claude -p` process needs to track, shared by card jobs and quick runs. */
+interface Runner {
   project: Project;
-  cardId: string;
-  columnId: string;
-  enteredAt: string;
   proc?: Subprocess;
   cancelled: boolean;
-  done: boolean;
-  /** Skill of the session this job runs (column skill for a new run, session skill when resuming). */
-  skill?: string;
-  /** Started in a skill column: such a job is stopped if the column stops being a skill column. */
-  startedInSkillColumn: boolean;
   /** Claude session of the current process, from its init event (known even if it dies before a result). */
   sessionId?: string;
   /** Live progress of the current process; reset at each spawn, never persisted. */
@@ -74,6 +69,41 @@ interface Job {
   markerSeen?: boolean;
   /** A TodoWrite was seen in the current process: tool activity no longer overwrites it. */
   todoSeen?: boolean;
+}
+
+/** Where a run writes its log and progress, and how it is launched: the card path and the quick-run path differ only here. */
+interface RunTarget {
+  /** Session name (--name), already truncated. */
+  name: string;
+  schema: object;
+  model: string | undefined;
+  log(kind: LogLine["kind"], text: string): void;
+  setProgress(v: { step: number; total: number; label: string }, source: RunProgress["source"]): void;
+  /** First log line, once the model and permission mode are known. */
+  startMessage(model: string | undefined, permissionMode: string): string;
+}
+
+/** A skill launched from the command palette: in memory only, never written to nightshift.json. */
+interface QuickJob extends Runner {
+  id: string;
+  skill: string;
+  instruction: string;
+  status: QuickRun["status"];
+  createdAt: string;
+  done: boolean;
+}
+
+interface Job extends Runner {
+  key: string;
+  project: Project;
+  cardId: string;
+  columnId: string;
+  enteredAt: string;
+  done: boolean;
+  /** Skill of the session this job runs (column skill for a new run, session skill when resuming). */
+  skill?: string;
+  /** Started in a skill column: such a job is stopped if the column stops being a skill column. */
+  startedInSkillColumn: boolean;
 }
 
 const MAX_LOG_LINES = 3000;
@@ -271,7 +301,8 @@ const SHUTDOWN_GRACE_MS = 2000;
 const STREAM_DRAIN_MS = 500;
 // biome-ignore lint/suspicious/noControlCharactersInRegex: strips ANSI colour escape sequences (ESC is the point)
 const ANSI_COLOR_RE = /\x1b\[[0-9;]*m/g;
-const CARD_ID_RE = /^[A-Za-z0-9_-]+$/;
+// Not "quick-…": those are the log files of quick runs, never served as a card log.
+const CARD_ID_RE = /^(?!quick-)[A-Za-z0-9_-]+$/;
 
 export function resolveModel(column: Column, settings: Settings): string | undefined {
   return column.model?.trim() || settings.model.trim() || undefined;
@@ -282,6 +313,7 @@ export class Orchestrator {
   /** Template skills that could not be copied into a new project, reported once by the next open response. */
   private templateFailures = new Map<string, string[]>();
   private jobs = new Map<string, Job>();
+  private quickRuns = new Map<string, QuickJob>();
   private logs = new Map<string, LogLine[]>();
   private listeners = new Set<(e: ServerEvent) => void>();
   private tickScheduled = false;
@@ -407,7 +439,17 @@ export class Orchestrator {
       live,
       testing,
       progress,
-      quickRuns: [],
+      quickRuns: [...this.quickRuns.values()]
+        .filter((q) => q.project === p)
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+        .map((q) => ({
+          id: q.id,
+          skill: q.skill,
+          instruction: q.instruction,
+          status: q.status,
+          createdAt: q.createdAt,
+          ...(q.status === "running" && q.progress ? { progress: q.progress } : {}),
+        })),
       sequence: this.sequence.get(p),
       ...(lockedBy ? { lockedBy } : {}),
       ...(this.agents ? {} : { agentsDisabled: true }),
@@ -423,9 +465,13 @@ export class Orchestrator {
   /** Log file of a card, or null for an id that is not a plain card id. Creates the directory only when asked. */
   private logFile(p: Project, cardId: string, create = false): string | null {
     if (!CARD_ID_RE.test(cardId)) return null;
+    return join(this.logDir(p, create), `${cardId}.jsonl`);
+  }
+
+  private logDir(p: Project, create = false): string {
     const dir = join(NIGHTSHIFT_HOME, "logs", createHash("sha1").update(p.path).digest("hex").slice(0, 12));
     if (create) mkdirSync(dir, { recursive: true });
-    return join(dir, `${cardId}.jsonl`);
+    return dir;
   }
 
   getLog(p: Project, cardId: string): LogLine[] {
@@ -490,7 +536,12 @@ export class Orchestrator {
   private tick() {
     if (!this.agents) return;
     const max = getSettings().maxParallel;
-    if (this.jobs.size >= max) return;
+    if (this.running() >= max) return;
+    let started = this.startQueuedQuickRuns(max);
+    if (this.running() >= max) {
+      if (started) this.broadcastAll();
+      return;
+    }
     const candidates: { p: Project; card: Card }[] = [];
     for (const p of this.projects.values()) {
       if (this.lockedBy.has(p.path)) continue;
@@ -499,10 +550,9 @@ export class Orchestrator {
       }
     }
     candidates.sort((a, b) => a.card.enteredColumnAt.localeCompare(b.card.enteredColumnAt));
-    let started = false;
     for (const { p, card } of candidates) {
       // Global cap over all projects: nothing else can start.
-      if (this.jobs.size >= max) break;
+      if (this.running() >= max) break;
       // Full column: this card waits, cards of other columns can still start.
       const column = p.column(card.columnId);
       if (!column) continue;
@@ -511,7 +561,32 @@ export class Orchestrator {
       this.start(p, card);
       started = true;
     }
-    if (started) for (const p of this.projects.values()) this.broadcast({ type: "board", project: p.path, snapshot: this.snapshot(p) });
+    if (started) this.broadcastAll();
+  }
+
+  private broadcastAll() {
+    for (const p of this.projects.values()) this.broadcast({ type: "board", project: p.path, snapshot: this.snapshot(p) });
+  }
+
+  /** Agents running now, over all projects: card jobs and running quick runs share the same cap. */
+  private running() {
+    let n = this.jobs.size;
+    for (const q of this.quickRuns.values()) if (q.status === "running") n++;
+    return n;
+  }
+
+  /** Starts queued quick runs, oldest first, before any card. They ignore column caps. Returns whether one started. */
+  private startQueuedQuickRuns(max: number): boolean {
+    const queued = [...this.quickRuns.values()]
+      .filter((q) => q.status === "queued" && !this.lockedBy.has(q.project.path))
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    let started = false;
+    for (const q of queued) {
+      if (this.running() >= max) break;
+      this.startQuick(q);
+      started = true;
+    }
+    return started;
   }
 
   private runningIn(p: Project, columnId: string) {
@@ -537,7 +612,7 @@ export class Orchestrator {
     }
   }
 
-  private kill(job: Job) {
+  private kill(job: Runner) {
     job.cancelled = true;
     try {
       job.proc?.kill("SIGTERM");
@@ -553,6 +628,140 @@ export class Orchestrator {
     this.log(p, cardId, "info", "Run cancelled by user.");
     this.kill(job);
     return true;
+  }
+
+  // ---- quick runs --------------------------------------------------------
+  // A favorite skill run once from the command palette, without a card. Kept in memory only.
+
+  /** Queues a quick run; the scheduler starts it. Returns its id. */
+  queueQuickRun(p: Project, skill: string, instruction: string): string {
+    if (!this.agents) throw new HttpError(409, "Agents are disabled on this instance");
+    if (this.lockedBy.has(p.path)) throw new HttpError(409, "This project's agents are run by another Nightshift process");
+    if (!p.board.favoriteSkills?.includes(skill)) throw new HttpError(400, `"${skill}" is not a favorite skill`);
+    const text = instruction.trim();
+    if (text.length > QUICK_INSTRUCTION_MAX) throw new HttpError(400, `instruction must be at most ${QUICK_INSTRUCTION_MAX} characters`);
+    const q: QuickJob = {
+      id: newId("qr"),
+      project: p,
+      skill,
+      instruction: text,
+      status: "queued",
+      createdAt: new Date().toISOString(),
+      cancelled: false,
+      done: false,
+    };
+    this.quickRuns.set(q.id, q);
+    this.broadcast({ type: "board", project: p.path, snapshot: this.snapshot(p) });
+    this.scheduleTick();
+    return q.id;
+  }
+
+  /** Cancels a queued or running quick run. False when this project has no such run. */
+  cancelQuickRun(p: Project, id: string): boolean {
+    const q = this.quickRuns.get(id);
+    if (!q || q.project !== p || q.done) return false;
+    if (q.status === "queued") {
+      this.endQuick(q, { status: "cancelled" });
+      return true;
+    }
+    this.kill(q);
+    return true;
+  }
+
+  private quickLogFile(q: QuickJob, create = false): string {
+    return join(this.logDir(q.project, create), `quick-${this.skillHash(q.skill)}-${q.id}.jsonl`);
+  }
+
+  private skillHash(skill: string) {
+    return createHash("sha1").update(skill).digest("hex").slice(0, 8);
+  }
+
+  /** Deletes the earlier log files of this skill, except those of runs still going. */
+  private pruneQuickLogs(q: QuickJob) {
+    const prefix = `quick-${this.skillHash(q.skill)}-`;
+    const live = new Set<string>();
+    for (const o of this.quickRuns.values()) {
+      if (o.project === q.project && o.skill === q.skill && o.status === "running") live.add(`${prefix}${o.id}.jsonl`);
+    }
+    try {
+      for (const name of readdirSync(this.logDir(q.project))) {
+        if (name.startsWith(prefix) && name.endsWith(".jsonl") && !live.has(name))
+          rmSync(join(this.logDir(q.project), name), { force: true });
+      }
+    } catch {}
+  }
+
+  private startQuick(q: QuickJob) {
+    q.status = "running";
+    this.pruneQuickLogs(q);
+    this.runQuick(q).catch((e) => {
+      // An exception must never become an unhandled rejection: Bun would exit the process.
+      console.error(`Quick run ${q.id} failed:`, e);
+      this.endQuick(q, { status: "error", error: e instanceof Error ? e.message : String(e) });
+    });
+  }
+
+  private quickTarget(q: QuickJob): RunTarget {
+    return {
+      name: `nightshift quick: ${q.skill}`.slice(0, 80),
+      schema: QUICK_RESULT_SCHEMA,
+      model: getSettings().model.trim() || undefined,
+      log: (kind, text) => {
+        const line: LogLine = { at: new Date().toISOString(), kind, text };
+        try {
+          appendFileSync(this.quickLogFile(q, true), `${JSON.stringify(line)}\n`);
+        } catch {}
+      },
+      setProgress: (v, source) => this.setProgress(q, v, source),
+      startMessage: (model, permissionMode) =>
+        `Starting quick run of skill "${q.skill}" (permission mode: ${permissionMode}, model: ${model ?? "default"}).`,
+    };
+  }
+
+  private async runQuick(q: QuickJob) {
+    const skill = findSkill(q.project.path, q.skill);
+    if (!skill) return this.endQuick(q, { status: "error", error: `Skill "${q.skill}" not found in project or user skills.` });
+    const target = this.quickTarget(q);
+    const r = await this.spawnAgent(q, target, buildQuickRunPrompt(q.skill, skill.path, q.instruction), undefined);
+    if ("startError" in r) return this.endQuick(q, { status: "error", error: r.startError });
+    if (q.cancelled) return this.endQuick(q, { status: "cancelled" });
+    const { result } = r;
+    if (!result) {
+      const error = `Agent exited without a result (${r.exit}).${r.stderr.trim() ? ` ${r.stderr.trim()}` : ""}`;
+      return this.endQuick(q, { status: "error", error });
+    }
+    if (result.is_error) {
+      return this.endQuick(q, { status: "error", error: String(result.result || result.subtype || "Agent returned an error") });
+    }
+    const out = parseQuickOutput(result.structured_output);
+    if (!out) return this.endQuick(q, { status: "error", error: "Agent finished without returning its structured result." });
+    if (out.status === "error") {
+      return this.endQuick(q, { status: "error", error: out.summary || "The skill reported an error without explanation." });
+    }
+    return this.endQuick(q, { status: "success", summary: out.summary });
+  }
+
+  /** Emits the result first, then the board without the run. */
+  private endQuick(q: QuickJob, r: { status: QuickRunResult["status"]; summary?: string; error?: string }) {
+    if (q.done) return;
+    q.done = true;
+    // Cancelled wins over whatever the process returned while it was being stopped.
+    const status = q.cancelled ? "cancelled" : r.status;
+    const text = (v: string | undefined) => (v ? v.slice(0, 2000) : undefined);
+    const summary = status === "success" ? text(r.summary) : undefined;
+    const error = status === "error" ? text(r.error) : undefined;
+    const result: QuickRunResult = {
+      id: q.id,
+      skill: q.skill,
+      instruction: q.instruction,
+      status,
+      ...(summary ? { summary } : {}),
+      ...(error ? { error } : {}),
+    };
+    this.broadcast({ type: "quickrun", project: q.project.path, result });
+    this.quickRuns.delete(q.id);
+    this.broadcast({ type: "board", project: q.project.path, snapshot: this.snapshot(q.project) });
+    this.scheduleTick();
   }
 
   /** Forces a new run of a card in its current column. */
@@ -714,7 +923,7 @@ export class Orchestrator {
     // returned only interim results while background work was running) is resumed once to collect it.
     for (let attempt = 0; ; attempt++) {
       const verb = attempt > 0 ? "Recovering" : !answer ? "Starting" : "Resuming";
-      const r = await this.spawnAgent(job, card, column, prompt, resumeId, verb);
+      const r = await this.spawnAgent(job, this.cardTarget(job, card, column, verb), prompt, resumeId);
       if ("startError" in r) return this.finish(job, "error", { error: r.startError });
       if (job.cancelled) return this.finish(job, "cancelled", {});
       const result = r.result;
@@ -754,21 +963,32 @@ export class Orchestrator {
     }
   }
 
+  private cardTarget(job: Job, card: Card, column: Column, verb: string): RunTarget {
+    const p = job.project;
+    return {
+      name: `nightshift: ${card.title}`.slice(0, 80),
+      schema: RESULT_SCHEMA,
+      model: resolveModel(column, getSettings()),
+      log: (kind, text) => this.log(p, card.id, kind, text),
+      setProgress: (v, source) => this.setProgress(job, v, source),
+      startMessage: (model, permissionMode) =>
+        `${verb} ${job.skill ? `skill "${job.skill}"` : "session"} in "${column.name}" (permission mode: ${permissionMode}, model: ${model ?? "default"}).`,
+    };
+  }
+
   /** Runs one `claude -p` process to completion. The prompt goes through stdin, never argv: see below. */
   private async spawnAgent(
-    job: Job,
-    card: Card,
-    column: Column,
+    job: Runner,
+    target: RunTarget,
     prompt: string,
     resumeId: string | undefined,
-    verb: string,
   ): Promise<{ startError: string } | { result: StreamEvent | null; stderr: string; exit: string }> {
     const p = job.project;
     job.progress = undefined;
     job.markerSeen = false;
     job.todoSeen = false;
     const settings = getSettings();
-    const model = resolveModel(column, settings);
+    const model = target.model;
     // The prompt holds the card text. Passed as an argument it would show in every process list, and an
     // agent running `pkill -f "bun test"` would kill any sibling agent whose card mentions `bun test`.
     const args = [
@@ -781,20 +1001,15 @@ export class Orchestrator {
       "stream-json",
       "--verbose",
       "--json-schema",
-      JSON.stringify(RESULT_SCHEMA),
+      JSON.stringify(target.schema),
       "--permission-mode",
       settings.permissionMode,
       "--name",
-      `nightshift: ${card.title}`.slice(0, 80),
+      target.name,
       ...(model ? ["--model", model] : []),
       ...splitArgs(settings.extraArgs),
     ];
-    this.log(
-      p,
-      card.id,
-      "info",
-      `${verb} ${job.skill ? `skill "${job.skill}"` : "session"} in "${column.name}" (permission mode: ${settings.permissionMode}, model: ${model ?? "default"}).`,
-    );
+    target.log("info", target.startMessage(model, settings.permissionMode));
 
     let result: StreamEvent | null = null;
     let stderr = "";
@@ -823,11 +1038,11 @@ export class Orchestrator {
             if (!isRaw(parsed)) throw new Error("not an event");
             ev = parsed as StreamEvent;
           } catch {
-            this.log(p, card.id, "text", line);
+            target.log("text", line);
             continue;
           }
           if (ev.type === "result") result = ev;
-          else this.handleEvent(job, ev);
+          else this.handleEvent(job, target, ev);
         }
       }
       await proc.exited;
@@ -839,43 +1054,41 @@ export class Orchestrator {
     }
   }
 
-  private handleEvent(job: Job, ev: StreamEvent) {
-    const p = job.project;
-    const cardId = job.cardId;
+  private handleEvent(job: Runner, target: RunTarget, ev: StreamEvent) {
     if (ev.type === "assistant") {
       // Subagent messages carry parent_tool_use_id: they are logged but never drive the card's progress.
       const own = !ev.parent_tool_use_id;
       for (const block of Array.isArray(ev.message?.content) ? ev.message.content : []) {
         if (block.type === "text" && block.text?.trim()) {
-          this.log(p, cardId, "text", block.text.trim());
+          target.log("text", block.text.trim());
           const m = own ? parseProgressMarker(block.text) : undefined;
           if (m) {
             job.markerSeen = true;
-            this.setProgress(job, m, "marker");
+            target.setProgress(m, "marker");
           }
         } else if (block.type === "tool_use" && block.name !== "StructuredOutput") {
-          this.log(p, cardId, "tool", summarizeToolInput(block.name ?? "tool", block.input));
+          target.log("tool", summarizeToolInput(block.name ?? "tool", block.input));
           if (!own) continue;
           if (block.name === "TodoWrite") {
             if (job.markerSeen) continue;
             const t = progressFromTodos(block.input);
             if (t) {
               job.todoSeen = true;
-              this.setProgress(job, t, "todo");
+              target.setProgress(t, "todo");
             }
           } else if (!job.markerSeen && !job.todoSeen) {
-            this.setProgress(job, { step: 0, total: 0, label: activityLabel(block.name ?? "tool", block.input) }, "activity");
+            target.setProgress({ step: 0, total: 0, label: activityLabel(block.name ?? "tool", block.input) }, "activity");
           }
         }
       }
     } else if (ev.type === "system" && ev.subtype === "init") {
       if (ev.session_id) job.sessionId = ev.session_id;
-      this.log(p, cardId, "info", `Session ${ev.session_id} (model ${ev.model ?? "default"})`);
+      target.log("info", `Session ${ev.session_id} (model ${ev.model ?? "default"})`);
     }
   }
 
   /** Stores a new progress value and broadcasts the board, unless nothing changed. */
-  private setProgress(job: Job, v: { step: number; total: number; label: string }, source: RunProgress["source"]) {
+  private setProgress(job: Runner, v: { step: number; total: number; label: string }, source: RunProgress["source"]) {
     const cur = job.progress;
     if (cur && cur.step === v.step && cur.total === v.total && cur.label === v.label && cur.source === source) return;
     job.progress = { step: v.step, total: v.total, label: v.label, source, at: new Date().toISOString() };
@@ -1042,7 +1255,9 @@ export class Orchestrator {
   async shutdown(graceMs = SHUTDOWN_GRACE_MS) {
     clearInterval(this.lockTimer);
     const groups = [...this.tests.values()].map((t) => t.proc.pid).filter((pid): pid is number => !!pid);
-    const jobs = [...this.jobs.values()];
+    // Queued quick runs are dropped; the running ones are stopped like jobs.
+    for (const q of [...this.quickRuns.values()]) if (q.status === "queued") this.quickRuns.delete(q.id);
+    const jobs: Runner[] = [...this.jobs.values(), ...this.quickRuns.values()];
     for (const t of this.tests.values()) this.stopTest(t.project, t.cardId);
     for (const job of jobs) this.kill(job);
     const groupAlive = (pid: number) => {
@@ -1053,7 +1268,7 @@ export class Orchestrator {
         return false;
       }
     };
-    const jobAlive = (job: Job) => !!job.proc && job.proc.exitCode === null && job.proc.signalCode === null;
+    const jobAlive = (job: Runner) => !!job.proc && job.proc.exitCode === null && job.proc.signalCode === null;
     const end = Date.now() + graceMs;
     while (Date.now() < end && (groups.some(groupAlive) || jobs.some(jobAlive))) await new Promise((r) => setTimeout(r, 25));
     for (const pid of groups) {

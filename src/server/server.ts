@@ -403,6 +403,34 @@ export function startServer({ port, development, agents = true }: { port: number
         GET: h((b, url, req) => orch.getLog(project(b, url), req.params.id)),
       },
 
+      "/api/favorite-skills": {
+        PUT: h((b, url) => {
+          const p = project(b, url);
+          const name = reqString(b, "name").trim();
+          if (typeof b.favorite !== "boolean") throw new Error("favorite must be a boolean");
+          const known = new Set(listSkills(p.path).map((s) => s.name));
+          if (b.favorite && !known.has(name)) throw new HttpError(404, `Skill not found: ${name}`);
+          p.mutate((board) => {
+            // Favorites of skills that no longer exist are dropped on every toggle.
+            const next = new Set((board.favoriteSkills ?? []).filter((n) => known.has(n)));
+            if (b.favorite) next.add(name);
+            else next.delete(name);
+            if (next.size > 0) board.favoriteSkills = [...next].sort((x, y) => x.localeCompare(y));
+            else delete board.favoriteSkills;
+          });
+          return orch.snapshot(p);
+        }),
+      },
+      "/api/quick-runs": {
+        POST: h((b, url) => {
+          const p = project(b, url);
+          return { id: orch.queueQuickRun(p, reqString(b, "skill"), optString(b, "instruction") ?? "") };
+        }),
+      },
+      "/api/quick-runs/:id/cancel": {
+        POST: h((b, url, req) => ({ ok: orch.cancelQuickRun(project(b, url), req.params.id) })),
+      },
+
       "/api/skills": {
         GET: h((b, url) => listSkills(project(b, url).path)),
         POST: h((b, url) =>
