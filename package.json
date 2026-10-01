@@ -1,7 +1,13 @@
 {
   "name": "nightshift",
   "version": "0.1.0",
+  "description": "A kanban board that orchestrates Claude Code agents: one folder, one board, one nightshift.json.",
+  "license": "MIT",
+  "author": "Maxime Gaudin",
   "private": true,
+  "engines": {
+    "bun": ">=1.4.2"
+  },
   "type": "module",
   "bin": {
     "nightshift": "./bin/nightshift.ts"
