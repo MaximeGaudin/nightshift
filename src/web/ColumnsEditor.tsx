@@ -2,7 +2,7 @@ import { closestCenter, DndContext, type DragEndEvent, KeyboardSensor, PointerSe
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { ChevronDown, GripVertical, Lock, Plus, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { type Column, ensureDoneColumn, isDoneColumn, MAX_PARALLEL, type ProjectSnapshot, type SkillInfo } from "../shared/types.ts";
 import { api } from "./api.ts";
 import { type KeyedColumn, reorderColumns } from "./columnOrder.ts";
@@ -236,7 +236,10 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
 
   const count = (id: string) => (id ? snap.board.cards.filter((c) => c.columnId === id).length : 0);
   const patch = (key: string, p: Partial<Column>) => setCols((cs) => cs.map((c) => (c.key === key ? { ...c, ...p } : c)));
+  // Radix catches Escape in the capture phase: while a keyboard drag is active, Escape must only cancel the drag.
+  const dragging = useRef(false);
   const onDragEnd = ({ active, over }: DragEndEvent) => {
+    dragging.current = false;
     if (over) setCols((cs) => reorderColumns(cs, String(active.id), String(over.id)));
   };
 
@@ -264,6 +267,9 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
       title="Colonnes du kanban"
       description="Ordonnez les colonnes, choisissez leur type et le skill exécuté."
       onClose={onClose}
+      onEscapeKeyDown={(e) => {
+        if (dragging.current) e.preventDefault();
+      }}
       footer={
         <>
           <Button
@@ -302,7 +308,13 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
         <DndContext
           sensors={sensors}
           collisionDetection={closestCenter}
+          onDragStart={() => {
+            dragging.current = true;
+          }}
           onDragEnd={onDragEnd}
+          onDragCancel={() => {
+            dragging.current = false;
+          }}
           accessibility={{
             screenReaderInstructions: {
               draggable:

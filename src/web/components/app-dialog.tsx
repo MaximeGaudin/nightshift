@@ -18,6 +18,7 @@ export function AppDialog({
   footer,
   size,
   onClose,
+  onEscapeKeyDown,
   children,
 }: {
   title: ReactNode;
@@ -25,11 +26,13 @@ export function AppDialog({
   footer?: ReactNode;
   size: keyof typeof SIZES;
   onClose: () => void;
+  /** Called before Escape dismisses the dialog; `preventDefault()` keeps it open (e.g. while a drag is in progress). */
+  onEscapeKeyDown?: (event: KeyboardEvent) => void;
   children: ReactNode;
 }) {
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className={cn("flex max-h-[calc(100dvh-4rem)] flex-col gap-0 p-0", SIZES[size])}>
+      <DialogContent onEscapeKeyDown={onEscapeKeyDown} className={cn("flex max-h-[calc(100dvh-4rem)] flex-col gap-0 p-0", SIZES[size])}>
         <DialogHeader className="border-b px-4 py-3 pr-11">
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription className={description ? undefined : "sr-only"}>{description ?? title}</DialogDescription>
