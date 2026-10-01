@@ -202,6 +202,8 @@ function summarizeToolInput(name: string, input: any): string {
 }
 
 // Column model wins over the global setting; neither means no --model (CLI default).
+const CARD_ID_RE = /^[A-Za-z0-9_-]+$/;
+
 export function resolveModel(column: Column, settings: Settings): string | undefined {
   return column.model?.trim() || settings.model.trim() || undefined;
 }
@@ -326,9 +328,11 @@ export class Orchestrator {
 
   // ---- logs --------------------------------------------------------------
 
-  private logFile(p: Project, cardId: string) {
+  /** Log file of a card, or null for an id that is not a plain card id. Creates the directory only when asked. */
+  private logFile(p: Project, cardId: string, create = false): string | null {
+    if (!CARD_ID_RE.test(cardId)) return null;
     const dir = join(NIGHTSHIFT_HOME, "logs", createHash("sha1").update(p.path).digest("hex").slice(0, 12));
-    mkdirSync(dir, { recursive: true });
+    if (create) mkdirSync(dir, { recursive: true });
     return join(dir, `${cardId}.jsonl`);
   }
 
@@ -336,8 +340,10 @@ export class Orchestrator {
     const k = this.key(p, cardId);
     const mem = this.logs.get(k);
     if (mem) return mem;
+    const file = this.logFile(p, cardId);
+    if (!file) return [];
     try {
-      return readFileSync(this.logFile(p, cardId), "utf8")
+      return readFileSync(file, "utf8")
         .split("\n")
         .filter(Boolean)
         .map((l) => JSON.parse(l));
@@ -354,7 +360,8 @@ export class Orchestrator {
     if (arr.length > MAX_LOG_LINES) arr.splice(0, arr.length - MAX_LOG_LINES);
     this.logs.set(k, arr);
     try {
-      appendFileSync(this.logFile(p, cardId), `${JSON.stringify(line)}\n`);
+      const file = this.logFile(p, cardId, true);
+      if (file) appendFileSync(file, `${JSON.stringify(line)}\n`);
     } catch {}
     this.broadcast({ type: "log", project: p.path, cardId, line });
   }
@@ -542,7 +549,8 @@ export class Orchestrator {
     if (!card.pendingAnswer) {
       this.logs.set(job.key, []);
       try {
-        writeFileSync(this.logFile(p, card.id), "");
+        const file = this.logFile(p, card.id, true);
+        if (file) writeFileSync(file, "");
       } catch {}
     }
     this.run(job, card, column).finally(() => {
