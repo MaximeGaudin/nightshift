@@ -432,29 +432,64 @@ button.add-card:hover:not(:disabled) {
   margin-left: var(--sp-2);
   color: var(--muted);
 }
+/* Summary and the inert shortcut share the first line; the open list sits under them. */
 .skip-picker {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
   font-size: var(--fs-xs);
   color: var(--muted);
+}
+.skip-picker > details {
+  flex: 1;
+  min-width: 0;
 }
 .skip-picker summary {
   cursor: pointer;
   user-select: none;
+  line-height: 22px;
 }
 .skip-picker summary:hover {
   color: var(--text);
 }
+/* Compact chips that wrap, instead of one tall line per column. */
 .skip-picker-list {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: var(--sp-1);
-  padding: var(--sp-2) 0 0 var(--sp-2);
+  padding-top: var(--sp-2);
 }
 .skip-picker-item {
-  display: flex;
+  /* The global label rule stacks its children in a column: keep the box and its name on one line. */
+  flex-direction: row;
   align-items: center;
-  gap: var(--sp-2);
+  gap: var(--sp-1);
+  padding: 2px var(--sp-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: var(--fs-xs);
+  font-weight: 400;
   color: var(--text);
+  white-space: nowrap;
   cursor: pointer;
+}
+.skip-picker-item:hover {
+  border-color: var(--border-strong);
+}
+.skip-picker-item:has(input:checked) {
+  border-color: var(--accent);
+}
+button.skip-picker-inert {
+  flex-shrink: 0;
+  min-height: 0;
+  height: 22px;
+  padding: 0 var(--sp-2);
+  font-size: var(--fs-xs);
+  color: var(--muted);
+}
+button.skip-picker-inert[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--text);
 }
 .card-next {
   position: absolute;

@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { normalizeBoard } from "../src/server/store.ts";
 import { normalizeSkipColumnIds, resolveNextColumn, skippedColumns } from "../src/shared/skip.ts";
 import { type Column, DONE_COLUMN_ID } from "../src/shared/types.ts";
-import { SkipColumnsPicker } from "../src/web/SkipColumnsPicker.tsx";
+import { SkipColumnsPicker, toggleInertColumns } from "../src/web/SkipColumnsPicker.tsx";
 import { must } from "./helpers.ts";
 
 const names = ["Backlog", "Grill", "Plan", "Implement", "Review", "To Test", "Merge"];
@@ -78,4 +78,30 @@ test("SkipColumnsPicker: collapsed, counts checked, emits ids in column order, n
   expect(renderToStaticMarkup(createElement(SkipColumnsPicker, { columns: cols.slice(1, 3), value: [], onChange: () => {} }))).toContain(
     ">Sauter des colonnes<",
   );
+});
+
+const board: Column[] = [
+  { id: "col_grill", name: "Grill", type: "skill", skill: "grill" },
+  { id: "col_review", name: "Review", type: "skill", skill: "review" },
+  { id: "col_test", name: "To Test", type: "inert" },
+  { id: "col_merge", name: "Merge", type: "skill", skill: "merge" },
+  { id: "col_wait", name: "Wait", type: "inert" },
+];
+
+test("toggleInertColumns checks every inert column, keeps the others, then unchecks them", () => {
+  const on = toggleInertColumns(board, ["col_merge"]);
+  expect(on).toEqual(["col_test", "col_merge", "col_wait"]);
+  expect(toggleInertColumns(board, on)).toEqual(["col_merge"]);
+  // One inert column missing: the shortcut completes the set instead of clearing it.
+  expect(toggleInertColumns(board, ["col_test"])).toEqual(["col_test", "col_wait"]);
+  expect(toggleInertColumns(board.slice(0, 2), ["col_grill"])).toEqual(["col_grill"]);
+});
+
+test("SkipColumnsPicker: inert shortcut shown only with inert columns, pressed when all are checked", () => {
+  const html = (columns: Column[], value: string[]) =>
+    renderToStaticMarkup(createElement(SkipColumnsPicker, { columns, value, onChange: () => {} }));
+  expect(html(board, [])).toContain('aria-pressed="false"');
+  expect(html(board, ["col_test", "col_wait"])).toContain('aria-pressed="true"');
+  expect(html(board, ["col_test"])).toContain('aria-pressed="false"');
+  expect(html(board.slice(0, 2), [])).not.toContain("skip-picker-inert");
 });
