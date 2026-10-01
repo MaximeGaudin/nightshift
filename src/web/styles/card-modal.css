@@ -1,29 +1,83 @@
-/* Card modal zone: layout, last run, agent questions, live log. */
+/* Card modal zone: layout, description, last run, agent questions, live log. */
 
-.card-modal { display: grid; grid-template-columns: 1.2fr 1fr; gap: 18px; flex: 1; min-height: 0; }
-.card-edit { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
-.card-edit textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
-.card-side { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
-.last-run { padding: 10px 12px; border-radius: 8px; background: var(--surface-2); font-size: 13px; }
-.last-run p { margin: 4px 0; }
-.last-run.st-success { background: var(--ok-soft); }
-.last-run.st-error, .last-run.st-cancelled { background: var(--err-soft); }
-.log {
-  flex: 1; overflow: auto; background: var(--surface-2); border-radius: 8px; padding: 8px 10px;
-  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+.card-modal { display: grid; grid-template-columns: 1.2fr 1fr; gap: var(--sp-6); flex: 1; min-height: 0; }
+.card-edit { display: flex; flex-direction: column; gap: var(--sp-4); min-height: 0; }
+.card-side { display: flex; flex-direction: column; gap: var(--sp-4); min-height: 0; }
+
+/* Description: Aperçu / Modifier. Preview and textarea share the same box so switching does not jump. */
+.card-desc { flex: 1; display: flex; flex-direction: column; gap: var(--sp-1); min-height: 0; }
+.card-desc-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); }
+.card-desc-label { font-size: var(--fs-sm); font-weight: 500; color: var(--muted); }
+.card-desc-head .tabs { padding-bottom: 0; border-bottom: 0; }
+.card-desc-body {
+  flex: 1; min-height: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
 }
-.log-line { display: grid; grid-template-columns: 70px 1fr; gap: 8px; padding: 2px 0; }
-.log-line time { color: var(--muted); }
+textarea.card-desc-body { resize: none; font: var(--fs-md)/1.55 var(--font-mono); padding: var(--sp-3) var(--sp-4); }
+.card-desc-preview {
+  overflow: auto;
+  padding: var(--sp-3) var(--sp-4);
+  background: transparent;
+  cursor: text;
+  transition: border-color var(--dur);
+}
+.card-desc-preview:hover { border-color: var(--border-strong); }
+.card-desc-preview > .muted { margin: 0; }
+
+/* Last run */
+.last-run {
+  flex-shrink: 0;
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  font-size: var(--fs-md);
+}
+.last-run.st-success { border-color: var(--ok-soft); background: var(--ok-soft); }
+.last-run.st-error, .last-run.st-cancelled { border-color: var(--err-soft); background: var(--err-soft); }
+.last-run-head { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
+.last-run-head strong { font-weight: 600; }
+.last-run-head .muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.last-run-summary { margin-top: var(--sp-2); max-height: 180px; overflow: auto; }
+.last-run-meta { margin-top: var(--sp-2); }
+.last-run-meta code { font-size: var(--fs-xs); }
+
+/* Agent questions */
+.question {
+  flex-shrink: 0; max-height: 60%; overflow: auto;
+  display: flex; flex-direction: column; gap: var(--sp-3);
+  padding: var(--sp-4);
+  border: 1px solid var(--warn-soft);
+  border-radius: var(--radius);
+  background: var(--warn-soft);
+}
+.question-head { display: flex; align-items: center; gap: var(--sp-2); font-weight: 600; }
+.question .hint { margin: 0; }
+.qa { display: flex; flex-direction: column; gap: var(--sp-2); }
+.qa-q { display: flex; gap: var(--sp-2); color: var(--text); font-size: var(--fs-md); }
+.qa-num { flex-shrink: 0; color: var(--muted); font-variant-numeric: tabular-nums; }
+.qa-q .md { flex: 1; min-width: 0; }
+.qa textarea { min-height: 54px; background: var(--surface); }
+.question button { align-self: flex-end; }
+
+/* Live log and history */
+.log {
+  flex: 1; overflow: auto;
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  font: var(--fs-sm)/1.55 var(--font-mono);
+}
+.log > .muted { margin: 0; font-family: var(--font); }
+.log-line { display: grid; grid-template-columns: 70px 1fr; gap: var(--sp-3); padding: 1px 0; }
+.log-line time { color: var(--muted); font-variant-numeric: tabular-nums; }
 .log-line span { white-space: pre-wrap; word-break: break-word; }
 .log-line.tool span { color: var(--accent); }
 .log-line.info span { color: var(--muted); }
 .log-line.error span { color: var(--err); }
-
-.question { display: flex; flex-direction: column; gap: 8px; max-height: 60%; overflow: auto; flex-shrink: 0; padding: 10px 12px; border-radius: 8px; background: var(--warn-soft); }
-.question .hint { margin: 0; }
-.qa > span { color: var(--text); font-size: 13px; white-space: pre-wrap; }
-.qa textarea { min-height: 54px; }
-.question button { align-self: flex-end; }
 
 @media (max-width: 800px) {
   .card-modal { grid-template-columns: 1fr; }
