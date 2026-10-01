@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { PERMISSION_MODES, type Settings } from "../shared/types.ts";
+import { LANGUAGE_SETTINGS, PERMISSION_MODES, type Settings } from "../shared/types.ts";
 import { writeFileAtomic } from "./fsutil.ts";
 
 export const NIGHTSHIFT_HOME = process.env.NIGHTSHIFT_HOME ?? join(homedir(), ".nightshift");
@@ -20,6 +20,7 @@ export const DEFAULT_SETTINGS: Settings = {
   extraArgs: "",
   recentProjects: [],
   soundNotifications: true,
+  language: "auto",
 };
 
 // Kept on globalThis so modules re-evaluated by `bun --hot` share the state seen by the long-lived orchestrator.
@@ -50,6 +51,8 @@ function checkField(key: keyof Settings, value: unknown): string | null {
       return typeof value === "boolean" ? null : "soundNotifications must be a boolean";
     case "permissionMode":
       return PERMISSION_MODES.includes(value as Settings["permissionMode"]) ? null : `Unknown permission mode: ${String(value)}`;
+    case "language":
+      return LANGUAGE_SETTINGS.includes(value as Settings["language"]) ? null : `Unknown language: ${String(value)}`;
     case "recentProjects":
       return isStringArray(value) ? null : "recentProjects must be an array of strings";
   }

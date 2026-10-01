@@ -190,6 +190,10 @@ export function ensureDoneColumn(columns: Column[]): Column[] {
 export const PERMISSION_MODES = ["auto", "acceptEdits", "dontAsk", "bypassPermissions", "manual", "plan"] as const;
 export type PermissionMode = (typeof PERMISSION_MODES)[number];
 
+/** UI language: "auto" follows the browser. */
+export const LANGUAGE_SETTINGS = ["auto", "en", "fr"] as const;
+export type LanguageSetting = (typeof LANGUAGE_SETTINGS)[number];
+
 export interface Settings {
   maxParallel: number;
   claudePath: string;
@@ -199,6 +203,7 @@ export interface Settings {
   recentProjects: string[];
   /** Play a sound when a card needs human attention. */
   soundNotifications: boolean;
+  language: LanguageSetting;
 }
 
 export interface SkillInfo {
@@ -254,6 +259,8 @@ export interface RunProgress {
 
 export interface ProjectSnapshot {
   path: string;
+  /** Template skills that could not be copied into a newly created project; only in the open response. */
+  templateSkillsNotCopied?: string[];
   board: Board;
   live: Record<string, LiveStatus>;
   /** Pid of another Nightshift process that runs this project's agents; this one does not. */

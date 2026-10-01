@@ -11,6 +11,7 @@ const base: Settings = {
   extraArgs: "",
   recentProjects: [],
   soundNotifications: false,
+  language: "auto",
 };
 
 const render = (s: Settings, current?: string) =>

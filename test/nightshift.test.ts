@@ -80,6 +80,7 @@ test("resolveModel priority", () => {
     extraArgs: "",
     recentProjects: [],
     soundNotifications: true,
+    language: "auto",
   });
   expect(resolveModel(col("opus"), settings("sonnet"))).toBe("opus");
   expect(resolveModel(col(), settings(" sonnet "))).toBe("sonnet");

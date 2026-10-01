@@ -95,3 +95,18 @@ test("settings-test-guard: under bun test, a missing NIGHTSHIFT_HOME is refused"
   expect(out.exitCode).not.toBe(0);
   expect(out.stderr.toString()).toContain("NIGHTSHIFT_HOME must be set");
 });
+
+test("settings-language: defaults to auto, persists, rejects unknown values", async () => {
+  const { getSettings, updateSettings } = await load();
+  expect(getSettings().language).toBe("auto");
+  updateSettings({ language: "en" });
+  expect(JSON.parse(readFileSync(join(home, "settings.json"), "utf8")).language).toBe("en");
+  expect(() => updateSettings({ language: "de" as never })).toThrow("Unknown language: de");
+  expect(getSettings().language).toBe("en");
+});
+
+test("settings-language: an invalid value in the file falls back to auto", async () => {
+  const { getSettings } = await load(JSON.stringify({ language: "de", maxParallel: 5 }));
+  expect(getSettings().language).toBe("auto");
+  expect(getSettings().maxParallel).toBe(5);
+});
