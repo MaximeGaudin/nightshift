@@ -31,12 +31,12 @@ const now = () => new Date().toISOString();
 // Key order matches normalizeBoard's output so a fresh board is not rewritten on reopen.
 const DEFAULT_COLUMNS: Omit<Column, "id">[] = [
   { name: "Backlog", type: "inert" },
-  { name: "Grill", type: "skill", skill: "nightshift-grill", model: "opus", maxParallel: 3 },
-  { name: "Plan", type: "skill", skill: "nightshift-plan", model: "opus", maxParallel: 3 },
-  { name: "Implement", type: "skill", skill: "nightshift-implement", model: "sonnet", maxParallel: 3 },
-  { name: "Review", type: "skill", skill: "nightshift-review", model: "opus", maxParallel: 1 },
-  { name: "To Test", type: "inert" },
-  { name: "Merged", type: "skill", skill: "nightshift-merge", model: "sonnet", maxParallel: 1 },
+  { name: "Grill", type: "skill", skill: "nightshift-grill", model: "opus", maxParallel: 3, emoji: "🔥" },
+  { name: "Plan", type: "skill", skill: "nightshift-plan", model: "opus", maxParallel: 3, emoji: "🗺️" },
+  { name: "Implement", type: "skill", skill: "nightshift-implement", model: "sonnet", maxParallel: 3, emoji: "🧑‍💻" },
+  { name: "Review", type: "skill", skill: "nightshift-review", model: "opus", maxParallel: 3, emoji: "🧐" },
+  { name: "To Test", type: "inert", emoji: "🪲" },
+  { name: "Merge", type: "skill", skill: "nightshift-merge", model: "sonnet", maxParallel: 1, emoji: "🎉" },
 ];
 
 export function defaultBoard(name: string): Board {
