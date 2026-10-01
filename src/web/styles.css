@@ -216,6 +216,8 @@ label > input, label > textarea, label > select { font-size: 14px; color: var(--
 .col-editor-row select { width: auto; max-width: 260px; }
 .col-editor .order { color: var(--muted); width: 18px; text-align: right; }
 .col-editor .hint { margin: 0 0 0 26px; }
+.col-model { flex-direction: row; align-items: center; gap: 8px; margin-left: 26px; }
+.col-model input { flex: 0 1 260px; }
 .instructions { min-height: 50px; margin-left: 26px; width: calc(100% - 26px); }
 
 /* Skills */

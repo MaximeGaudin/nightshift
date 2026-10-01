@@ -117,6 +117,16 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
             {c.type === "skill" && (
               <>
                 {c.skill && <p className="hint small">{skills.find((s) => s.name === c.skill)?.description}</p>}
+                <label className="col-model">
+                  Modèle
+                  <input
+                    list="column-models"
+                    placeholder="Réglage global"
+                    value={c.model ?? ""}
+                    onChange={(e) => patch(i, { model: e.target.value })}
+                  />
+                </label>
+                <p className="hint small">Vide = modèle des réglages globaux.</p>
                 <textarea
                   className="instructions"
                   placeholder="Instructions additionnelles pour l'agent (optionnel)…"
@@ -128,6 +138,11 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
           </li>
         ))}
       </ol>
+      <datalist id="column-models">
+        {["fable", "opus", "sonnet", "haiku"].map((m) => (
+          <option key={m} value={m} />
+        ))}
+      </datalist>
     </Modal>
   );
 }
