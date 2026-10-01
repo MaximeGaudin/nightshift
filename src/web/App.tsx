@@ -195,9 +195,16 @@ function Board({
                 <span className="count">{cards.length}</span>
               </div>
               {col.type === "skill" ? (
-                <span className="badge skill" title={col.instructions || undefined}>
-                  ⚡ {col.skill || "aucun skill"}
-                </span>
+                <div className="column-badges">
+                  <span className="badge skill" title={col.instructions || undefined}>
+                    ⚡ {col.skill || "aucun skill"}
+                  </span>
+                  {col.model && (
+                    <span className="badge model" title={`Modèle : ${col.model}`}>
+                      {col.model}
+                    </span>
+                  )}
+                </div>
               ) : (
                 <span className="badge inert">inerte</span>
               )}
