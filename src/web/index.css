@@ -1,0 +1,197 @@
+/*
+ * Entry stylesheet: Tailwind v4 + shadcn/ui theme (Linear flavour).
+ *
+ * Cascade layers. `legacy` holds the hand-written styles.css until it is deleted: it sits above Tailwind's
+ * preflight (`base`, so the old screens keep their look) and below `components` / `utilities` (so shadcn
+ * components and Tailwind classes win over the old `button { ... }` style rules). Preflight is therefore kept.
+ * When styles.css is removed, drop the `legacy` layer and its import.
+ */
+@layer theme, base, legacy, components, utilities;
+
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "@fontsource-variable/inter";
+@import "./styles.css" layer(legacy);
+@import "./styles/markdown.css";
+
+/* Dark mode follows prefers-color-scheme only: no .dark class. */
+@custom-variant dark (@media (prefers-color-scheme: dark));
+
+:root {
+  --radius: 6px;
+  --background: #fbfbfc;
+  --foreground: #1f2023;
+  --card: #ffffff;
+  --card-foreground: #1f2023;
+  --popover: #ffffff;
+  --popover-foreground: #1f2023;
+  --primary: #5e6ad2;
+  --primary-foreground: #ffffff;
+  --secondary: #f4f5f7;
+  --secondary-foreground: #1f2023;
+  /* --muted and --accent are also names of the legacy text color and indigo (styles.css, unlayered :root):
+     the shadcn values live under --ui-* and are mapped to the bg-muted / bg-accent utilities below. */
+  --ui-muted: #f4f5f7;
+  --muted-foreground: #6b6f76;
+  --ui-accent: #eceef1;
+  --accent-foreground: #1f2023;
+  --destructive: #cf5050;
+  --border: rgb(0 0 0 / 0.08);
+  --input: rgb(0 0 0 / 0.12);
+  --ring: #5e6ad2;
+  --overlay: rgb(0 0 0 / 0.45);
+  --ok: #3a9a6c;
+  --ok-soft: rgb(58 154 108 / 0.12);
+  --warn: #b5832b;
+  --warn-soft: rgb(181 131 43 / 0.13);
+  --err: #cf5050;
+  --err-soft: rgb(207 80 80 / 0.12);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0e0f12;
+    --foreground: #e4e5e9;
+    --card: #16171b;
+    --card-foreground: #e4e5e9;
+    --popover: #16171b;
+    --popover-foreground: #e4e5e9;
+    --primary: #5e6ad2;
+    --primary-foreground: #ffffff;
+    --secondary: #1c1d22;
+    --secondary-foreground: #e4e5e9;
+    --ui-muted: #1c1d22;
+    --muted-foreground: #8a8f98;
+    --ui-accent: #24252b;
+    --accent-foreground: #e4e5e9;
+    --destructive: #e5676b;
+    --border: rgb(255 255 255 / 0.08);
+    --input: rgb(255 255 255 / 0.12);
+    --ring: #5e6ad2;
+    --overlay: rgb(0 0 0 / 0.55);
+    --ok: #4cb782;
+    --ok-soft: rgb(76 183 130 / 0.15);
+    --warn: #d6a24a;
+    --warn-soft: rgb(214 162 74 / 0.15);
+    --err: #e5676b;
+    --err-soft: rgb(229 103 107 / 0.15);
+  }
+}
+
+@theme inline {
+  --font-sans: "Inter Variable", Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--ui-muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--ui-accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-overlay: var(--overlay);
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-err: var(--err);
+  --color-err-soft: var(--err-soft);
+
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+
+  --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.06), 0 0 0 0.5px rgb(0 0 0 / 0.04);
+  --default-transition-duration: 120ms;
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+    outline-color: color-mix(in srgb, var(--ring) 50%, transparent);
+  }
+  html {
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    html {
+      color-scheme: dark;
+    }
+  }
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    line-height: 1.45;
+    font-feature-settings: "cv11", "ss01";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* Status and column glyphs (icons.tsx): color comes from currentColor, set here. */
+@layer components {
+  .icon,
+  .st-icon,
+  .col-icon {
+    display: inline-block;
+    flex-shrink: 0;
+    vertical-align: middle;
+  }
+  .st-icon.st-queued,
+  .st-icon.st-question {
+    color: var(--warn);
+  }
+  .st-icon.st-running {
+    color: var(--primary);
+    animation: spin 1.6s linear infinite;
+  }
+  .st-icon.st-success {
+    color: var(--ok);
+  }
+  .st-icon.st-error {
+    color: var(--err);
+  }
+  .st-icon.st-cancelled,
+  .col-icon.col-inert {
+    color: var(--muted-foreground);
+  }
+  .col-icon.col-skill {
+    color: var(--primary);
+  }
+  .col-icon.col-emoji {
+    width: 14px;
+    height: 14px;
+    font-size: 13px;
+    line-height: 14px;
+    text-align: center;
+    overflow: hidden;
+    color: initial;
+  }
+}
+
+/* Reduced motion: no animation, no transition anywhere (Radix, Sonner, dnd-kit included). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    /* biome-ignore lint/complexity/noImportantStyles: must also beat inline styles (dnd-kit transforms and transitions) */
+    animation: none !important;
+    /* biome-ignore lint/complexity/noImportantStyles: same */
+    transition: none !important;
+    /* biome-ignore lint/complexity/noImportantStyles: same */
+    scroll-behavior: auto !important;
+  }
+}
