@@ -1,7 +1,29 @@
 import { useEffect, useState } from "react";
 import type { Column, ProjectSnapshot, SkillInfo } from "../shared/types.ts";
 import { api } from "./api.ts";
+import { ColumnIcon, Icon } from "./icons.tsx";
 import { ErrorBanner, Modal } from "./ui.tsx";
+
+/** Up/down chevron for the reorder buttons (icons.tsx has no arrow glyph). */
+function Chevron({ up }: { up?: boolean }) {
+  return (
+    <svg
+      className="icon"
+      width={14}
+      height={14}
+      viewBox="0 0 14 14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d={up ? "M3.5 8.75L7 5.25l3.5 3.5" : "M3.5 5.25L7 8.75l3.5-3.5"} />
+    </svg>
+  );
+}
 
 type Draft = Column & { key: string };
 
@@ -51,7 +73,7 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
               setCols((cs) => [...cs, { id: "", key: crypto.randomUUID(), name: "Nouvelle colonne", type: "inert" }])
             }
           >
-            + Colonne
+            <Icon name="plus" /> Colonne
           </button>
           <div className="spacer" />
           <button onClick={onClose}>Annuler</button>
@@ -75,6 +97,7 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
           <li key={c.key} className={c.type}>
             <div className="col-editor-row">
               <span className="order">{i + 1}</span>
+              <ColumnIcon type={c.type} />
               <input aria-label="Nom" value={c.name} onChange={(e) => patch(i, { name: e.target.value })} />
               <select aria-label="Type" value={c.type} onChange={(e) => patch(i, { type: e.target.value as Column["type"] })}>
                 <option value="inert">Inerte</option>
@@ -99,10 +122,10 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
               )}
               <div className="spacer" />
               <button className="icon-btn" disabled={i === 0} onClick={() => move(i, -1)} aria-label="Monter">
-                ↑
+                <Chevron up />
               </button>
               <button className="icon-btn" disabled={i === cols.length - 1} onClick={() => move(i, 1)} aria-label="Descendre">
-                ↓
+                <Chevron />
               </button>
               <button
                 className="icon-btn danger"
@@ -111,7 +134,7 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
                 onClick={() => setCols((cs) => cs.filter((_, j) => j !== i))}
                 aria-label="Supprimer"
               >
-                🗑
+                <Icon name="trash" />
               </button>
             </div>
             {c.type === "skill" && (
