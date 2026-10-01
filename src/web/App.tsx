@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { cardRef, columnMaxParallel, type Card, type Column, type LiveStatus, type ProjectSnapshot } from "../shared/types.ts";
 import { api, useServerEvents, useSettings } from "./api.ts";
 import { CardModal } from "./CardModal.tsx";
+import { CompactColumnBand, compactColumnTitle, isCompactColumn } from "./compactColumn.tsx";
 import { ColumnsEditor } from "./ColumnsEditor.tsx";
 import { ProjectPicker } from "./ProjectPicker.tsx";
 import { SettingsModal } from "./SettingsModal.tsx";
@@ -174,6 +175,7 @@ function Board({
 }) {
   const [drag, setDrag] = useState<string | null>(null);
   const [drop, setDrop] = useState<{ col: string; index: number } | null>(null);
+  const [expanded, setExpanded] = useState<string | null>(null);
 
   const onDrop = (col: Column) => {
     if (drag && drop) guard(api.moveCard(snap.path, drag, col.id, drop.index));
@@ -185,10 +187,12 @@ function Board({
     <main className="board">
       {snap.board.columns.map((col) => {
         const cards = snap.board.cards.filter((c) => c.columnId === col.id);
+        const compact = isCompactColumn(cards.length, expanded === col.id);
         return (
           <section
             key={col.id}
-            className={`column ${col.type} ${drop?.col === col.id ? "drop-target" : ""}`}
+            title={compact ? compactColumnTitle(col) : undefined}
+            className={`column ${compact ? "compact " : ""}${col.type} ${drop?.col === col.id ? "drop-target" : ""}`}
             onDragOver={(e) => {
               if (!drag) return;
               e.preventDefault();
@@ -211,52 +215,68 @@ function Board({
               onDrop(col);
             }}
           >
-            <header className="column-head">
-              <div className="column-title">
-                <ColumnIcon type={col.type} />
-                <h2>{col.name}</h2>
-                <span className="count">{cards.length}</span>
-                {col.type === "skill" && (
-                  <span className="column-parallel" title="agents actifs / limite de la colonne">
-                    {cards.filter((c) => snap.live[c.id] === "running").length} / {columnMaxParallel(col)}
-                  </span>
-                )}
-              </div>
-              {col.type === "skill" ? (
-                <div className="column-badges">
-                  <span className="badge skill" title={col.instructions || undefined}>
-                    {col.skill || "aucun skill"}
-                  </span>
-                  {col.model && (
-                    <span className="badge model" title={`Modèle : ${col.model}`}>
-                      {col.model}
+            {compact ? (
+              <CompactColumnBand col={col} onAdd={() => setExpanded(col.id)} />
+            ) : (
+              <>
+              <header className="column-head">
+                <div className="column-title">
+                  <ColumnIcon type={col.type} />
+                  <h2>{col.name}</h2>
+                  <span className="count">{cards.length}</span>
+                  {col.type === "skill" && (
+                    <span className="column-parallel" title="agents actifs / limite de la colonne">
+                      {cards.filter((c) => snap.live[c.id] === "running").length} / {columnMaxParallel(col)}
                     </span>
                   )}
                 </div>
+                {col.type === "skill" ? (
+                  <div className="column-badges">
+                    <span className="badge skill" title={col.instructions || undefined}>
+                      {col.skill || "aucun skill"}
+                    </span>
+                    {col.model && (
+                      <span className="badge model" title={`Modèle : ${col.model}`}>
+                        {col.model}
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <span className="badge inert">inerte</span>
+                )}
+              </header>
+              <div className="cards">
+                {cards.map((card, i) => (
+                  <div key={card.id}>
+                    {drop?.col === col.id && drop.index === i && <div className="drop-indicator" />}
+                    <CardTile
+                      card={card}
+                      live={snap.live[card.id]}
+                      dragging={drag === card.id}
+                      onOpen={() => onOpen(card.id)}
+                      onDragStart={() => setDrag(card.id)}
+                      onDragEnd={() => {
+                        setDrag(null);
+                        setDrop(null);
+                      }}
+                    />
+                  </div>
+                ))}
+                {drop?.col === col.id && drop.index === cards.length && <div className="drop-indicator" />}
+              </div>
+              {expanded === col.id ? (
+                <AddCard
+                  key="expanded"
+                  initialOpen
+                  closeOnEmptyBlur
+                  onClose={() => setExpanded(null)}
+                  onAdd={(title) => guard(api.createCard(snap.path, col.id, title))}
+                />
               ) : (
-                <span className="badge inert">inerte</span>
+                <AddCard key="plain" onAdd={(title) => guard(api.createCard(snap.path, col.id, title))} />
               )}
-            </header>
-            <div className="cards">
-              {cards.map((card, i) => (
-                <div key={card.id}>
-                  {drop?.col === col.id && drop.index === i && <div className="drop-indicator" />}
-                  <CardTile
-                    card={card}
-                    live={snap.live[card.id]}
-                    dragging={drag === card.id}
-                    onOpen={() => onOpen(card.id)}
-                    onDragStart={() => setDrag(card.id)}
-                    onDragEnd={() => {
-                      setDrag(null);
-                      setDrop(null);
-                    }}
-                  />
-                </div>
-              ))}
-              {drop?.col === col.id && drop.index === cards.length && <div className="drop-indicator" />}
-            </div>
-            <AddCard onAdd={(title) => guard(api.createCard(snap.path, col.id, title))} />
+              </>
+            )}
           </section>
         );
       })}
