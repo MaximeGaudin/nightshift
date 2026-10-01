@@ -18,6 +18,7 @@ import {
 } from "../shared/types.ts";
 import { safeHttpUrl } from "../shared/urls.ts";
 import index from "../web/index.html";
+import { removeAttachments, saveAttachment } from "./attachments.ts";
 import { checkRequest, HttpError } from "./guard.ts";
 import { Orchestrator } from "./orchestrator.ts";
 import { removeScreenshots, resolveScreenshot } from "./screenshots.ts";
@@ -328,6 +329,7 @@ export function startServer({ port, development, agents = true }: { port: number
             board.cards = board.cards.filter((c) => c.id !== req.params.id);
           });
           removeScreenshots(req.params.id);
+          removeAttachments(req.params.id);
           orch.purgeCard(p, req.params.id);
         }),
       },
@@ -362,6 +364,17 @@ export function startServer({ port, development, agents = true }: { port: number
       },
       "/api/cards/:id/feedback": {
         POST: h((b, url, req) => orch.feedback(project(b, url), req.params.id, typeof b.text === "string" ? b.text : "")),
+      },
+      "/api/cards/:id/attachments": {
+        // The file travels as base64 in a JSON body: the CSRF guard only accepts application/json.
+        POST: h((b, url, req) => {
+          const card = project(b, url).card(req.params.id);
+          if (!card) throw new HttpError(404, "Unknown card");
+          const name = reqString(b, "name");
+          const data = reqString(b, "data");
+          if (!/^[A-Za-z0-9+/]*={0,2}$/.test(data)) throw new Error("data must be base64");
+          return saveAttachment(card.id, name, Buffer.from(data, "base64"));
+        }),
       },
       "/api/cards/:id/screenshot": {
         GET: h((_b, url, req) => {
