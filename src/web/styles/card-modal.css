@@ -63,6 +63,19 @@ textarea.card-desc-body { resize: none; font: var(--fs-md)/1.55 var(--font-mono)
 .qa textarea { min-height: 54px; background: var(--surface); }
 .question button { align-self: flex-end; }
 
+/* Agent feedback */
+.feedback {
+  flex-shrink: 0;
+  display: flex; flex-direction: column; gap: var(--sp-3);
+  padding: var(--sp-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.feedback-head { font-weight: 600; }
+.feedback textarea { min-height: 54px; }
+.feedback button { align-self: flex-end; }
+
 /* Live log and history */
 .log {
   flex: 1 0 320px; min-height: 320px; overflow: auto;

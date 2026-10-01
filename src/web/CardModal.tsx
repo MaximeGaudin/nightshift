@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { cardRef, columnEmoji, type Board, type Card, type LiveStatus, type LogLine } from "../shared/types.ts";
+import { canSendFeedback, cardRef, columnEmoji, type Board, type Card, type LiveStatus, type LogLine } from "../shared/types.ts";
 import { api, useServerEvents } from "./api.ts";
+import { FeedbackForm } from "./FeedbackForm.tsx";
 import { StatusIcon } from "./icons.tsx";
 import { Markdown } from "./markdown.tsx";
 import { TestPanel } from "./TestPanel.tsx";
@@ -220,6 +221,9 @@ export function CardModal({
                 )}
               </div>
             </div>
+          )}
+          {canSendFeedback(card, live) && !(lr?.status === "question" && lr.columnId === card.columnId && !live) && (
+            <FeedbackForm project={project} cardId={card.id} onError={setError} />
           )}
           <TestPanel project={project} card={card} running={testing} onError={setError} />
           <div className="tabs" role="tablist">
