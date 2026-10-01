@@ -209,6 +209,7 @@ export class Project {
   board!: Board;
   private listeners = new Set<() => void>();
   private watcher: FSWatcher | null = null;
+  private reloadTimer: ReturnType<typeof setTimeout> | undefined;
   private lastWrittenMtime = 0;
   /** Set when a reload failed: the file on disk holds an edit we could not read and must not silently overwrite. */
   private unreadableOnDisk = false;
@@ -244,21 +245,29 @@ export class Project {
       try {
         copyFileSync(this.file, `${this.file}.invalid`);
       } catch {}
-      this.unreadableOnDisk = false;
     }
     writeFileAtomic(this.file, `${JSON.stringify(this.board, null, 2)}\n`);
+    this.unreadableOnDisk = false;
     try {
       this.lastWrittenMtime = statSync(this.file).mtimeMs;
-    } catch {}
+    } catch (e) {
+      console.warn(`Could not stat ${this.file}: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
 
   private watch() {
     try {
       this.watcher = watch(this.path, (_event, filename) => {
         if (filename !== BOARD_FILE) return;
-        setTimeout(() => this.reloadIfChanged(), 50);
+        clearTimeout(this.reloadTimer);
+        this.reloadTimer = setTimeout(() => this.reloadIfChanged(), 50);
       });
-    } catch {}
+      this.watcher.on("error", (e) => console.error(`Watching ${this.path} failed, external edits will not be picked up: ${e.message}`));
+    } catch (e) {
+      console.error(
+        `Cannot watch ${this.path}, external edits of ${BOARD_FILE} will not be picked up: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
   }
 
   private reloadIfChanged() {
@@ -289,13 +298,23 @@ export class Project {
 
   /** Applies a mutation, persists, notifies. */
   mutate<T>(fn: (board: Board) => T): T {
-    const result = fn(this.board);
-    this.write();
+    // If the mutation or the write fails, the memory must not run ahead of the file: restore the previous state.
+    const before = structuredClone(this.board);
+    let result: T;
+    try {
+      result = fn(this.board);
+      this.write();
+    } catch (e) {
+      for (const key of Object.keys(this.board)) delete (this.board as unknown as Record<string, unknown>)[key];
+      Object.assign(this.board, before);
+      throw e;
+    }
     this.emit();
     return result;
   }
 
   close() {
+    clearTimeout(this.reloadTimer);
     this.watcher?.close();
   }
 
