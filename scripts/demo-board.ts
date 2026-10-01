@@ -107,7 +107,10 @@ const cards: Card[] = [
     description: "Import fails when the folder name contains a dot.",
     lastRun: { columnId: "col_build", status: "error", at: at(220), error: "Command failed: bun test (exit 1)", costUsd: 0.18 },
   }),
-  card("Review the Settings page", "col_review", { description: "Check label consistency." }),
+  card("Review the Settings page", "col_review", {
+    description: "Check label consistency.",
+    lastRun: { columnId: "col_review", status: "success", at: at(230), summary: "Labels checked, no inconsistency found.", costUsd: 0.12 },
+  }),
   card("Preview the interface", "col_test", {
     description: "Run the app from the worktree.",
     test: { command: "bun start --no-agents --port 4611", url: "http://localhost:4611" },
