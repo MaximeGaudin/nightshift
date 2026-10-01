@@ -135,6 +135,7 @@ label > input, label > textarea, label > select { font-size: 14px; color: var(--
 }
 .card:hover { box-shadow: 0 0 0 1px var(--border), var(--shadow); }
 .card.dragging { opacity: 0.4; }
+.card .card-ref { font-size: 11px; color: var(--muted); margin-bottom: 2px; font-variant-numeric: tabular-nums; }
 .card h3 { font-size: 14px; font-weight: 500; word-break: break-word; }
 .card .excerpt { margin: 4px 0 0; color: var(--muted); font-size: 12px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; white-space: pre-line; }
 .card.st-running { border-left-color: var(--accent); }
