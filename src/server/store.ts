@@ -33,6 +33,7 @@ export function normalizeBoard(raw: any, fallbackName: string): Board {
           type: c.type === "skill" ? "skill" : "inert",
           ...(c.skill ? { skill: String(c.skill) } : {}),
           ...(c.instructions ? { instructions: String(c.instructions) } : {}),
+          ...(typeof c.model === "string" && c.model.trim() ? { model: c.model.trim() } : {}),
         }))
     : [];
   if (columns.length === 0) columns.push(...defaultBoard(fallbackName).columns);

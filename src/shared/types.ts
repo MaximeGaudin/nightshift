@@ -10,6 +10,8 @@ export interface Column {
   skill?: string;
   /** Extra instructions appended to the agent prompt for this column. */
   instructions?: string;
+  /** Modèle Claude (alias ou ID) pour les runs de cette colonne ; absent = réglage global. */
+  model?: string;
 }
 
 export type RunStatus = "success" | "error" | "cancelled" | "question";

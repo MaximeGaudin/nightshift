@@ -90,6 +90,7 @@ export function startServer({ port, development }: { port: number; development?:
                 type: c.type === "skill" ? "skill" : "inert",
                 ...(c.type === "skill" && c.skill ? { skill: String(c.skill) } : {}),
                 ...(c.instructions?.trim() ? { instructions: String(c.instructions).trim() } : {}),
+                ...(typeof c.model === "string" && c.model.trim() ? { model: c.model.trim() } : {}),
               }));
               if (cols.length === 0) throw new Error("A board needs at least one column");
               const ids = new Set(cols.map((c) => c.id));

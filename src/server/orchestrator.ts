@@ -2,7 +2,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileS
 import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import type { Subprocess } from "bun";
-import type { Board, Card, Column, LiveStatus, LogLine, ProjectSnapshot, RunStatus, ServerEvent } from "../shared/types.ts";
+import type { Board, Card, Column, LiveStatus, LogLine, ProjectSnapshot, RunStatus, ServerEvent, Settings } from "../shared/types.ts";
 import { getSettings, NIGHTSHIFT_HOME, onSettingsChange, rememberProject } from "./settings.ts";
 import { needsRun, Project } from "./store.ts";
 import { findSkill } from "./skills.ts";
@@ -103,6 +103,11 @@ function summarizeToolInput(name: string, input: any): string {
   if (!input || typeof input !== "object") return name;
   const v = input.command ?? input.file_path ?? input.pattern ?? input.skill ?? input.url ?? input.description ?? input.query;
   return v ? `${name}: ${String(v).slice(0, 200)}` : name;
+}
+
+// Column model wins over the global setting; neither means no --model (CLI default).
+export function resolveModel(column: Column, settings: Settings): string | undefined {
+  return column.model?.trim() || settings.model.trim() || undefined;
 }
 
 export class Orchestrator {
@@ -382,6 +387,7 @@ export class Orchestrator {
       ? `The user answered your questions:\n\n${answer.text}\n\nContinue processing the card "${card.title}" with the skill "${column.skill}", then return the structured output as before (title, description, move, summary). Only ask new questions if the answers raise new blocking decisions, and then ask them all at once.`
       : buildPrompt(p.board, card, column, skill.path);
     if (answer) this.log(p, card.id, "info", `User answer: ${answer.text}`);
+    const model = resolveModel(column, settings);
     const args = [
       settings.claudePath || "claude",
       "-p",
@@ -398,15 +404,15 @@ export class Orchestrator {
       settings.permissionMode,
       "--name",
       `nightshift: ${card.title}`.slice(0, 80),
-      ...(settings.model ? ["--model", settings.model] : []),
+      ...(model ? ["--model", model] : []),
       ...splitArgs(settings.extraArgs),
     ];
-    this.log(p, card.id, "info", `${answer ? "Resuming" : "Starting"} skill "${column.skill}" in "${column.name}" (permission mode: ${settings.permissionMode}).`);
+    this.log(p, card.id, "info", `${answer ? "Resuming" : "Starting"} skill "${column.skill}" in "${column.name}" (permission mode: ${settings.permissionMode}, model: ${model ?? "default"}).`);
 
     let result: any = null;
     let stderr = "";
     try {
-      const proc = Bun.spawn(args, { cwd: p.path, stdout: "pipe", stderr: "pipe", stdin: "ignore" });
+      const proc = Bun.spawn(args, { cwd: p.path, env: process.env, stdout: "pipe", stderr: "pipe", stdin: "ignore" });
       job.proc = proc;
       if (job.cancelled) proc.kill();
       const readStderr = new Response(proc.stderr).text().then((t) => (stderr = t));
