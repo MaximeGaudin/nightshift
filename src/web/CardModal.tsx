@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { Board, Card, LiveStatus, LogLine } from "../shared/types.ts";
+import { cardRef, type Board, type Card, type LiveStatus, type LogLine } from "../shared/types.ts";
 import { api, useServerEvents } from "./api.ts";
 import { ErrorBanner, Modal, timeAgo } from "./ui.tsx";
 
@@ -57,7 +57,7 @@ export function CardModal({
       wide
       title={
         <span>
-          Fiche <span className="muted">· {column?.name}</span>
+          Fiche <CopyRef card={card} /> <span className="muted">· {column?.name}</span>
         </span>
       }
       onClose={() => {
@@ -181,5 +181,45 @@ export function CardModal({
         </aside>
       </div>
     </Modal>
+  );
+}
+
+/** Card ref shown as muted text; click copies it and briefly confirms. Clipboard failures stay silent. */
+function CopyRef({ card }: { card: Card }) {
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      clearTimeout(timer.current);
+    };
+  }, []);
+  const ref = cardRef(card);
+  const copy = async () => {
+    try {
+      if (!navigator.clipboard) return;
+      await navigator.clipboard.writeText(ref);
+    } catch {
+      return;
+    }
+    if (!mounted.current) return;
+    setCopied(true);
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => setCopied(false), 1500);
+  };
+  return (
+    <button
+      type="button"
+      className="card-ref-copy"
+      title="Copier la référence"
+      onClick={(e) => {
+        e.stopPropagation();
+        void copy();
+      }}
+    >
+      {copied ? "Copié" : ref}
+    </button>
   );
 }
