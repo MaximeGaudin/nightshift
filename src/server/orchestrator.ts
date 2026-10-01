@@ -3,11 +3,12 @@ import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import type { Subprocess } from "bun";
 import { spawn, type ChildProcess } from "node:child_process";
-import type { AttentionKind, Board, Card, Column, LiveStatus, LogLine, ProjectSnapshot, RunStatus, ServerEvent, Settings } from "../shared/types.ts";
+import type { AttentionKind, Board, Card, Column, LiveStatus, LogLine, ProjectSnapshot, RunProgress, RunStatus, ServerEvent, Settings } from "../shared/types.ts";
 import { cardRef, columnMaxParallel, isDoneColumn } from "../shared/types.ts";
 import { getSettings, NIGHTSHIFT_HOME, onSettingsChange, rememberProject } from "./settings.ts";
 import { needsRun, Project } from "./store.ts";
 import { findSkill } from "./skills.ts";
+import { parseProgressMarker, progressFromTodos } from "./progress.ts";
 
 interface Job {
   key: string;
@@ -20,6 +21,10 @@ interface Job {
   done: boolean;
   /** Claude session of the current process, from its init event (known even if it dies before a result). */
   sessionId?: string;
+  /** Live progress of the current process; reset at each spawn, never persisted. */
+  progress?: RunProgress;
+  /** A valid marker was seen in the current process: TodoWrite no longer counts. */
+  markerSeen?: boolean;
 }
 
 const MAX_LOG_LINES = 3000;
@@ -69,9 +74,12 @@ export const RESULT_SCHEMA = {
   additionalProperties: false,
 };
 
+const PROGRESS_MARKER = "[nightshift-progress]";
+
 /** Sent when resuming a session that stopped before returning its structured result. */
 export const RECOVER_PROMPT = `Your previous run in this session stopped before returning Nightshift's structured output (it may have been interrupted, or it only returned interim results while background work was running).
-Check the actual state of your work first (worktrees, branches, commits, background tasks). If work remains, finish it. Then return the structured output exactly once, describing the final state.`;
+Check the actual state of your work first (worktrees, branches, commits, background tasks). If work remains, finish it. Then return the structured output exactly once, describing the final state.
+Progress: on resume, emit the progress marker again (a line \`${PROGRESS_MARKER} N/M label\`) at the start of the step you are on, and at each following step.`;
 
 export function buildPrompt(board: Board, card: Card, column: Column, skillPath: string | undefined): string {
   const idx = board.columns.findIndex((c) => c.id === column.id);
@@ -98,6 +106,7 @@ Rules:
 - Work autonomously and pick sensible defaults. Do not use the AskUserQuestion tool.
 - If you truly cannot continue without human decisions, first explore everything you can on your own, then return the structured output with "questions" (and move "stay"); the answers will be sent back to you in this same session.
 - Each round-trip with the user is slow: put EVERY question you need answered in that single list (self-contained, one decision per question, suggest a default when you have one). Never ask one question now and keep others for later.
+- Progress: at the start, split your work into steps. At the start of each step, write a line on its own, exactly \`${PROGRESS_MARKER} N/M label\` (N = current step, M = total steps, label = short description). If the card description has a numbered \`## Progress\` section, use its numbering and total.
 - Never edit nightshift.json yourself; the board is updated from your structured output.
 - Never kill processes by name or pattern (pkill -f, killall, kill $(pgrep …)): other agents run on this machine and their processes can match. Only kill PIDs you started yourself.
 - Return the structured output exactly once, at the very end. If you started background work (subagents, background shells), wait until all of it has finished first. Never return an interim or "in progress" result.
@@ -227,7 +236,12 @@ export class Orchestrator {
     }
     const lockedBy = this.lockedBy.get(p.path);
     const testing = [...this.tests.values()].filter((t) => t.project === p).map((t) => t.cardId);
-    return { path: p.path, board: p.board, live, testing, ...(lockedBy ? { lockedBy } : {}), ...(this.agents ? {} : { agentsDisabled: true }) };
+    const progress: Record<string, RunProgress> = {};
+    for (const card of p.board.cards) {
+      const job = this.jobs.get(this.key(p, card.id));
+      if (job?.progress && !job.done) progress[card.id] = job.progress;
+    }
+    return { path: p.path, board: p.board, live, testing, progress, ...(lockedBy ? { lockedBy } : {}), ...(this.agents ? {} : { agentsDisabled: true }) };
   }
 
   private key(p: Project, cardId: string) {
@@ -436,7 +450,7 @@ export class Orchestrator {
       ? buildPrompt(p.board, card, column, skill.path)
       : answer.kind === "resume"
         ? RECOVER_PROMPT
-        : `The user answered your questions:\n\n${answer.text}\n\nContinue processing the card "${card.title}" with the skill "${column.skill}", then return the structured output as before (title, description, move, summary). Only ask new questions if the answers raise new blocking decisions, and then ask them all at once.`;
+        : `The user answered your questions:\n\n${answer.text}\n\nRe-emit the progress marker (\`${PROGRESS_MARKER} N/M label\`) as you resume and at each step. Continue processing the card "${card.title}" with the skill "${column.skill}", then return the structured output as before (title, description, move, summary). Only ask new questions if the answers raise new blocking decisions, and then ask them all at once.`;
     if (answer && answer.kind !== "resume") this.log(p, card.id, "info", `User answer: ${answer.text}`);
     let resumeId = answer?.sessionId;
     let costUsd = 0;
@@ -482,6 +496,8 @@ export class Orchestrator {
     verb: string,
   ): Promise<{ startError: string } | { result: any; stderr: string; exit: string }> {
     const p = job.project;
+    job.progress = undefined;
+    job.markerSeen = false;
     const settings = getSettings();
     const model = resolveModel(column, settings);
     // The prompt holds the card text. Passed as an argument it would show in every process list, and an
@@ -553,14 +569,33 @@ export class Orchestrator {
     const cardId = job.cardId;
     if (ev.type === "assistant") {
       for (const block of ev.message?.content ?? []) {
-        if (block.type === "text" && block.text?.trim()) this.log(p, cardId, "text", block.text.trim());
-        else if (block.type === "tool_use" && block.name !== "StructuredOutput")
+        if (block.type === "text" && block.text?.trim()) {
+          this.log(p, cardId, "text", block.text.trim());
+          const m = parseProgressMarker(block.text);
+          if (m) {
+            job.markerSeen = true;
+            this.setProgress(job, m, "marker");
+          }
+        } else if (block.type === "tool_use" && block.name !== "StructuredOutput") {
           this.log(p, cardId, "tool", summarizeToolInput(block.name, block.input));
+          if (block.name === "TodoWrite" && !job.markerSeen) {
+            const t = progressFromTodos(block.input);
+            if (t) this.setProgress(job, t, "todo");
+          }
+        }
       }
     } else if (ev.type === "system" && ev.subtype === "init") {
       if (ev.session_id) job.sessionId = ev.session_id;
       this.log(p, cardId, "info", `Session ${ev.session_id} (model ${ev.model ?? "default"})`);
     }
+  }
+
+  /** Stores a new progress value and broadcasts the board, unless nothing changed. */
+  private setProgress(job: Job, v: { step: number; total: number; label: string }, source: RunProgress["source"]) {
+    const cur = job.progress;
+    if (cur && cur.step === v.step && cur.total === v.total && cur.label === v.label) return;
+    job.progress = { step: v.step, total: v.total, label: v.label, source, at: new Date().toISOString() };
+    this.broadcast({ type: "board", project: job.project.path, snapshot: this.snapshot(job.project) });
   }
 
   private finish(
