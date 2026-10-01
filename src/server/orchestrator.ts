@@ -407,6 +407,7 @@ export class Orchestrator {
       live,
       testing,
       progress,
+      quickRuns: [],
       sequence: this.sequence.get(p),
       ...(lockedBy ? { lockedBy } : {}),
       ...(this.agents ? {} : { agentsDisabled: true }),

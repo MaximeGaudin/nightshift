@@ -118,7 +118,7 @@ const CARD_KEYS = [
   "history",
   "timeBase",
 ];
-const BOARD_KEYS = ["version", "name", "columns", "cards", "nextCardNumber"];
+const BOARD_KEYS = ["version", "name", "columns", "cards", "nextCardNumber", "favoriteSkills"];
 
 /**
  * Fields this version does not know, kept as they are. Several Nightshift versions write the same file
@@ -172,6 +172,14 @@ export function remapColumnId(card: object, from: string, to: string): void {
     fix(c.timeBase.cursor);
     if (Array.isArray(c.timeBase.totals)) for (const t of c.timeBase.totals) fix(t);
   }
+}
+
+/** Non-empty trimmed skill names, deduplicated in file order; undefined when nothing valid is left. */
+function normalizeFavoriteSkills(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const names = new Set<string>();
+  for (const v of value) if (typeof v === "string" && v.trim()) names.add(v.trim());
+  return names.size > 0 ? [...names] : undefined;
 }
 
 /** Normalizes a parsed board so the rest of the code can trust its shape. */
@@ -243,7 +251,16 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
     rawCards.map((c) => c.number),
     r.nextCardNumber,
   );
-  return { ...unknownFields(raw, BOARD_KEYS), version: 1, name: String(r.name ?? fallbackName), columns, cards, nextCardNumber };
+  const favoriteSkills = normalizeFavoriteSkills(r.favoriteSkills);
+  return {
+    ...unknownFields(raw, BOARD_KEYS),
+    version: 1,
+    name: String(r.name ?? fallbackName),
+    columns,
+    cards,
+    nextCardNumber,
+    ...(favoriteSkills ? { favoriteSkills } : {}),
+  };
 }
 
 /**

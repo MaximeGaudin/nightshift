@@ -112,6 +112,8 @@ export interface Board {
   cards: Card[];
   /** Number the next created card receives. Always greater than every card number. */
   nextCardNumber: number;
+  /** Skill names pinned in the command palette for quick runs. Absent when none. */
+  favoriteSkills?: string[];
 }
 
 /** Quick human ref of a card, e.g. `#32`. */
@@ -312,6 +314,29 @@ export interface RunProgress {
   at: string;
 }
 
+/** A skill launched from the command palette without a card. */
+export interface QuickRun {
+  id: string;
+  skill: string;
+  /** Free text given with the skill; "" when none. */
+  instruction: string;
+  status: "queued" | "running";
+  /** ISO timestamp. */
+  createdAt: string;
+  /** Only while running; same invariant as a card's RunProgress. */
+  progress?: RunProgress;
+}
+
+/** Outcome of a finished quick run. */
+export interface QuickRunResult {
+  id: string;
+  skill: string;
+  instruction: string;
+  status: "success" | "error" | "cancelled";
+  summary?: string;
+  error?: string;
+}
+
 export interface ProjectSnapshot {
   path: string;
   /** Template skills that could not be copied into a newly created project; only in the open response. */
@@ -326,6 +351,8 @@ export interface ProjectSnapshot {
   testing: string[];
   /** Progress per card id; only for cards that are live "running". */
   progress: Record<string, RunProgress>;
+  /** Quick runs not finished yet, sorted by createdAt. */
+  quickRuns: QuickRun[];
   /** Sequential mode: cards of the first column are fed one at a time into the second. */
   sequence: SequenceState;
 }
@@ -341,4 +368,5 @@ export type ServerEvent =
   | { type: "log"; project: string; cardId: string; line: LogLine }
   | { type: "testlog"; project: string; cardId: string; line: LogLine }
   | { type: "settings"; settings: Settings }
-  | { type: "attention"; project: string; cardId: string; kind: AttentionKind };
+  | { type: "attention"; project: string; cardId: string; kind: AttentionKind }
+  | { type: "quickrun"; project: string; result: QuickRunResult };
