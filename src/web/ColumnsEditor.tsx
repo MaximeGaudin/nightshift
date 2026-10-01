@@ -80,6 +80,7 @@ function SortableColumnRow({ col, skills, skillsLoading, cardCount, reducedMotio
             type="button"
             ref={setActivatorNodeRef}
             aria-label={`Réordonner la colonne ${col.name}`}
+            title="Réordonner"
             className="flex size-7 shrink-0 cursor-grab touch-none items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
             {...attributes}
             {...listeners}

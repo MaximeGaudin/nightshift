@@ -1,6 +1,7 @@
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { XIcon } from "lucide-react";
 import type * as React from "react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 function Dialog(props: React.ComponentProps<typeof DialogPrimitive.Root>) {
@@ -51,13 +52,18 @@ function DialogContent({
       >
         {children}
         {showCloseButton && (
-          <DialogPrimitive.Close
-            data-slot="dialog-close"
-            className="absolute top-3 right-3 inline-flex size-6 items-center justify-center rounded-sm text-muted-foreground transition-colors duration-150 outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring [&_svg]:size-3.5"
-          >
-            <XIcon />
-            <span className="sr-only">Fermer</span>
-          </DialogPrimitive.Close>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <DialogPrimitive.Close
+                data-slot="dialog-close"
+                aria-label="Fermer"
+                className="absolute top-3 right-3 inline-flex size-6 items-center justify-center rounded-sm text-muted-foreground transition-colors duration-150 outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring [&_svg]:size-3.5"
+              >
+                <XIcon />
+              </DialogPrimitive.Close>
+            </TooltipTrigger>
+            <TooltipContent>Fermer</TooltipContent>
+          </Tooltip>
         )}
       </DialogPrimitive.Content>
     </DialogPortal>
