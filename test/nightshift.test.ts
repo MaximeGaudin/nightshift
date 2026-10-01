@@ -275,3 +275,11 @@ test("numbering: load writes back only when changed", async () => {
   expect(readFileSync(cleanFile, "utf8")).toBe(before.text);
   expect(statSync(cleanFile).mtimeMs).toBe(before.mtime);
 });
+
+test("prompt: includes card ref", async () => {
+  const { buildPrompt } = await import("../src/server/orchestrator.ts");
+  const column = { id: "col", name: "Work", type: "skill" as const, skill: "s" };
+  const card = { id: "card_abc", number: 32, title: "T", description: "D", columnId: "col", createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", enteredColumnAt: "2026-01-01T00:00:00Z", history: [] };
+  const board = { version: 1 as const, name: "x", columns: [column], cards: [card], nextCardNumber: 33 };
+  expect(buildPrompt(board, card, column, undefined)).toContain(`<card id="card_abc" ref="#32">`);
+});
