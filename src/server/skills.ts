@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSy
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { SkillInfo } from "../shared/types.ts";
+import { HttpError } from "./guard.ts";
 
 const USER_SKILLS = process.env.NIGHTSHIFT_USER_SKILLS ?? join(homedir(), ".claude", "skills");
 const NAME_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
@@ -72,13 +73,13 @@ export function findSkill(projectPath: string, name: string): SkillInfo | undefi
 
 export function readSkill(projectPath: string, name: string) {
   const skill = findSkill(projectPath, name);
-  if (!skill) throw new Error(`Skill not found: ${name}`);
+  if (!skill) throw new HttpError(404, `Skill not found: ${name}`);
   return { ...skill, content: readFileSync(skill.path, "utf8") };
 }
 
 export function saveSkill(projectPath: string, name: string, content: string) {
   const skill = findSkill(projectPath, name);
-  if (!skill) throw new Error(`Skill not found: ${name}`);
+  if (!skill) throw new HttpError(404, `Skill not found: ${name}`);
   writeFileSync(skill.path, content);
   return skill;
 }

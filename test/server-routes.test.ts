@@ -38,10 +38,10 @@ test("routes-invalid-json non-object bodies are refused, empty body is accepted"
 test("routes-unknown-project unknown or missing project is refused and writes nothing", async () => {
   const other = mkdtempSync(join(srv.tmp, "other-"));
   const unknown = await srv.call(`/api/project?project=${encodeURIComponent(other)}`);
-  expect(unknown.status).toBe(400);
+  expect(unknown.status).toBe(404);
   expect((await unknown.json()).error).toBe("Unknown project");
   const write = await srv.call("/api/cards", { body: { project: other, title: "x" } });
-  expect(write.status).toBe(400);
+  expect(write.status).toBe(404);
   const missing = await srv.call("/api/project");
   expect(missing.status).toBe(400);
   expect((await missing.json()).error).toBe("Missing project");
@@ -150,4 +150,35 @@ test("routes-validation settings and moves: non-object settings body and unknown
   expect(move.status).toBe(400);
   const card = (await snapshot()).board.cards.find((c: { id: string }) => c.id === id);
   expect(card.columnId).not.toBe("nope");
+});
+
+test("routes-status-codes unknown card, project and skill are 404 with an error body", async () => {
+  const card = await srv.call("/api/cards/nope", { method: "PATCH", body: { project: dir, title: "x" } });
+  expect(card.status).toBe(404);
+  expect((await card.json()).error).toBe("Unknown card");
+  for (const [path, method] of [
+    ["/api/cards/nope/test", "PUT"],
+    ["/api/cards/nope/retry", "POST"],
+  ] as const) {
+    const r = await srv.call(path, { method, body: { project: dir, command: "x" } });
+    expect({ path, status: r.status }).toEqual({ path, status: 404 });
+  }
+  expect((await srv.call(`/api/cards/nope/screenshot?${proj()}&file=x.png`)).status).toBe(404);
+  const project = await srv.call(`/api/project?project=${encodeURIComponent(join(srv.tmp, "never-opened"))}`);
+  expect(project.status).toBe(404);
+  expect((await project.json()).error).toBe("Unknown project");
+  const skill = await srv.call(`/api/skill?${proj()}&name=nope`);
+  expect(skill.status).toBe(404);
+  expect((await skill.json()).error).toContain("Skill not found");
+  // Other errors stay 400.
+  expect((await srv.call("/api/cards", { body: { project: dir, columnId: "nope", title: "x" } })).status).toBe(400);
+});
+
+test("routes-validation PUT /api/settings with an invalid value is a 400 and changes nothing", async () => {
+  const before = await srv.call("/api/settings").then((r) => r.json());
+  const bad = await srv.call("/api/settings", { method: "PUT", body: { maxParallel: "many" } });
+  expect(bad.status).toBe(400);
+  expect((await bad.json()).error).toBeTruthy();
+  expect((await srv.call("/api/settings", { method: "PUT", body: { nope: 1 } })).status).toBe(400);
+  expect(await srv.call("/api/settings").then((r) => r.json())).toEqual(before);
 });

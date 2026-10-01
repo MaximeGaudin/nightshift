@@ -1,5 +1,16 @@
 /** Local HTTP guard: blocks DNS rebinding (Host), cross-site requests (Origin) and "simple" CSRF requests (Content-Type). */
 
+/** An error with the HTTP status to answer with (404 for an unknown card, project or skill). Any other Error is a 400. */
+export class HttpError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "HttpError";
+  }
+}
+
 const HOSTS = ["localhost", "127.0.0.1", "[::1]"];
 
 const deny = (status: number, error: string) => Response.json({ error }, { status });

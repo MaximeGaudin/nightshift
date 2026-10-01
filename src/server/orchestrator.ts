@@ -18,6 +18,7 @@ import type {
 } from "../shared/types.ts";
 import { canSendFeedback, cardRef, columnMaxParallel, isDoneColumn } from "../shared/types.ts";
 import { safeHttpUrl } from "../shared/urls.ts";
+import { HttpError } from "./guard.ts";
 import { parseProgressMarker, progressFromTodos } from "./progress.ts";
 import { persistScreenshots } from "./screenshots.ts";
 import { getSettings, NIGHTSHIFT_HOME, onSettingsChange, rememberProject } from "./settings.ts";
@@ -474,7 +475,7 @@ export class Orchestrator {
   retry(p: Project, cardId: string) {
     p.mutate(() => {
       const card = p.card(cardId);
-      if (!card) throw new Error("Unknown card");
+      if (!card) throw new HttpError(404, "Unknown card");
       card.enteredColumnAt = new Date().toISOString();
       delete card.lastRun;
       delete card.pendingAnswer;
@@ -507,7 +508,7 @@ export class Orchestrator {
     if (!trimmed) throw new Error("Empty feedback");
     p.mutate(() => {
       const card = p.card(cardId);
-      if (!card) throw new Error("Unknown card");
+      if (!card) throw new HttpError(404, "Unknown card");
       const live: LiveStatus | undefined = this.jobs.has(this.key(p, cardId)) ? "running" : needsRun(p.board, card) ? "queued" : undefined;
       if (!canSendFeedback(card, live)) throw new Error("This card has no session to send feedback to");
       card.pendingAnswer = { text: trimmed, sessionId: card.lastRun!.sessionId!, at: new Date().toISOString(), kind: "feedback" };

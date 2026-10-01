@@ -14,7 +14,7 @@ import {
 } from "../shared/types.ts";
 import { safeHttpUrl } from "../shared/urls.ts";
 import index from "../web/index.html";
-import { checkRequest } from "./guard.ts";
+import { checkRequest, HttpError } from "./guard.ts";
 import { Orchestrator } from "./orchestrator.ts";
 import { removeScreenshots, resolveScreenshot } from "./screenshots.ts";
 import { getSettings, updateSettings } from "./settings.ts";
@@ -39,7 +39,13 @@ export function startServer({ port, development, agents = true }: { port: number
   const opened = (g.__nightshift.opened ??= new Set());
 
   const json = (data: unknown, status = 200) => Response.json(data, { status });
-  const fail = (e: any) => json({ error: e?.message ?? String(e) }, 400);
+  /** HttpError keeps its status, any other Error is a bad request (400), anything else is a server fault (500). */
+  const fail = (e: unknown) => {
+    if (e instanceof HttpError) return json({ error: e.message }, e.status);
+    if (e instanceof Error) return json({ error: e.message }, 400);
+    console.error("Unexpected error:", e);
+    return json({ error: "Internal server error" }, 500);
+  };
 
   /** Empty body is `{}`; anything else must be a JSON object. */
   const parseBody = (text: string): any => {
@@ -96,7 +102,7 @@ export function startServer({ port, development, agents = true }: { port: number
     const raw = body.project ?? url.searchParams.get("project");
     if (typeof raw !== "string" || !raw) throw new Error("Missing project");
     const path = resolve(raw);
-    if (!opened.has(path)) throw new Error("Unknown project");
+    if (!opened.has(path)) throw new HttpError(404, "Unknown project");
     return orch.get(path);
   };
 
@@ -226,7 +232,7 @@ export function startServer({ port, development, agents = true }: { port: number
           const description = optString(b, "description");
           p.mutate(() => {
             const card = p.card(req.params.id!);
-            if (!card) throw new Error("Unknown card");
+            if (!card) throw new HttpError(404, "Unknown card");
             if (title !== undefined) card.title = title;
             if (description !== undefined) card.description = description;
             card.updatedAt = new Date().toISOString();
@@ -262,7 +268,7 @@ export function startServer({ port, development, agents = true }: { port: number
       "/api/cards/:id/screenshot": {
         GET: h((_b, url, req) => {
           const card = project({}, url).card(req.params.id!);
-          if (!card) throw new Error("Unknown card");
+          if (!card) throw new HttpError(404, "Unknown card");
           const file = resolveScreenshot(card.description, url.searchParams.get("file") ?? "", card.id);
           return new Response(Bun.file(file), { headers: { "content-type": "image/png" } });
         }),
@@ -278,7 +284,7 @@ export function startServer({ port, development, agents = true }: { port: number
           const rawUrl = (optString(b, "url") ?? "").trim();
           p.mutate(() => {
             const card = p.card(req.params.id!);
-            if (!card) throw new Error("Unknown card");
+            if (!card) throw new HttpError(404, "Unknown card");
             const testUrl = rawUrl ? safeHttpUrl(rawUrl) : "";
             if (testUrl === null) throw new Error("url must be an absolute http(s) URL");
             if (command) card.test = { command, ...(testUrl ? { url: testUrl } : {}) };
