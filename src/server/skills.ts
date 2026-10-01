@@ -1,7 +1,8 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { SkillInfo } from "../shared/types.ts";
+import { writeFileAtomic } from "./fsutil.ts";
 import { HttpError } from "./guard.ts";
 
 const USER_SKILLS = process.env.NIGHTSHIFT_USER_SKILLS ?? join(homedir(), ".claude", "skills");
@@ -55,7 +56,9 @@ function scan(dir: string, scope: SkillInfo["scope"]): SkillInfo[] {
       if (!statSync(join(dir, entry)).isDirectory() || !existsSync(file)) continue;
       const fm = parseFrontmatter(readFileSync(file, "utf8"));
       out.push({ name: fm.name || entry, description: fm.description ?? "", scope, path: file });
-    } catch {}
+    } catch (e) {
+      console.warn(`Skipping unreadable skill ${file}: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -80,7 +83,7 @@ export function readSkill(projectPath: string, name: string) {
 export function saveSkill(projectPath: string, name: string, content: string) {
   const skill = findSkill(projectPath, name);
   if (!skill) throw new HttpError(404, `Skill not found: ${name}`);
-  writeFileSync(skill.path, content);
+  writeFileAtomic(skill.path, content);
   return skill;
 }
 
@@ -91,6 +94,6 @@ export function createSkill(projectPath: string, name: string, description: stri
   mkdirSync(dir, { recursive: true });
   const desc = description.replace(/\s+/g, " ").trim() || `Nightshift skill ${name}.`;
   const content = `---\nname: ${name}\ndescription: ${JSON.stringify(desc)}\n---\n\n${body.trim() || `# ${name}\n\nDescribe what to do with the card.`}\n`;
-  writeFileSync(join(dir, "SKILL.md"), content);
+  writeFileAtomic(join(dir, "SKILL.md"), content);
   return findSkill(projectPath, name)!;
 }

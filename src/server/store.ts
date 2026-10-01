@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, type FSWatcher, readFileSync, renameSync, statSync, watch, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, type FSWatcher, readFileSync, statSync, watch } from "node:fs";
 import { basename, join } from "node:path";
 import { replayHistory } from "../shared/timeline.ts";
 import {
@@ -13,6 +13,8 @@ import {
   normalizeColumnParallel,
   type TimeState,
 } from "../shared/types.ts";
+
+import { writeFileAtomic } from "./fsutil.ts";
 
 export const BOARD_FILE = "nightshift.json";
 
@@ -244,9 +246,7 @@ export class Project {
       } catch {}
       this.unreadableOnDisk = false;
     }
-    const tmp = `${this.file}.tmp`;
-    writeFileSync(tmp, `${JSON.stringify(this.board, null, 2)}\n`);
-    renameSync(tmp, this.file);
+    writeFileAtomic(this.file, `${JSON.stringify(this.board, null, 2)}\n`);
     try {
       this.lastWrittenMtime = statSync(this.file).mtimeMs;
     } catch {}

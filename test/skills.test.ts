@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -7,7 +7,7 @@ import { join } from "node:path";
 // files that set NIGHTSHIFT_USER_SKILLS before importing skills.ts are unaffected.
 const previousUserSkills = process.env.NIGHTSHIFT_USER_SKILLS;
 process.env.NIGHTSHIFT_USER_SKILLS = mkdtempSync(join(tmpdir(), "ns-skills-user-"));
-const { createSkill, listSkills, parseFrontmatter, skillsDir } = await import("../src/server/skills.ts?skills-test");
+const { createSkill, listSkills, parseFrontmatter, saveSkill, skillsDir } = await import("../src/server/skills.ts?skills-test");
 if (previousUserSkills === undefined) delete process.env.NIGHTSHIFT_USER_SKILLS;
 else process.env.NIGHTSHIFT_USER_SKILLS = previousUserSkills;
 
@@ -72,4 +72,20 @@ test("skills-project-shadows-user", () => {
   expect(list.find((s) => s.name === shared)?.scope).toBe("project");
   expect(list.find((s) => s.name === shared)?.description).toBe("project version");
   expect(list.find((s) => s.name === unique)?.scope).toBe("user");
+});
+
+test("skills-save-atomic: saveSkill replaces the file through a rename and leaves no .tmp", () => {
+  const project = tmp();
+  createSkill(project, "atomic", "d", "# first");
+  const file = join(skillsDir("project", project), "atomic", "SKILL.md");
+  // A second name for the old inode: a rename leaves it untouched, an in-place write would change it too.
+  const old = join(project, "old-inode");
+  linkSync(file, old);
+  const content = `---\nname: atomic\ndescription: "d"\n---\n\n${"x".repeat(100_000)}\n`;
+  saveSkill(project, "atomic", content);
+  expect(readFileSync(file, "utf8")).toBe(content);
+  expect(readFileSync(old, "utf8")).toContain("# first");
+  expect(readdirSync(join(skillsDir("project", project), "atomic"))).toEqual(["SKILL.md"]);
+  expect(existsSync(`${file}.tmp`)).toBe(false);
+  expect(readdirSync(skillsDir("project", project))).toEqual(["atomic"]);
 });

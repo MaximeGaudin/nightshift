@@ -1,7 +1,8 @@
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { PERMISSION_MODES, type Settings } from "../shared/types.ts";
+import { writeFileAtomic } from "./fsutil.ts";
 
 export const NIGHTSHIFT_HOME = process.env.NIGHTSHIFT_HOME ?? join(homedir(), ".nightshift");
 const SETTINGS_FILE = join(NIGHTSHIFT_HOME, "settings.json");
@@ -100,9 +101,7 @@ export function updateSettings(patch: Partial<Settings>): Settings {
   const next: Settings = { ...getSettings(), ...patch };
   next.maxParallel = clampParallel(next.maxParallel);
   mkdirSync(NIGHTSHIFT_HOME, { recursive: true });
-  const tmp = `${SETTINGS_FILE}.tmp`;
-  writeFileSync(tmp, `${JSON.stringify(next, null, 2)}\n`);
-  renameSync(tmp, SETTINGS_FILE);
+  writeFileAtomic(SETTINGS_FILE, `${JSON.stringify(next, null, 2)}\n`);
   shared.current = next;
   for (const l of listeners) l(next);
   return next;
