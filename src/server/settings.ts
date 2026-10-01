@@ -13,6 +13,7 @@ export const DEFAULT_SETTINGS: Settings = {
   model: "",
   extraArgs: "",
   recentProjects: [],
+  soundNotifications: true,
 };
 
 // Kept on globalThis so modules re-evaluated by `bun --hot` share the state seen by the long-lived orchestrator.
@@ -28,6 +29,7 @@ export function getSettings(): Settings {
     const raw = JSON.parse(readFileSync(SETTINGS_FILE, "utf8"));
     const loaded: Settings = { ...DEFAULT_SETTINGS, ...raw };
     if (!PERMISSION_MODES.includes(loaded.permissionMode)) loaded.permissionMode = DEFAULT_SETTINGS.permissionMode;
+    if (typeof loaded.soundNotifications !== "boolean") loaded.soundNotifications = DEFAULT_SETTINGS.soundNotifications;
     shared.current = loaded;
   } catch {
     shared.current = { ...DEFAULT_SETTINGS };
@@ -38,6 +40,7 @@ export function getSettings(): Settings {
 export function updateSettings(patch: Partial<Settings>): Settings {
   const next = { ...getSettings(), ...patch };
   if (!PERMISSION_MODES.includes(next.permissionMode)) throw new Error(`Unknown permission mode: ${next.permissionMode}`);
+  if (typeof next.soundNotifications !== "boolean") next.soundNotifications = DEFAULT_SETTINGS.soundNotifications;
   next.maxParallel = Math.max(1, Math.min(32, Math.floor(Number(next.maxParallel) || 1)));
   shared.current = next;
   mkdirSync(NIGHTSHIFT_HOME, { recursive: true });

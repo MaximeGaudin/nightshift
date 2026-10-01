@@ -78,6 +78,8 @@ export interface Settings {
   model: string;
   extraArgs: string;
   recentProjects: string[];
+  /** Play a sound when a card needs human attention. */
+  soundNotifications: boolean;
 }
 
 export interface SkillInfo {
@@ -104,7 +106,14 @@ export interface ProjectSnapshot {
   lockedBy?: number;
 }
 
+/** Why a card needs a human: it reached an inert column, asks questions, or its run failed. */
+export type AttentionKind = "inert" | "question" | "error";
+
+/** Higher wins when several attention events are batched into one sound. */
+export const ATTENTION_PRIORITY: Record<AttentionKind, number> = { inert: 1, question: 2, error: 3 };
+
 export type ServerEvent =
   | { type: "board"; project: string; snapshot: ProjectSnapshot }
   | { type: "log"; project: string; cardId: string; line: LogLine }
-  | { type: "settings"; settings: Settings };
+  | { type: "settings"; settings: Settings }
+  | { type: "attention"; project: string; cardId: string; kind: AttentionKind };
