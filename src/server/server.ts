@@ -3,7 +3,7 @@ import { dirname, join, resolve } from "node:path";
 import { homedir } from "node:os";
 import type { ServerWebSocket } from "bun";
 import index from "../web/index.html";
-import type { Column, ServerEvent } from "../shared/types.ts";
+import { normalizeColumnParallel, type Column, type ColumnType, type ServerEvent } from "../shared/types.ts";
 import { Orchestrator } from "./orchestrator.ts";
 import { getSettings, updateSettings } from "./settings.ts";
 import { newId } from "./store.ts";
@@ -84,17 +84,19 @@ export function startServer({ port, development }: { port: number; development?:
           p.mutate((board) => {
             if (typeof b.name === "string" && b.name.trim()) board.name = b.name.trim();
             if (Array.isArray(b.columns)) {
-              const cols: Column[] = b.columns.map((c: any) => ({
-                id: typeof c.id === "string" && c.id ? c.id : newId("col"),
-                name: String(c.name || "Column").trim(),
-                type: c.type === "skill" ? "skill" : "inert",
-                ...(c.type === "skill" && c.skill ? { skill: String(c.skill) } : {}),
-                ...(c.instructions?.trim() ? { instructions: String(c.instructions).trim() } : {}),
-                ...(typeof c.model === "string" && c.model.trim() ? { model: c.model.trim() } : {}),
-                ...(Number.isInteger(Number(c.maxParallel)) && Number(c.maxParallel) >= 1 && c.maxParallel !== ""
-                  ? { maxParallel: Number(c.maxParallel) }
-                  : {}),
-              }));
+              const cols: Column[] = b.columns.map((c: any) => {
+                const type: ColumnType = c.type === "skill" ? "skill" : "inert";
+                const maxParallel = normalizeColumnParallel(type, c.maxParallel);
+                return {
+                  id: typeof c.id === "string" && c.id ? c.id : newId("col"),
+                  name: String(c.name || "Column").trim(),
+                  type,
+                  ...(type === "skill" && c.skill ? { skill: String(c.skill) } : {}),
+                  ...(c.instructions?.trim() ? { instructions: String(c.instructions).trim() } : {}),
+                  ...(typeof c.model === "string" && c.model.trim() ? { model: c.model.trim() } : {}),
+                  ...(maxParallel !== undefined ? { maxParallel } : {}),
+                };
+              });
               if (cols.length === 0) throw new Error("A board needs at least one column");
               const ids = new Set(cols.map((c) => c.id));
               const orphan = board.cards.find((c) => !ids.has(c.columnId));

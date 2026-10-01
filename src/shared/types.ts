@@ -12,7 +12,7 @@ export interface Column {
   instructions?: string;
   /** Modèle Claude (alias ou ID) pour les runs de cette colonne ; absent = réglage global. */
   model?: string;
-  /** Max agents running at once in this column (e.g. 1 for a merge column); absent = only the global limit. */
+  /** Max agents running at once in this column; absent = 1. The global setting still caps the total. */
   maxParallel?: number;
 }
 
@@ -76,6 +76,30 @@ export interface Board {
 /** Quick human ref of a card, e.g. `#32`. */
 export function cardRef(card: Pick<Card, "number">): string {
   return "#" + card.number;
+}
+
+/** Parallel agents in a skill column when `maxParallel` is absent. */
+export const DEFAULT_COLUMN_PARALLEL = 1;
+/** Upper bound for any parallel limit (column or global). */
+export const MAX_PARALLEL = 32;
+
+/** Max agents running at once in a column. Never reads the global settings. */
+export function columnMaxParallel(col: Pick<Column, "maxParallel">): number {
+  return col.maxParallel ?? DEFAULT_COLUMN_PARALLEL;
+}
+
+/**
+ * Normalizes a raw `maxParallel` value for a column of the given type.
+ * Returns undefined (field absent) for inert columns and for empty, non-numeric, non-integer or < 1 values;
+ * clamps integers above MAX_PARALLEL. Never produces a default value.
+ */
+export function normalizeColumnParallel(type: ColumnType, raw: unknown): number | undefined {
+  if (type !== "skill") return undefined;
+  if (typeof raw !== "number" && typeof raw !== "string") return undefined;
+  if (typeof raw === "string" && !raw.trim()) return undefined;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1) return undefined;
+  return Math.min(n, MAX_PARALLEL);
 }
 
 /** Values accepted by `claude --permission-mode`. */

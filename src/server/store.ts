@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, renameSync, statSync, watch, writeFileSync, type FSWatcher } from "node:fs";
 import { basename, join } from "node:path";
-import type { Board, Card, Column, HistoryEntry } from "../shared/types.ts";
+import { normalizeColumnParallel, type Board, type Card, type Column, type ColumnType, type HistoryEntry } from "../shared/types.ts";
 
 export const BOARD_FILE = "nightshift.json";
 
@@ -66,15 +66,19 @@ export function normalizeBoard(raw: any, fallbackName: string): Board {
   const columns: Column[] = Array.isArray(raw?.columns)
     ? raw.columns
         .filter((c: any) => c && typeof c.id === "string")
-        .map((c: any) => ({
-          id: c.id,
-          name: String(c.name ?? "Column"),
-          type: c.type === "skill" ? "skill" : "inert",
-          ...(c.skill ? { skill: String(c.skill) } : {}),
-          ...(c.instructions ? { instructions: String(c.instructions) } : {}),
-          ...(typeof c.model === "string" && c.model.trim() ? { model: c.model.trim() } : {}),
-          ...(Number.isInteger(Number(c.maxParallel)) && Number(c.maxParallel) >= 1 ? { maxParallel: Number(c.maxParallel) } : {}),
-        }))
+        .map((c: any) => {
+          const type: ColumnType = c.type === "skill" ? "skill" : "inert";
+          const maxParallel = normalizeColumnParallel(type, c.maxParallel);
+          return {
+            id: c.id,
+            name: String(c.name ?? "Column"),
+            type,
+            ...(c.skill ? { skill: String(c.skill) } : {}),
+            ...(c.instructions ? { instructions: String(c.instructions) } : {}),
+            ...(typeof c.model === "string" && c.model.trim() ? { model: c.model.trim() } : {}),
+            ...(maxParallel !== undefined ? { maxParallel } : {}),
+          };
+        })
     : [];
   if (columns.length === 0) columns.push(...defaultBoard(fallbackName).columns);
   const colIds = new Set(columns.map((c) => c.id));
