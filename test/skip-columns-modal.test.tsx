@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Board, Card, Column } from "../src/shared/types.ts";
-import { CardModal, saveSkipColumns } from "../src/web/CardModal.tsx";
+import { CardModalContent, saveSkipColumns, useCardDraft } from "../src/web/CardModal.tsx";
 import { nextInertTarget } from "../src/web/NextColumnButton.tsx";
 
 const columns: Column[] = [
@@ -24,8 +24,12 @@ const card = (columnId: string, skipColumnIds?: string[]): Card => ({
   history: [],
   ...(skipColumnIds ? { skipColumnIds } : {}),
 });
-const render = (c: Card) =>
-  renderToStaticMarkup(<CardModal project="p" card={c} board={board} testing={false} onClose={() => {}} onError={() => {}} />);
+// Radix dialogs render nothing on the server: the tests render the dialog body.
+function Content({ card: c }: { card: Card }) {
+  const draft = useCardDraft("p", c);
+  return <CardModalContent project="p" card={c} board={board} testing={false} onClose={() => {}} onError={() => {}} draft={draft} />;
+}
+const render = (c: Card) => renderToStaticMarkup(<Content card={c} />);
 
 test("modal picker lists all columns except the current one and Done", () => {
   const html = render(card("col_0fc8f00a6b"));

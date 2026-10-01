@@ -1,9 +1,9 @@
 /* Markdown zone: rendered descriptions, questions and summaries. */
 
 .md {
-  font-size: var(--fs-md);
+  font-size: 13px;
   line-height: 1.55;
-  color: var(--text);
+  color: var(--foreground);
   overflow-wrap: anywhere;
 }
 .md.md-plain {
@@ -23,7 +23,7 @@
 .md blockquote,
 .md pre,
 .md .md-table {
-  margin: 0 0 var(--sp-4);
+  margin: 0 0 12px;
 }
 
 /* Headings: compact, weight carries the hierarchy. */
@@ -33,31 +33,31 @@
 .md h4,
 .md h5,
 .md h6 {
-  margin: var(--sp-5) 0 var(--sp-3);
+  margin: 16px 0 8px;
   font-weight: 600;
   line-height: 1.3;
-  color: var(--text);
+  color: var(--foreground);
 }
 .md h1 {
-  font-size: var(--fs-xl);
+  font-size: 17px;
   letter-spacing: -0.015em;
 }
 .md h2 {
-  font-size: var(--fs-lg);
+  font-size: 15px;
   letter-spacing: -0.01em;
 }
 .md h3 {
-  font-size: var(--fs-md);
+  font-size: 13px;
 }
 .md h4 {
-  font-size: var(--fs-md);
+  font-size: 13px;
   font-weight: 500;
 }
 .md h5,
 .md h6 {
-  font-size: var(--fs-sm);
+  font-size: 12px;
   font-weight: 500;
-  color: var(--muted);
+  color: var(--muted-foreground);
 }
 
 .md strong {
@@ -65,32 +65,33 @@
 }
 
 .md a {
-  color: var(--accent);
+  color: var(--primary);
   text-decoration: none;
 }
 .md a:hover {
-  color: var(--accent-hover);
+  color: var(--primary);
+  filter: brightness(1.15);
   text-decoration: underline;
 }
 
 /* Lists */
 .md ul,
 .md ol {
-  padding-left: calc(var(--sp-5) + var(--sp-1));
+  padding-left: 20px;
 }
 .md li + li {
-  margin-top: calc(var(--sp-1) / 2);
+  margin-top: 2px;
 }
 .md li > ul,
 .md li > ol {
-  margin: calc(var(--sp-1) / 2) 0 0;
+  margin: 2px 0 0;
 }
 .md li::marker {
-  color: var(--muted);
+  color: var(--muted-foreground);
 }
 
 .md ul.tasks {
-  padding-left: var(--sp-1);
+  padding-left: 4px;
 }
 .md li.task {
   list-style: none;
@@ -99,9 +100,9 @@
   width: auto;
   height: auto;
   min-height: 0;
-  margin: 0 var(--sp-3) 0 0;
+  margin: 0 8px 0 0;
   vertical-align: -0.1em;
-  accent-color: var(--accent);
+  accent-color: var(--primary);
   pointer-events: none;
 }
 /* Read-only boxes stay legible: cancel the base faded look of disabled fields. */
@@ -112,15 +113,15 @@
 /* Code */
 .md code {
   font-family: var(--font-mono);
-  font-size: var(--fs-sm);
-  padding: 0.1em var(--sp-1);
-  background: var(--surface-2);
+  font-size: 12px;
+  padding: 0.1em 4px;
+  background: var(--ui-muted);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: 4px;
 }
 .md pre {
-  padding: var(--sp-3) var(--sp-4);
-  background: var(--surface-2);
+  padding: 8px 12px;
+  background: var(--ui-muted);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow-x: auto;
@@ -128,7 +129,7 @@
 .md pre code {
   display: block;
   padding: 0;
-  font-size: var(--fs-sm);
+  font-size: 12px;
   line-height: 1.5;
   white-space: pre;
   background: none;
@@ -138,14 +139,14 @@
 
 /* Quotes */
 .md blockquote {
-  padding: 0 0 0 var(--sp-4);
-  border-left: 2px solid var(--border-strong);
-  color: var(--muted);
+  padding: 0 0 0 12px;
+  border-left: 2px solid var(--input);
+  color: var(--muted-foreground);
 }
 
 .md hr {
   height: 0;
-  margin: var(--sp-5) 0;
+  margin: 16px 0;
   border: 0;
   border-top: 1px solid var(--border);
 }
@@ -160,22 +161,22 @@
 .md li > pre,
 .md li > blockquote,
 .md li > .md-table {
-  margin: var(--sp-2) 0;
+  margin: 6px 0;
 }
 .md table {
   border-collapse: collapse;
-  font-size: var(--fs-sm);
+  font-size: 12px;
 }
 .md th,
 .md td {
-  padding: var(--sp-2) var(--sp-4);
+  padding: 6px 12px;
   border: 1px solid var(--border);
   text-align: left;
   vertical-align: top;
 }
 .md th {
   font-weight: 600;
-  background: var(--surface-2);
+  background: var(--ui-muted);
 }
 
 /* Fullscreen capture viewer (portal on body). */
@@ -186,9 +187,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--sp-5);
-  background: rgba(0, 0, 0, 0.85);
+  padding: 16px;
+  background: rgb(0 0 0 / 0.85);
   cursor: zoom-out;
+  pointer-events: auto;
 }
 .lightbox img {
   max-width: 100%;
@@ -198,14 +200,14 @@
 
 /* Card captures: full-width figure, caption, not-found box. */
 .md .md-figure {
-  margin: var(--sp-4) 0;
+  margin: 12px 0;
 }
 .md .md-figure img {
   display: block;
   width: 100%;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
+  border-radius: 4px;
+  background: var(--card);
   cursor: zoom-in;
 }
 .md .md-figure .md-figure-open {
@@ -214,7 +216,7 @@
   min-height: 0;
   padding: 0;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: 4px;
   background: none;
   cursor: zoom-in;
 }
@@ -223,15 +225,15 @@
   border-color: transparent;
 }
 .md .md-figure figcaption {
-  margin-top: var(--sp-2);
-  font-size: var(--fs-sm);
-  color: var(--muted);
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted-foreground);
 }
 .md .md-figure-missing {
-  padding: var(--sp-5) var(--sp-4);
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  color: var(--muted);
-  font-size: var(--fs-sm);
+  padding: 16px 12px;
+  border: 1px dashed var(--input);
+  border-radius: 4px;
+  background: var(--ui-muted);
+  color: var(--muted-foreground);
+  font-size: 12px;
 }

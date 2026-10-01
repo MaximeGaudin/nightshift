@@ -1,4 +1,13 @@
+import { Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 import {
   type Board,
   type Card,
@@ -13,16 +22,18 @@ import {
 import { api, useServerEvents } from "./api.ts";
 import { SequenceBadge } from "./CardTile.tsx";
 import { attempt, deleteThenClose, sendThenClear } from "./cardActions.ts";
+import { AppDialog } from "./components/app-dialog.tsx";
 import { FeedbackForm } from "./FeedbackForm.tsx";
 import { StatusIcon } from "./icons.tsx";
 import { Markdown } from "./markdown.tsx";
 import { NextColumnButton } from "./NextColumnButton.tsx";
+import { notifyError } from "./notify.ts";
 import { RunProgress } from "./RunProgress.tsx";
 import { renderCardImage } from "./Screenshot.tsx";
 import { SkipColumnsPicker } from "./SkipColumnsPicker.tsx";
 import { TestPanel } from "./TestPanel.tsx";
 import { TimePanel } from "./TimePanel.tsx";
-import { ErrorBanner, Modal, timeAgo } from "./ui.tsx";
+import { timeAgo } from "./ui.tsx";
 
 /** Saves the skipped columns at once, on their own: the title/description draft is neither sent nor touched. */
 export async function saveSkipColumns({
@@ -47,17 +58,7 @@ export async function saveSkipColumns({
   }
 }
 
-export function CardModal({
-  project,
-  card,
-  board,
-  live,
-  progress,
-  testing,
-  sequential,
-  onClose,
-  onError,
-}: {
+type CardModalProps = {
   project: string;
   card: Card;
   board: Board;
@@ -69,34 +70,20 @@ export function CardModal({
   onClose: () => void;
   /** Receives errors that happen after the card is closed (a failed save), to show them in the application banner. */
   onError: (message: string) => void;
-}) {
+};
+
+/**
+ * Title and description being edited. Edits are detected against `base` (the content the form started from), not against the live card,
+ * so agent updates are pulled into an untouched form instead of being mistaken for user edits.
+ */
+export function useCardDraft(project: string, card: Card) {
   const [title, setTitle] = useState(card.title);
   const [description, setDescription] = useState(card.description);
-  const [log, setLog] = useState<LogLine[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<"log" | "history" | "time">("log");
-  const [answers, setAnswers] = useState<string[]>([]);
-  const logRef = useRef<HTMLDivElement>(null);
-  // Description shows rendered markdown by default; an empty one opens straight in the editor.
-  const [descMode, setDescMode] = useState<"preview" | "edit">(card.description.trim() ? "preview" : "edit");
-  const descRef = useRef<HTMLTextAreaElement>(null);
-  const focusDesc = useRef(false);
-  // Card content the form started from: edits are detected against it, not against the live card,
-  // so agent updates are pulled into an untouched form instead of being mistaken for user edits.
   const [base, setBase] = useState({ title: card.title, description: card.description });
   const dirty = title !== base.title || description !== base.description;
   // Read by the effect below without being one of its triggers (see there).
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
-  const column = board.columns.find((c) => c.id === card.columnId);
-  // Skipped columns are saved on each change; the display follows the board snapshot (the server value wins on every update).
-  const serverSkip = card.skipColumnIds ?? [];
-  const [skip, setSkip] = useState(serverSkip);
-  const skipKey = serverSkip.join(",");
-  // biome-ignore lint/correctness/useExhaustiveDependencies: skipKey is the trigger (the server list changed); serverSkip is derived from it
-  useEffect(() => setSkip(serverSkip), [skipKey]);
-  const skipOptions = board.columns.filter((c) => c.id !== DONE_COLUMN_ID && c.id !== card.columnId);
-
   // Re-runs only when the card changes on the server: edits in progress are kept, so `dirty` is read through a ref.
   useEffect(() => {
     if (dirtyRef.current) return;
@@ -104,6 +91,145 @@ export function CardModal({
     setDescription(card.description);
     setBase({ title: card.title, description: card.description });
   }, [card.title, card.description]);
+  const saveOrThrow = () => api.updateCard(project, card.id, { title, description }).then(() => setBase({ title, description }));
+  return { title, setTitle, description, setDescription, dirty, saveOrThrow };
+}
+
+export type CardDraft = ReturnType<typeof useCardDraft>;
+
+export function CardModal(props: CardModalProps) {
+  const { project, card, board, live, sequential, onClose, onError } = props;
+  const draft = useCardDraft(project, card);
+  const column = board.columns.find((c) => c.id === card.columnId);
+  return (
+    <AppDialog
+      size="xl"
+      title={
+        <span>
+          Fiche <CopyRef card={card} /> {sequential && <SequenceBadge />}{" "}
+          <span className="font-normal text-muted-foreground">
+            · {column && columnEmoji(column) ? `${columnEmoji(column)} ` : ""}
+            {column?.name}
+          </span>
+        </span>
+      }
+      onClose={() => {
+        // The card closes at once; a failed save is shown in the application banner, not lost silently.
+        if (draft.dirty) void attempt(draft.saveOrThrow(), (m) => onError(`Enregistrement de la fiche échoué : ${m}`));
+        onClose();
+      }}
+      footer={<CardModalFooter project={project} card={card} board={board} live={live} draft={draft} onClose={onClose} />}
+    >
+      <CardModalContent {...props} draft={draft} />
+    </AppDialog>
+  );
+}
+
+function CardModalFooter({
+  project,
+  card,
+  board,
+  live,
+  draft,
+  onClose,
+}: {
+  project: string;
+  card: Card;
+  board: Board;
+  live?: LiveStatus;
+  draft: CardDraft;
+  onClose: () => void;
+}) {
+  const column = board.columns.find((c) => c.id === card.columnId);
+  const lr = card.lastRun;
+  const guard = (p: Promise<unknown>) => void attempt(p, notifyError);
+  return (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        className="text-err hover:text-err"
+        onClick={() => {
+          if (confirm("Supprimer cette fiche ?")) void deleteThenClose(api.deleteCard(project, card.id), onClose, notifyError);
+        }}
+      >
+        Supprimer
+      </Button>
+      <div className="flex-1" />
+      {live === "running" && (
+        <Button type="button" variant="outline" onClick={() => guard(api.cancel(project, card.id))}>
+          Arrêter l'agent
+        </Button>
+      )}
+      {column?.type === "skill" &&
+        live !== "running" &&
+        lr?.sessionId &&
+        lr.columnId === card.columnId &&
+        (lr.status === "error" || lr.status === "cancelled") && (
+          <Button
+            type="button"
+            variant="outline"
+            title="Reprend la même session Claude : l'agent vérifie où il en était et termine, sans tout recommencer."
+            onClick={() => guard(api.resumeSession(project, card.id))}
+          >
+            Reprendre la session
+          </Button>
+        )}
+      {column?.type === "skill" && live !== "running" && (
+        <Button type="button" variant="outline" onClick={() => guard(api.retry(project, card.id))}>
+          {lr?.columnId === card.columnId ? "Relancer" : "Lancer"}
+        </Button>
+      )}
+      <NextColumnButton
+        project={project}
+        card={card}
+        board={board}
+        beforeMove={() => (draft.dirty ? draft.saveOrThrow() : undefined)}
+        onError={notifyError}
+        live={live}
+      />
+      <Button type="button" disabled={!draft.dirty} onClick={() => guard(draft.saveOrThrow())}>
+        Enregistrer
+      </Button>
+    </>
+  );
+}
+
+const LAST_RUN_TONE: Partial<Record<string, string>> = {
+  success: "border-ok/30 bg-ok-soft",
+  error: "border-err/30 bg-err-soft",
+  cancelled: "border-err/30 bg-err-soft",
+};
+
+/** Body of the card dialog (edit column + side column). Exported on its own because Radix dialogs render nothing on the server. */
+export function CardModalContent({
+  project,
+  card,
+  board,
+  live,
+  progress,
+  testing,
+  draft,
+}: CardModalProps & {
+  draft: CardDraft;
+}) {
+  const { title, setTitle, description, setDescription, dirty } = draft;
+  const [log, setLog] = useState<LogLine[]>([]);
+  const [logLoaded, setLogLoaded] = useState(false);
+  const [tab, setTab] = useState<"log" | "history" | "time">("log");
+  const [answers, setAnswers] = useState<string[]>([]);
+  const logRef = useRef<HTMLDivElement>(null);
+  // Description shows rendered markdown by default; an empty one opens straight in the editor.
+  const [descMode, setDescMode] = useState<"preview" | "edit">(card.description.trim() ? "preview" : "edit");
+  const descRef = useRef<HTMLTextAreaElement>(null);
+  const focusDesc = useRef(false);
+  // Skipped columns are saved on each change; the display follows the board snapshot (the server value wins on every update).
+  const serverSkip = card.skipColumnIds ?? [];
+  const [skip, setSkip] = useState(serverSkip);
+  const skipKey = serverSkip.join(",");
+  // biome-ignore lint/correctness/useExhaustiveDependencies: skipKey is the trigger (the server list changed); serverSkip is derived from it
+  useEffect(() => setSkip(serverSkip), [skipKey]);
+  const skipOptions = board.columns.filter((c) => c.id !== DONE_COLUMN_ID && c.id !== card.columnId);
 
   useEffect(() => {
     if (descMode !== "edit" || !focusDesc.current) return;
@@ -115,14 +241,14 @@ export function CardModal({
     setDescMode("edit");
   };
 
-  useEffect(
-    () =>
-      void api
-        .log(project, card.id)
-        .then(setLog)
-        .catch(() => {}),
-    [project, card.id],
-  );
+  useEffect(() => {
+    setLogLoaded(false);
+    void api
+      .log(project, card.id)
+      .then(setLog)
+      .catch(() => {})
+      .finally(() => setLogLoaded(true));
+  }, [project, card.id]);
   useServerEvents((e) => {
     if (e.type !== "log" || e.project !== project || e.cardId !== card.id) return;
     // A new run resets the log on the server: mirror that.
@@ -138,248 +264,197 @@ export function CardModal({
     if (tab === "time" && logRef.current) logRef.current.scrollTop = 0;
   }, [tab]);
 
-  const guard = (p: Promise<unknown>) => attempt(p, setError);
-  const saveOrThrow = () => api.updateCard(project, card.id, { title, description }).then(() => setBase({ title, description }));
-  const save = () => guard(saveOrThrow());
   const lr = card.lastRun;
+  const asking = lr?.status === "question" && lr.columnId === card.columnId && !live;
 
   return (
-    <Modal
-      wide
-      title={
-        <span>
-          Fiche <CopyRef card={card} /> {sequential && <SequenceBadge />}{" "}
-          <span className="muted">
-            · {column && columnEmoji(column) ? `${columnEmoji(column)} ` : ""}
-            {column?.name}
-          </span>
-        </span>
-      }
-      onClose={() => {
-        // The card closes at once; a failed save is shown in the application banner, not lost silently.
-        if (dirty) void attempt(saveOrThrow(), (m) => onError(`Enregistrement de la fiche échoué : ${m}`));
-        onClose();
-      }}
-      footer={
-        <>
-          <button
-            type="button"
-            className="danger"
-            onClick={() => {
-              if (confirm("Supprimer cette fiche ?")) void deleteThenClose(api.deleteCard(project, card.id), onClose, setError);
-            }}
-          >
-            Supprimer
-          </button>
-          <div className="spacer" />
-          {live === "running" && (
-            <button type="button" onClick={() => guard(api.cancel(project, card.id))}>
-              Arrêter l'agent
-            </button>
-          )}
-          {column?.type === "skill" &&
-            live !== "running" &&
-            lr?.sessionId &&
-            lr.columnId === card.columnId &&
-            (lr.status === "error" || lr.status === "cancelled") && (
-              <button
-                type="button"
-                title="Reprend la même session Claude : l'agent vérifie où il en était et termine, sans tout recommencer."
-                onClick={() => guard(api.resumeSession(project, card.id))}
-              >
-                Reprendre la session
-              </button>
-            )}
-          {column?.type === "skill" && live !== "running" && (
-            <button type="button" onClick={() => guard(api.retry(project, card.id))}>
-              {lr?.columnId === card.columnId ? "Relancer" : "Lancer"}
-            </button>
-          )}
-          <NextColumnButton
-            project={project}
-            card={card}
-            board={board}
-            beforeMove={() => (dirty ? saveOrThrow() : undefined)}
-            onError={setError}
-            live={live}
-          />
-          <button type="button" className="primary" disabled={!dirty} onClick={save}>
-            Enregistrer
-          </button>
-        </>
-      }
-    >
-      <ErrorBanner error={error} onClose={() => setError(null)} />
-      <div className="card-modal">
-        <div className="card-edit">
-          <label>
+    <div className="card-modal grid h-[calc(100dvh-13rem)] min-h-[440px] min-w-0 grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] gap-6 max-[800px]:h-auto max-[800px]:grid-cols-[minmax(0,1fr)]">
+      <div className="card-edit flex min-h-0 min-w-0 flex-col gap-3">
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="card-title" className="self-start">
             Titre
-            <input value={title} onChange={(e) => setTitle(e.target.value)} />
-          </label>
-          <div className="card-desc">
-            <div className="card-desc-head">
-              <span id="card-desc-label" className="card-desc-label">
-                Description
-              </span>
-              <div className="tabs" role="tablist" aria-labelledby="card-desc-label">
-                <button type="button" role="tab" aria-selected={descMode === "preview"} onClick={() => setDescMode("preview")}>
-                  Aperçu
-                </button>
-                <button type="button" role="tab" aria-selected={descMode === "edit"} onClick={editDescription}>
-                  Modifier
-                </button>
-              </div>
-            </div>
-            {descMode === "edit" ? (
-              <textarea
-                ref={descRef}
-                className="card-desc-body"
-                aria-label="Description (markdown)"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                spellCheck
-              />
-            ) : (
-              <div
-                className="card-desc-body card-desc-preview"
-                role="tabpanel"
-                // biome-ignore lint/a11y/noNoninteractiveTabindex: the scrollable preview must be reachable by keyboard
-                tabIndex={0}
-                title="Double-cliquer pour modifier"
-                onDoubleClick={editDescription}
-              >
-                {description.trim() ? (
-                  <Markdown source={description} renderImage={renderCardImage(project, card.id)} />
-                ) : (
-                  <p className="muted">Aucune description. Double-cliquer pour en écrire une.</p>
-                )}
-              </div>
-            )}
+          </Label>
+          <Input id="card-title" value={title} onChange={(e) => setTitle(e.target.value)} />
+        </div>
+        <div className="card-desc flex min-h-[220px] min-w-0 flex-1 flex-col gap-1.5">
+          <div className="flex items-center justify-between gap-3">
+            <span id="card-desc-label" className="text-xs font-medium text-muted-foreground">
+              Description
+            </span>
+            <Tabs value={descMode} onValueChange={(v) => (v === "edit" ? editDescription() : setDescMode("preview"))}>
+              <TabsList aria-labelledby="card-desc-label">
+                <TabsTrigger value="preview">Aperçu</TabsTrigger>
+                <TabsTrigger value="edit">Modifier</TabsTrigger>
+              </TabsList>
+            </Tabs>
           </div>
-          {live === "running" && dirty && (
-            <p className="hint warn">Un agent travaille sur cette fiche : son résultat écrasera vos modifications non enregistrées.</p>
+          {descMode === "edit" ? (
+            <Textarea
+              ref={descRef}
+              className="card-desc-body min-h-0 min-w-0 flex-1 resize-none font-mono leading-relaxed"
+              aria-label="Description (markdown)"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              spellCheck
+            />
+          ) : (
+            <div
+              className="card-desc-body card-desc-preview min-h-0 min-w-0 flex-1 cursor-text overflow-auto rounded-md border bg-card px-3 py-2 transition-colors duration-150 hover:border-input"
+              role="tabpanel"
+              // biome-ignore lint/a11y/noNoninteractiveTabindex: the scrollable preview must be reachable by keyboard
+              tabIndex={0}
+              title="Double-cliquer pour modifier"
+              onDoubleClick={editDescription}
+            >
+              {description.trim() ? (
+                <Markdown source={description} renderImage={renderCardImage(project, card.id)} />
+              ) : (
+                <p className="text-muted-foreground">Aucune description. Double-cliquer pour en écrire une.</p>
+              )}
+            </div>
           )}
         </div>
-        <aside className="card-side">
-          <SkipColumnsPicker
-            columns={skipOptions}
-            value={skip}
-            onChange={(ids) => {
-              setSkip(ids);
-              void saveSkipColumns({ project, cardId: card.id, ids, onError: setError }).then((ok) => {
-                if (!ok) setSkip(serverSkip);
-              });
-            }}
-          />
-          {lr?.status === "question" && lr.columnId === card.columnId && !live && (
-            <form
-              className="question"
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (answers.some((a) => a.trim()))
-                  void sendThenClear(api.answer(project, card.id, answers), () => setAnswers([]), setError);
-              }}
-            >
-              <strong className="question-head">
-                <StatusIcon status="question" />
-                L'agent a {lr.questions?.length ?? 0} question{(lr.questions?.length ?? 0) > 1 ? "s" : ""}
-              </strong>
-              <p className="hint small">Une réponse vide laisse l'agent décider.</p>
-              {(lr.questions ?? []).map((q, i) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: questions have no id; the answers are positional (answers[i])
-                <div key={i} className="qa">
-                  <div className="qa-q">
-                    <span className="qa-num">{i + 1}.</span>
-                    <Markdown source={q} />
-                  </div>
-                  <textarea
-                    aria-label={`Réponse à la question ${i + 1}`}
-                    // biome-ignore lint/a11y/noAutofocus: the question form appears on user request, the first answer is what comes next
-                    autoFocus={i === 0}
-                    value={answers[i] ?? ""}
-                    placeholder="Votre réponse… (⌘+Entrée pour tout envoyer)"
-                    onChange={(e) => setAnswers((a) => Object.assign([...a], { [i]: e.target.value }))}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) e.currentTarget.form?.requestSubmit();
-                    }}
-                  />
-                </div>
-              ))}
-              <button className="primary" type="submit" disabled={!answers.some((a) => a?.trim())}>
-                Répondre et reprendre
-              </button>
-            </form>
-          )}
-          {lr && (lr.status !== "question" || live) && (
-            <div className={`last-run st-${lr.status}`}>
-              <div className="last-run-head">
-                <StatusIcon status={lr.status} />
-                <strong>Dernier run</strong>
-                <span className="muted">
-                  · {board.columns.find((c) => c.id === lr.columnId)?.name ?? "?"} · {timeAgo(lr.at)}
-                </span>
-              </div>
-              {lr.summary && <Markdown source={lr.summary} className="last-run-summary" />}
-              {lr.error && <pre className="error-text">{lr.error}</pre>}
-              <div className="last-run-meta muted small">
-                {lr.costUsd !== undefined && (
-                  <>
-                    Coût : ${lr.costUsd.toFixed(3)}
-                    {lr.sessionId ? " · " : ""}
-                  </>
-                )}
-                {lr.sessionId && (
-                  <span title="Reprendre la session dans un terminal">
-                    <code>claude -r {lr.sessionId}</code>
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
-          {canSendFeedback(card, live) && !(lr?.status === "question" && lr.columnId === card.columnId && !live) && (
-            <FeedbackForm project={project} cardId={card.id} onError={setError} />
-          )}
-          <TestPanel project={project} card={card} running={testing} onError={setError} />
-          <div className="tabs" role="tablist">
-            <button type="button" role="tab" aria-selected={tab === "log"} onClick={() => setTab("log")}>
-              Journal agent {live === "running" && <span className="spinner" aria-hidden />}
-            </button>
-            <button type="button" role="tab" aria-selected={tab === "history"} onClick={() => setTab("history")}>
-              Historique
-            </button>
-            <button type="button" role="tab" aria-selected={tab === "time"} onClick={() => setTab("time")}>
-              Temps
-            </button>
-          </div>
-          {tab === "log" && <RunProgress progress={progress} live={live} />}
-          <div className="log" ref={logRef}>
-            {tab === "log" ? (
-              log.length ? (
-                log.map((l, i) => (
-                  // biome-ignore lint/suspicious/noArrayIndexKey: log lines have no id and the list only grows at its end
-                  <div key={i} className={`log-line ${l.kind}`}>
-                    <time>{new Date(l.at).toLocaleTimeString("fr-FR")}</time>
-                    <span>{l.text}</span>
-                  </div>
-                ))
-              ) : (
-                <p className="muted">Aucun run pour cette fiche.</p>
-              )
-            ) : tab === "time" ? (
-              <TimePanel card={card} board={board} />
-            ) : (
-              [...card.history].reverse().map((h, i) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: history entries have no id and the list is never reordered in place
-                <div key={i} className={`log-line ${h.kind}`}>
-                  <time>{timeAgo(h.at)}</time>
-                  <span>{h.text}</span>
-                </div>
-              ))
-            )}
-          </div>
-        </aside>
+        {live === "running" && dirty && (
+          <Alert variant="warn" className="hint warn">
+            <AlertDescription>
+              Un agent travaille sur cette fiche : son résultat écrasera vos modifications non enregistrées.
+            </AlertDescription>
+          </Alert>
+        )}
       </div>
-    </Modal>
+      <aside className="card-side flex min-h-0 min-w-0 flex-col gap-3 overflow-y-auto">
+        <SkipColumnsPicker
+          columns={skipOptions}
+          value={skip}
+          onChange={(ids) => {
+            setSkip(ids);
+            void saveSkipColumns({ project, cardId: card.id, ids, onError: notifyError }).then((ok) => {
+              if (!ok) setSkip(serverSkip);
+            });
+          }}
+        />
+        {asking && lr && (
+          <form
+            className="question flex max-h-[60%] min-w-0 shrink-0 flex-col gap-3 overflow-auto rounded-md border border-warn/30 bg-warn-soft p-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (answers.some((a) => a.trim()))
+                void sendThenClear(api.answer(project, card.id, answers), () => setAnswers([]), notifyError);
+            }}
+          >
+            <strong className="question-head flex items-center gap-2 font-semibold">
+              <StatusIcon status="question" />
+              L'agent a {lr.questions?.length ?? 0} question{(lr.questions?.length ?? 0) > 1 ? "s" : ""}
+            </strong>
+            <p className="hint small m-0 text-xs text-muted-foreground">Une réponse vide laisse l'agent décider.</p>
+            {(lr.questions ?? []).map((q, i) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: questions have no id; the answers are positional (answers[i])
+              <div key={i} className="qa flex flex-col gap-2">
+                <div className="qa-q flex gap-2">
+                  <span className="qa-num shrink-0 text-muted-foreground tabular-nums">{i + 1}.</span>
+                  <Markdown source={q} className="min-w-0 flex-1" />
+                </div>
+                <Textarea
+                  aria-label={`Réponse à la question ${i + 1}`}
+                  autoFocus={i === 0}
+                  className="min-h-14"
+                  value={answers[i] ?? ""}
+                  placeholder="Votre réponse… (⌘+Entrée pour tout envoyer)"
+                  onChange={(e) => setAnswers((a) => Object.assign([...a], { [i]: e.target.value }))}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) e.currentTarget.form?.requestSubmit();
+                  }}
+                />
+              </div>
+            ))}
+            <Button className="self-end" type="submit" disabled={!answers.some((a) => a?.trim())}>
+              Répondre et reprendre
+            </Button>
+          </form>
+        )}
+        {lr && (lr.status !== "question" || live) && (
+          <div className={cn("last-run min-w-0 shrink-0 rounded-md border bg-card p-3", LAST_RUN_TONE[lr.status], `st-${lr.status}`)}>
+            <div className="last-run-head flex min-w-0 items-center gap-2">
+              <StatusIcon status={lr.status} />
+              <strong className="font-semibold">Dernier run</strong>
+              <span className="truncate text-muted-foreground">
+                · {board.columns.find((c) => c.id === lr.columnId)?.name ?? "?"} · {timeAgo(lr.at)}
+              </span>
+            </div>
+            {lr.summary && <Markdown source={lr.summary} className="last-run-summary mt-2 max-h-[180px] overflow-auto" />}
+            {lr.error && <pre className="error-text mt-2 whitespace-pre-wrap break-words font-mono text-xs text-err">{lr.error}</pre>}
+            <div className="last-run-meta mt-2 text-xs text-muted-foreground">
+              {lr.costUsd !== undefined && (
+                <>
+                  Coût : ${lr.costUsd.toFixed(3)}
+                  {lr.sessionId ? " · " : ""}
+                </>
+              )}
+              {lr.sessionId && (
+                <span title="Reprendre la session dans un terminal">
+                  <code className="font-mono text-[11px]">claude -r {lr.sessionId}</code>
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+        {canSendFeedback(card, live) && !asking && <FeedbackForm project={project} cardId={card.id} onError={notifyError} />}
+        <TestPanel project={project} card={card} running={testing} onError={notifyError} />
+        <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)} className="shrink-0">
+          <TabsList>
+            <TabsTrigger value="log">Journal agent {live === "running" && <Loader2 className="animate-spin" aria-hidden />}</TabsTrigger>
+            <TabsTrigger value="history">Historique</TabsTrigger>
+            <TabsTrigger value="time">Temps</TabsTrigger>
+          </TabsList>
+        </Tabs>
+        {tab === "log" && <RunProgress progress={progress} live={live} />}
+        <div
+          className="log min-h-[320px] flex-[1_0_320px] overflow-auto rounded-md border bg-card px-3 py-2 font-mono text-xs leading-relaxed"
+          ref={logRef}
+        >
+          {tab === "log" ? (
+            log.length ? (
+              log.map((l, i) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: log lines have no id and the list only grows at its end
+                <LogRow key={i} kind={l.kind} time={new Date(l.at).toLocaleTimeString("fr-FR")} text={l.text} />
+              ))
+            ) : !logLoaded ? (
+              <LogSkeleton />
+            ) : (
+              <p className="m-0 font-sans text-muted-foreground">Aucun run pour cette fiche.</p>
+            )
+          ) : tab === "time" ? (
+            <TimePanel card={card} board={board} />
+          ) : (
+            [...card.history].reverse().map((h, i) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: history entries have no id and the list is never reordered in place
+              <LogRow key={i} kind={h.kind} time={timeAgo(h.at)} text={h.text} />
+            ))
+          )}
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function LogSkeleton() {
+  return (
+    <div className="flex flex-col gap-2" aria-busy="true">
+      <Skeleton className="h-3 w-3/4" />
+      <Skeleton className="h-3 w-full" />
+      <Skeleton className="h-3 w-2/3" />
+    </div>
+  );
+}
+
+const LOG_TONE: Record<string, string> = { tool: "text-primary", info: "text-muted-foreground", error: "text-err" };
+
+function LogRow({ kind, time, text }: { kind: string; time: string; text: string }) {
+  return (
+    <div className={cn("log-line grid grid-cols-[70px_minmax(0,1fr)] gap-3 py-px", kind)}>
+      <time className="text-muted-foreground tabular-nums">{time}</time>
+      <span className={cn("break-words whitespace-pre-wrap", LOG_TONE[kind])}>{text}</span>
+    </div>
   );
 }
 
@@ -411,7 +486,7 @@ function CopyRef({ card }: { card: Card }) {
   return (
     <button
       type="button"
-      className="card-ref-copy"
+      className="card-ref-copy cursor-pointer rounded-sm px-0.5 font-normal text-muted-foreground tabular-nums hover:text-foreground hover:underline"
       title="Copier la référence"
       onClick={(e) => {
         e.stopPropagation();

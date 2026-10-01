@@ -50,7 +50,7 @@ export function startTicker(onTick: () => void, ms = 1000): () => void {
 export function TimePanelView({ card, board, nowMs }: { card: Card; board: Board; nowMs: number }) {
   const slices = cardTimeSlices(card, board.columns, nowMs);
   const total = slices.reduce((sum, s) => sum + s.ms, 0);
-  if (!slices.length || total <= 0) return <p className="muted">Pas encore de temps mesuré</p>;
+  if (!slices.length || total <= 0) return <p className="m-0 font-sans text-muted-foreground">Pas encore de temps mesuré</p>;
 
   const parts = slices.map((s) => {
     const idx = hueIndex(board, s);
@@ -79,9 +79,9 @@ export function TimePanelView({ card, board, nowMs }: { card: Card; board: Board
   });
 
   return (
-    <div className="time-panel">
+    <div className="time-panel flex flex-col items-center gap-3 font-sans text-[13px]">
       <svg
-        className="time-pie"
+        className="time-pie shrink-0"
         viewBox={`0 0 ${SIZE} ${SIZE}`}
         width={SIZE}
         height={SIZE}
@@ -105,16 +105,16 @@ export function TimePanelView({ card, board, nowMs }: { card: Card; board: Board
         </defs>
         {shapes}
       </svg>
-      <ul className="time-legend">
+      <ul className="time-legend m-0 flex w-full min-w-0 list-none flex-col gap-1 p-0">
         {parts.map((p) => (
-          <li key={p.key}>
-            <svg className="time-swatch" width="12" height="12" aria-hidden>
+          <li key={p.key} className="grid grid-cols-[12px_minmax(0,1fr)_auto_auto_auto] items-center gap-2">
+            <svg className="time-swatch shrink-0" width="12" height="12" aria-hidden>
               <rect width="12" height="12" rx="2" fill={p.fill} />
             </svg>
-            <span className="time-col">{p.s.columnName}</span>
-            <span className="time-part muted">{p.label}</span>
-            <span className="time-dur">{formatDuration(p.s.ms)}</span>
-            <span className="time-pct muted">{formatPercent(p.s.ms, total)}</span>
+            <span className="time-col truncate">{p.s.columnName}</span>
+            <span className="time-part text-xs text-muted-foreground">{p.label}</span>
+            <span className="time-dur tabular-nums">{formatDuration(p.s.ms)}</span>
+            <span className="time-pct text-right text-xs text-muted-foreground tabular-nums">{formatPercent(p.s.ms, total)}</span>
           </li>
         ))}
       </ul>

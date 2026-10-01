@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { api } from "./api.ts";
 
 export function FeedbackForm({
@@ -17,7 +19,7 @@ export function FeedbackForm({
   const blank = !text.trim();
   return (
     <form
-      className="feedback"
+      className="feedback flex shrink-0 flex-col gap-2 rounded-md border bg-card p-3"
       onSubmit={(e) => {
         e.preventDefault();
         if (blank || sending) return;
@@ -29,8 +31,9 @@ export function FeedbackForm({
           .finally(() => setSending(false));
       }}
     >
-      <strong className="feedback-head">Faire un retour à l'agent</strong>
-      <textarea
+      <strong className="feedback-head text-[13px] font-semibold">Faire un retour à l'agent</strong>
+      <Textarea
+        className="min-h-14"
         aria-label="Retour à l'agent"
         value={text}
         placeholder="Votre retour… (⌘+Entrée pour envoyer)"
@@ -39,9 +42,9 @@ export function FeedbackForm({
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) e.currentTarget.form?.requestSubmit();
         }}
       />
-      <button className="primary" type="submit" disabled={blank || sending}>
+      <Button className="self-end" type="submit" disabled={blank || sending}>
         Envoyer le retour
-      </button>
+      </Button>
     </form>
   );
 }

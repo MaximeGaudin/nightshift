@@ -1,8 +1,8 @@
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { isCardScreenshot, screenshotUrl } from "../shared/screenshots.ts";
 
-/** Escape closes the lightbox only: stop it before the card Modal's window listener sees it. */
+/** Escape closes the lightbox only: stop it before the card dialog's Escape listener (Radix, on the document) sees it. */
 export function handleLightboxKey(
   e: Pick<KeyboardEvent, "key" | "preventDefault" | "stopImmediatePropagation">,
   onClose: () => void,
@@ -20,10 +20,18 @@ export function Lightbox({ src, alt, onClose }: { src: string; alt: string; onCl
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
   }, [onClose]);
+  // The lightbox lives on body, outside the card dialog: without this, a press on it counts as an outside click and Radix closes the dialog.
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    const stop = (e: Event) => e.stopPropagation();
+    el?.addEventListener("pointerdown", stop);
+    return () => el?.removeEventListener("pointerdown", stop);
+  }, []);
   if (typeof document === "undefined") return null;
   return createPortal(
     // biome-ignore lint/a11y/useKeyWithClickEvents: the click on the backdrop is a mouse shortcut; the keyboard closes the lightbox with Escape (window listener above)
-    <div className="lightbox" role="dialog" aria-label={alt} onClick={onClose}>
+    <div ref={ref} className="lightbox" role="dialog" aria-label={alt} onClick={onClose}>
       <img src={src} alt={alt} />
     </div>,
     document.body,
