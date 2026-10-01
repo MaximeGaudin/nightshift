@@ -79,8 +79,13 @@ test("markdown-wide-blocks-scroll", () => {
 });
 
 test("markdown-uses-theme-variables-only", () => {
-  const used = new Set([...mdCss.matchAll(/var\((--[a-z-]+)\)/g)].map((m) => m[1]));
-  for (const legacy of ["--text", "--muted", "--accent", "--surface", "--surface-2", "--border-strong", "--sp-1", "--fs-md"]) {
+  const used = new Set([...mdCss.matchAll(/var\((--[a-z0-9-]+)\)/g)].map((m) => m[1]));
+  // --muted is a shadcn theme background now, so it is allowed; the other legacy names are not.
+  for (const legacy of ["--text", "--ui-muted", "--surface", "--surface-2", "--border-strong", "--sp-1", "--fs-md"]) {
     expect(used.has(legacy)).toBe(false);
   }
+  // Every variable used is defined by the theme sheet.
+  const themeCss = readFileSync(new URL("../src/web/index.css", import.meta.url), "utf8");
+  const defined = new Set([...themeCss.matchAll(/(--[a-z0-9-]+)\s*:/g)].map((m) => m[1]));
+  expect([...used].filter((v) => !defined.has(v))).toEqual([]);
 });
