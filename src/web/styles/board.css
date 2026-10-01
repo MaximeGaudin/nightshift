@@ -57,7 +57,19 @@
   /* min-width: 0 keeps every column at 290px even when a long skill badge would widen it. */
   flex: 0 0 290px; min-width: 0; max-height: 100%; display: flex; flex-direction: column;
   background: transparent; border-radius: var(--radius-lg); border: 1px solid transparent;
-  transition: border-color var(--dur), background var(--dur);
+  transition: border-color var(--dur), background var(--dur), flex-basis var(--dur);
+}
+.column.compact { flex: 0 0 48px; align-self: stretch; min-width: 0; max-height: 100%; overflow: hidden; }
+.column-band {
+  flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column;
+  align-items: center; justify-content: flex-start; gap: var(--sp-3); padding: var(--sp-3) 0;
+}
+.column-band > * { flex-shrink: 0; }
+.column-band .band-add { padding: 2px; line-height: 0; }
+.column-band .band-name {
+  writing-mode: vertical-rl; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  min-height: 0; max-height: 100%; flex: 1 1 auto; flex-shrink: 1;
+  font-size: var(--fs-md); font-weight: 500;
 }
 .column.drop-target { border-color: var(--accent); background: var(--accent-soft); }
 .column-head {
@@ -129,6 +141,7 @@ button.add-card:hover:not(:disabled) { color: var(--text); }
 @media (prefers-reduced-motion: reduce) {
   .card:hover { transform: none; }
   .dot.on { animation: none; }
+  .column { transition: none; }
 }
 
 @media (max-width: 800px) {
