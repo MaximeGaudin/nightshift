@@ -7,7 +7,7 @@ beforeAll(async () => {
   srv = await startChildServer({
     agents: true,
     settings: { claudePath: join(import.meta.dir, "fake-claude.ts") },
-    env: { FAKE_DELAY_MS: "50", NIGHTSHIFT_TEMPLATE_SKILLS: join(import.meta.dir, "..", "skills") },
+    env: { FAKE_DELAY_MS: "50", NIGHTSHIFT_TEMPLATE_SKILLS: join(import.meta.dir, "..", ".claude", "skills") },
   });
 });
 afterAll(() => srv.stop());
