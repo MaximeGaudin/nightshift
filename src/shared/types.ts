@@ -221,6 +221,21 @@ export function canSendFeedback(card: Card, live?: LiveStatus): boolean {
   );
 }
 
+/**
+ * What keeps the agent from taking new work on the card: "working" when it is queued, running or has an answer
+ * waiting to be sent (wins over "question"), "question" when it asked something in the current column.
+ */
+export function agentBlocker(card: Card, live?: LiveStatus): "working" | "question" | undefined {
+  if (live || card.pendingAnswer) return "working";
+  if (card.lastRun?.status === "question" && card.lastRun.columnId === card.columnId) return "question";
+  return undefined;
+}
+
+/** Whether the agent is busy on the card: see `agentBlocker`. */
+export function agentBusy(card: Card, live?: LiveStatus): boolean {
+  return agentBlocker(card, live) !== undefined;
+}
+
 export interface LogLine {
   at: string;
   kind: "text" | "tool" | "info" | "error";
