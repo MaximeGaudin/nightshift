@@ -2,6 +2,7 @@ import { useState } from "react";
 import { api } from "./api.ts";
 import { Button } from "./components/ui/button.tsx";
 import { Textarea } from "./components/ui/textarea.tsx";
+import { useT } from "./i18n/index.ts";
 
 export function FeedbackForm({
   project,
@@ -14,6 +15,7 @@ export function FeedbackForm({
   onError: (message: string) => void;
   initialText?: string;
 }) {
+  const { t } = useT();
   const [text, setText] = useState(initialText);
   const [sending, setSending] = useState(false);
   const blank = !text.trim();
@@ -31,19 +33,19 @@ export function FeedbackForm({
           .finally(() => setSending(false));
       }}
     >
-      <strong className="feedback-head text-[13px] font-semibold">Faire un retour à l'agent</strong>
+      <strong className="feedback-head text-[13px] font-semibold">{t("card.feedback.title")}</strong>
       <Textarea
         className="min-h-14"
-        aria-label="Retour à l'agent"
+        aria-label={t("card.feedback.label")}
         value={text}
-        placeholder="Votre retour… (⌘+Entrée pour envoyer)"
+        placeholder={t("card.feedback.placeholder")}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) e.currentTarget.form?.requestSubmit();
         }}
       />
       <Button className="self-end" type="submit" disabled={blank || sending}>
-        Envoyer le retour
+        {t("card.feedback.send")}
       </Button>
     </form>
   );

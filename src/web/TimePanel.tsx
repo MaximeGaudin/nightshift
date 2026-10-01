@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
 import { cardTimeSlices, formatDuration, formatPercent, type TimePart, type TimeSlice } from "../shared/timeline.ts";
 import type { Board, Card } from "../shared/types.ts";
+import { type MessageKey, t, useT } from "./i18n/index.ts";
 
 const HUES = [210, 25, 145, 280, 50, 340, 175, 100];
-const PART_LABEL: Record<TimePart, string> = {
-  queued: "En file (concurrence)",
-  running: "Agent en cours",
-  human: "Attente humaine",
-  legacy: "Détail indisponible",
-  inert: "",
+const PART_LABEL_KEY: Record<TimePart, MessageKey | null> = {
+  queued: "card.time.queued",
+  running: "card.time.running",
+  human: "card.time.human",
+  legacy: "card.time.legacy",
+  inert: null,
 };
 const PART_LIGHTNESS: Record<Exclude<TimePart, "legacy">, number> = { queued: 74, running: 52, human: 34, inert: 52 };
 
@@ -48,14 +49,17 @@ export function startTicker(onTick: () => void, ms = 1000): () => void {
 
 /** Pie and legend at a given instant. Pure rendering, no timer. */
 export function TimePanelView({ card, board, nowMs }: { card: Card; board: Board; nowMs: number }) {
+  useT();
   const slices = cardTimeSlices(card, board.columns, nowMs);
   const total = slices.reduce((sum, s) => sum + s.ms, 0);
-  if (!slices.length || total <= 0) return <p className="m-0 font-sans text-muted-foreground">Pas encore de temps mesuré</p>;
+  if (!slices.length || total <= 0) return <p className="m-0 font-sans text-muted-foreground">{t("card.time.empty")}</p>;
 
   const parts = slices.map((s) => {
     const idx = hueIndex(board, s);
-    const label = PART_LABEL[s.part];
-    const title = `${s.columnName}${label ? ` — ${label}` : ""} : ${formatDuration(s.ms)} (${formatPercent(s.ms, total)})`;
+    const labelKey = PART_LABEL_KEY[s.part];
+    const label = labelKey ? t(labelKey) : "";
+    const params = { column: s.columnName, part: label, duration: formatDuration(s.ms), percent: formatPercent(s.ms, total) };
+    const title = t(label ? "card.time.sliceTitleWithPart" : "card.time.sliceTitle", params);
     // One slice per column and part (see cardTimeSlices): that pair is the identity of the slice.
     const key = `${s.columnId ?? `name:${s.columnName}`}:${s.part}`;
     return { s, idx, label, title, key, fill: fillFor(s, idx) };
@@ -86,7 +90,7 @@ export function TimePanelView({ card, board, nowMs }: { card: Card; board: Board
         width={SIZE}
         height={SIZE}
         role="img"
-        aria-label="Répartition du temps par colonne"
+        aria-label={t("card.time.chartLabel")}
       >
         <defs>
           {patternIdxs.map((idx) => (
