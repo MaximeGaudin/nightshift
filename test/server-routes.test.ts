@@ -115,3 +115,26 @@ test("routes-validation cards: wrongly typed fields are refused", async () => {
   expect(card.title).toBe("typed");
   expect(card.test).toBeUndefined();
 });
+
+test("routes-validation skills: bad name refused, PUT /api/skill needs string name and content", async () => {
+  const bad = await srv.call("/api/skills", { body: { project: dir, name: "Bad Name" } });
+  expect(bad.status).toBe(400);
+  expect((await bad.json()).error).toBeString();
+  const notString = await srv.call("/api/skills", { body: { project: dir, name: {} } });
+  expect(notString.status).toBe(400);
+
+  const made = await srv.call("/api/skills", { body: { project: dir, name: "good-skill", description: "d", body: "hello" } });
+  expect(made.status).toBe(200);
+  const read = () => srv.call(`/api/skill?${proj()}&name=good-skill`).then((r) => r.json());
+  const before = (await read()).content;
+  expect(before).toContain("hello");
+
+  for (const body of [{ name: "good-skill" }, { name: "good-skill", content: 4 }, { content: "x" }, { name: 3, content: "x" }]) {
+    const r = await srv.call("/api/skill", { method: "PUT", body: { project: dir, ...body } });
+    expect(r.status).toBe(400);
+  }
+  expect((await read()).content).toBe(before);
+  const ok = await srv.call("/api/skill", { method: "PUT", body: { project: dir, name: "good-skill", content: `${before}more` } });
+  expect(ok.status).toBe(200);
+  expect((await read()).content).toBe(`${before}more`);
+});

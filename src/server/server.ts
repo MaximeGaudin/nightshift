@@ -300,11 +300,13 @@ export function startServer({ port, development, agents = true }: { port: number
 
       "/api/skills": {
         GET: h((b, url) => listSkills(project(b, url).path)),
-        POST: h((b, url) => createSkill(project(b, url).path, String(b.name ?? ""), String(b.description ?? ""), String(b.body ?? ""))),
+        POST: h((b, url) =>
+          createSkill(project(b, url).path, reqString(b, "name"), optString(b, "description") ?? "", optString(b, "body") ?? ""),
+        ),
       },
       "/api/skill": {
         GET: h((b, url) => readSkill(project(b, url).path, url.searchParams.get("name") ?? "")),
-        PUT: h((b, url) => saveSkill(project(b, url).path, String(b.name), String(b.content))),
+        PUT: h((b, url) => saveSkill(project(b, url).path, reqString(b, "name"), reqString(b, "content"))),
       },
 
       "/ws": (req, srv) =>
