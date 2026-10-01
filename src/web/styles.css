@@ -125,6 +125,10 @@ label > input, label > textarea, label > select { font-size: 14px; color: var(--
 .column-title { display: flex; align-items: center; gap: 8px; }
 .column-title h2 { font-size: 14px; }
 .count { color: var(--muted); font-size: 12px; }
+.column-parallel {
+  margin-left: auto; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums;
+  padding: 1px 6px; border-radius: 99px; border: 1px solid var(--border);
+}
 .badge { align-self: flex-start; font-size: 11px; padding: 2px 8px; border-radius: 99px; }
 .badge.skill { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .badge.inert { background: var(--surface); color: var(--muted); }

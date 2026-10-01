@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { cardRef, type Card, type Column, type LiveStatus, type ProjectSnapshot } from "../shared/types.ts";
+import { cardRef, columnMaxParallel, type Card, type Column, type LiveStatus, type ProjectSnapshot } from "../shared/types.ts";
 import { api, useServerEvents, useSettings } from "./api.ts";
 import { CardModal } from "./CardModal.tsx";
 import { ColumnsEditor } from "./ColumnsEditor.tsx";
@@ -193,6 +193,11 @@ function Board({
               <div className="column-title">
                 <h2>{col.name}</h2>
                 <span className="count">{cards.length}</span>
+                {col.type === "skill" && (
+                  <span className="column-parallel" title="agents actifs / limite de la colonne">
+                    {cards.filter((c) => snap.live[c.id] === "running").length} / {columnMaxParallel(col)}
+                  </span>
+                )}
               </div>
               {col.type === "skill" ? (
                 <div className="column-badges">
