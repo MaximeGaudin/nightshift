@@ -7,20 +7,24 @@ import { must, quiet, removeTempDirs, settingsGlobal, tempDir, waitFor } from ".
 /** An mtime long ago: a file that is rewritten gets a later one. */
 const PAST = new Date("2020-01-01T00:00:00Z");
 
-const home = tempDir("ns-home-");
-const userSkills = tempDir("ns-skills-");
-process.env.NIGHTSHIFT_HOME = home;
-process.env.NIGHTSHIFT_USER_SKILLS = userSkills;
+// bun test shares one module cache across files: settings.ts and skills.ts capture NIGHTSHIFT_HOME and
+// NIGHTSHIFT_USER_SKILLS once, at the first import. If another file (e.g. progress-prompts.test.ts, through
+// orchestrator.ts) imported them first, the paths set below are ignored. So the home and the user skills
+// directory used by this file are read back from the modules, never from the variables set here.
+process.env.NIGHTSHIFT_HOME = tempDir("ns-home-");
+process.env.NIGHTSHIFT_USER_SKILLS = tempDir("ns-skills-");
 // Read by the fake claude binary, which inherits the server's environment.
 const argsLog = join(tempDir("ns-args-"), "args.jsonl");
 const prevArgsLog = process.env.FAKE_ARGS_LOG;
 process.env.FAKE_ARGS_LOG = argsLog;
 
-const { parseFrontmatter, listSkills, createSkill } = await import("../src/server/skills.ts");
+const { parseFrontmatter, listSkills, createSkill, skillsDir } = await import("../src/server/skills.ts");
 const { splitArgs, resolveModel } = await import("../src/server/orchestrator.ts");
 const { defaultBoard, needsRun, normalizeBoard, numberingChanged, Project } = await import("../src/server/store.ts");
 const { startServer } = await import("../src/server/server.ts");
-const { updateSettings } = await import("../src/server/settings.ts");
+const { updateSettings, NIGHTSHIFT_HOME } = await import("../src/server/settings.ts");
+const home = NIGHTSHIFT_HOME;
+const userSkills = skillsDir("user", "");
 const { BACKLOG_COLUMN_ID, columnMaxParallel, DONE_COLUMN_ID } = await import("../src/shared/types.ts");
 
 test("parseFrontmatter handles folded descriptions", () => {

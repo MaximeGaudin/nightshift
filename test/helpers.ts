@@ -2,9 +2,11 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// bun test runs every file in one process with one module cache: settings.ts reads NIGHTSHIFT_HOME at import and
-// startServer reuses globalThis.__nightshift. Any test that starts a server or touches settings therefore runs
-// the server in a child process with its own NIGHTSHIFT_HOME, through this helper.
+// bun test runs every file in one process with one module cache: settings.ts reads NIGHTSHIFT_HOME at import,
+// skills.ts reads NIGHTSHIFT_USER_SKILLS at import, and startServer reuses globalThis.__nightshift. Any test that
+// starts a server or touches settings either runs the server in a child process with its own NIGHTSHIFT_HOME,
+// through this helper, or takes the home and user skills paths from the imported modules (NIGHTSHIFT_HOME from
+// settings.ts, skillsDir("user", "") from skills.ts) instead of from the env vars it just set.
 
 const tempDirs: string[] = [];
 
