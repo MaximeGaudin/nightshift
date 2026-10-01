@@ -1,0 +1,192 @@
+import { existsSync, readFileSync, renameSync, statSync, watch, writeFileSync, type FSWatcher } from "node:fs";
+import { basename, join } from "node:path";
+import type { Board, Card, Column, HistoryEntry } from "../shared/types.ts";
+
+export const BOARD_FILE = "nightshift.json";
+
+export function newId(prefix: string) {
+  return `${prefix}_${crypto.randomUUID().replace(/-/g, "").slice(0, 10)}`;
+}
+
+const now = () => new Date().toISOString();
+
+export function defaultBoard(name: string): Board {
+  return {
+    version: 1,
+    name,
+    columns: [
+      { id: newId("col"), name: "Backlog", type: "inert" },
+      { id: newId("col"), name: "Done", type: "inert" },
+    ],
+    cards: [],
+  };
+}
+
+/** Normalizes a parsed board so the rest of the code can trust its shape. */
+export function normalizeBoard(raw: any, fallbackName: string): Board {
+  const columns: Column[] = Array.isArray(raw?.columns)
+    ? raw.columns
+        .filter((c: any) => c && typeof c.id === "string")
+        .map((c: any) => ({
+          id: c.id,
+          name: String(c.name ?? "Column"),
+          type: c.type === "skill" ? "skill" : "inert",
+          ...(c.skill ? { skill: String(c.skill) } : {}),
+          ...(c.instructions ? { instructions: String(c.instructions) } : {}),
+        }))
+    : [];
+  if (columns.length === 0) columns.push(...defaultBoard(fallbackName).columns);
+  const colIds = new Set(columns.map((c) => c.id));
+  const cards: Card[] = Array.isArray(raw?.cards)
+    ? raw.cards
+        .filter((c: any) => c && typeof c.id === "string")
+        .map((c: any) => ({
+          id: c.id,
+          title: String(c.title ?? ""),
+          description: String(c.description ?? ""),
+          columnId: colIds.has(c.columnId) ? c.columnId : columns[0]!.id,
+          createdAt: c.createdAt ?? now(),
+          updatedAt: c.updatedAt ?? now(),
+          enteredColumnAt: c.enteredColumnAt ?? c.updatedAt ?? now(),
+          ...(c.lastRun ? { lastRun: c.lastRun } : {}),
+          ...(c.pendingAnswer ? { pendingAnswer: c.pendingAnswer } : {}),
+          history: Array.isArray(c.history) ? c.history.slice(-50) : [],
+        }))
+    : [];
+  return { version: 1, name: String(raw?.name ?? fallbackName), columns, cards };
+}
+
+/**
+ * Owns one project's `nightshift.json`. All mutations go through here, are written
+ * atomically, and notify listeners. External edits (git pull, editor) are picked up
+ * by a file watcher.
+ */
+export class Project {
+  readonly path: string;
+  readonly file: string;
+  board: Board;
+  private listeners = new Set<() => void>();
+  private watcher: FSWatcher | null = null;
+  private lastWrittenMtime = 0;
+
+  constructor(path: string) {
+    this.path = path;
+    this.file = join(path, BOARD_FILE);
+    if (existsSync(this.file)) {
+      this.board = this.read();
+    } else {
+      this.board = defaultBoard(basename(path));
+      this.write();
+    }
+    this.watch();
+  }
+
+  private read(): Board {
+    const text = readFileSync(this.file, "utf8");
+    return normalizeBoard(JSON.parse(text), basename(this.path));
+  }
+
+  private write() {
+    const tmp = this.file + ".tmp";
+    writeFileSync(tmp, JSON.stringify(this.board, null, 2) + "\n");
+    renameSync(tmp, this.file);
+    try {
+      this.lastWrittenMtime = statSync(this.file).mtimeMs;
+    } catch {}
+  }
+
+  private watch() {
+    try {
+      this.watcher = watch(this.path, (_event, filename) => {
+        if (filename !== BOARD_FILE) return;
+        setTimeout(() => this.reloadIfChanged(), 50);
+      });
+    } catch {}
+  }
+
+  private reloadIfChanged() {
+    try {
+      const mtime = statSync(this.file).mtimeMs;
+      if (mtime === this.lastWrittenMtime) return;
+      this.lastWrittenMtime = mtime;
+      this.board = this.read();
+      this.emit();
+    } catch {
+      // Partial write or invalid JSON: keep the in-memory board.
+    }
+  }
+
+  onChange(fn: () => void) {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
+  }
+
+  private emit() {
+    for (const l of this.listeners) l();
+  }
+
+  /** Applies a mutation, persists, notifies. */
+  mutate<T>(fn: (board: Board) => T): T {
+    const result = fn(this.board);
+    this.write();
+    this.emit();
+    return result;
+  }
+
+  close() {
+    this.watcher?.close();
+  }
+
+  // ---- helpers -----------------------------------------------------------
+
+  card(id: string): Card | undefined {
+    return this.board.cards.find((c) => c.id === id);
+  }
+
+  column(id: string): Column | undefined {
+    return this.board.columns.find((c) => c.id === id);
+  }
+
+  nextColumn(id: string): Column | undefined {
+    const i = this.board.columns.findIndex((c) => c.id === id);
+    return i >= 0 ? this.board.columns[i + 1] : undefined;
+  }
+
+  addHistory(card: Card, kind: HistoryEntry["kind"], text: string) {
+    card.history.push({ at: now(), kind, text });
+    if (card.history.length > 50) card.history.splice(0, card.history.length - 50);
+  }
+
+  /** Moves a card to a column at an index (end when omitted). Resets its run state for that column. */
+  moveCard(board: Board, cardId: string, columnId: string, index?: number, reason = "Moved") {
+    const card = board.cards.find((c) => c.id === cardId);
+    const col = board.columns.find((c) => c.id === columnId);
+    if (!card || !col) throw new Error("Unknown card or column");
+    const from = board.columns.find((c) => c.id === card.columnId);
+    board.cards.splice(board.cards.indexOf(card), 1);
+    const sameCol = board.cards.filter((c) => c.columnId === columnId);
+    const target = index === undefined || index >= sameCol.length ? null : sameCol[Math.max(0, index)];
+    if (target) board.cards.splice(board.cards.indexOf(target), 0, card);
+    else {
+      const last = sameCol[sameCol.length - 1];
+      board.cards.splice(last ? board.cards.indexOf(last) + 1 : board.cards.length, 0, card);
+    }
+    if (card.columnId !== columnId) {
+      card.columnId = columnId;
+      card.enteredColumnAt = now();
+      card.updatedAt = now();
+      delete card.pendingAnswer;
+      this.addHistory(card, "moved", `${reason}: ${from?.name ?? "?"} → ${col.name}`);
+    }
+  }
+}
+
+/** A card needs an agent run when it sits in a skill column and has not been processed since it entered it. */
+export function needsRun(board: Board, card: Card): boolean {
+  const col = board.columns.find((c) => c.id === card.columnId);
+  if (!col || col.type !== "skill" || !col.skill) return false;
+  if (card.pendingAnswer) return true;
+  const lr = card.lastRun;
+  if (!lr || lr.columnId !== card.columnId) return true;
+  return lr.at < card.enteredColumnAt;
+}
