@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { cardRef, columnMaxParallel, isDoneColumn, DONE_COLUMN_ID, type Card, type Column, type LiveStatus, type ProjectSnapshot } from "../shared/types.ts";
+import { columnMaxParallel, isDoneColumn, DONE_COLUMN_ID, type Card, type Column, type LiveStatus, type ProjectSnapshot } from "../shared/types.ts";
 import { api, useServerEvents, useSettings } from "./api.ts";
+import { CardTile } from "./CardTile.tsx";
 import { CardModal } from "./CardModal.tsx";
 import { CompactColumnBand, compactColumnTitle, isCompactColumn } from "./compactColumn.tsx";
 import { DoneColumn } from "./DoneColumn.tsx";
@@ -9,7 +10,7 @@ import { ColumnsEditor } from "./ColumnsEditor.tsx";
 import { ProjectPicker } from "./ProjectPicker.tsx";
 import { SettingsModal } from "./SettingsModal.tsx";
 import { SkillsModal } from "./SkillsModal.tsx";
-import { ColumnIcon, Icon, StatusIcon } from "./icons.tsx";
+import { ColumnIcon, Icon } from "./icons.tsx";
 import { toPlainText } from "./markdown.tsx";
 import { installAudioUnlock, notifyAttention } from "./sound.ts";
 import { ErrorBanner } from "./ui.tsx";
@@ -326,64 +327,6 @@ function Board({
         );
       })}
     </main>
-  );
-}
-
-function CardTile({
-  card,
-  live,
-  dragging,
-  onOpen,
-  onDragStart,
-  onDragEnd,
-}: {
-  card: Card;
-  live?: LiveStatus;
-  dragging: boolean;
-  onOpen: () => void;
-  onDragStart: () => void;
-  onDragEnd: () => void;
-}) {
-  const lr = card.lastRun?.columnId === card.columnId ? card.lastRun : undefined;
-  const status = live ?? lr?.status;
-  const excerpt = card.description ? toPlainText(card.description).slice(0, 160) : "";
-  const label: Record<string, string> = {
-    running: "En cours",
-    queued: "En attente",
-    success: "Traité",
-    error: "Erreur",
-    cancelled: "Annulé",
-    question: "Question pour vous",
-  };
-  return (
-    <article
-      data-card
-      className={`card ${dragging ? "dragging" : ""} ${status ? `st-${status}` : ""}`}
-      draggable
-      onDragStart={(e) => {
-        e.dataTransfer.effectAllowed = "move";
-        e.dataTransfer.setData("text/plain", card.id);
-        onDragStart();
-      }}
-      onDragEnd={onDragEnd}
-      onClick={onOpen}
-      tabIndex={0}
-      onKeyDown={(e) => e.key === "Enter" && onOpen()}
-    >
-      <div className="card-ref">{cardRef(card)}</div>
-      <h3>{card.title}</h3>
-      {excerpt && <p className="excerpt">{excerpt}</p>}
-      {status && (
-        <div className={`status st-${status}`}>
-          <StatusIcon status={status} />
-          <span className="status-label">{label[status]}</span>
-          {status === "success" && lr?.summary && <span className="muted"> · {toPlainText(lr.summary).slice(0, 80)}</span>}
-          {status === "question" && lr?.questions && (
-            <span className="muted"> · {lr.questions.length} question{lr.questions.length > 1 ? "s" : ""}</span>
-          )}
-        </div>
-      )}
-    </article>
   );
 }
 
