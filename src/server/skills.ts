@@ -10,6 +10,18 @@ export function skillsDir(scope: "project" | "user", projectPath: string) {
   return scope === "project" ? join(projectPath, ".claude", "skills") : USER_SKILLS;
 }
 
+function unquote(value: string): string {
+  if (value.length >= 2 && value.startsWith('"') && value.endsWith('"')) {
+    try {
+      const decoded = JSON.parse(value);
+      if (typeof decoded === "string") return decoded;
+    } catch {}
+  } else if (value.length >= 2 && value.startsWith("'") && value.endsWith("'")) {
+    return value.slice(1, -1).replace(/''/g, "'");
+  }
+  return value.replace(/^(["'])(.*)\1$/, "$2");
+}
+
 /** Minimal frontmatter parser: handles `key: value` and folded/literal (`>` / `|`) blocks. */
 export function parseFrontmatter(text: string): Record<string, string> {
   const m = text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
@@ -27,7 +39,7 @@ export function parseFrontmatter(text: string): Record<string, string> {
       }
       value = block.join(value.startsWith(">") ? " " : "\n").trim();
     }
-    out[kv[1]!] = value.replace(/^(["'])(.*)\1$/, "$2");
+    out[kv[1]!] = unquote(value);
   }
   return out;
 }
