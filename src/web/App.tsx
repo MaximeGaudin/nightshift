@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { resolveNextColumn } from "../shared/skip.ts";
+import { resolveNextColumn, skippedColumns } from "../shared/skip.ts";
 import { type Card, type Column, columnMaxParallel, DONE_COLUMN_ID, isDoneColumn, type ProjectSnapshot } from "../shared/types.ts";
 import { api, useServerEvents, useSettings } from "./api.ts";
 import { CardModal } from "./CardModal.tsx";
@@ -12,6 +12,7 @@ import { ColumnGlyph, Icon } from "./icons.tsx";
 import { ProjectPicker } from "./ProjectPicker.tsx";
 import { SettingsModal } from "./SettingsModal.tsx";
 import { SkillsModal } from "./SkillsModal.tsx";
+import { SkipColumnsPicker } from "./SkipColumnsPicker.tsx";
 import { installAudioUnlock, notifyAttention } from "./sound.ts";
 import { ErrorBanner } from "./ui.tsx";
 
@@ -236,6 +237,7 @@ function Board({ snap, onOpen, guard }: { snap: ProjectSnapshot; onOpen: (id: st
         progress={snap.progress?.[card.id]}
         dragging={drag === card.id}
         next={next ? { name: next.name } : undefined}
+        skipped={skippedColumns(snap.board.columns, card).map((c) => c.name)}
         onSendNext={next ? () => sendNext(card, next.id) : undefined}
         sending={sending.has(card.id)}
         onOpen={() => onOpen(card.id)}
@@ -340,10 +342,15 @@ function Board({ snap, onOpen, guard }: { snap: ProjectSnapshot; onOpen: (id: st
                     initialOpen
                     closeOnEmptyBlur
                     onClose={() => setExpanded(null)}
-                    onAdd={(title) => guard(api.createCard(snap.path, col.id, title))}
+                    skipOptions={skipOptions(snap.board.columns, col.id)}
+                    onAdd={(title, skip) => guard(api.createCard(snap.path, col.id, title, "", skip))}
                   />
                 ) : (
-                  <AddCard key="plain" onAdd={(title) => guard(api.createCard(snap.path, col.id, title))} />
+                  <AddCard
+                    key="plain"
+                    skipOptions={skipOptions(snap.board.columns, col.id)}
+                    onAdd={(title, skip) => guard(api.createCard(snap.path, col.id, title, "", skip))}
+                  />
                 )}
               </>
             )}
@@ -354,19 +361,39 @@ function Board({ snap, onOpen, guard }: { snap: ProjectSnapshot; onOpen: (id: st
   );
 }
 
-function AddCard({
+/** Columns a new card can be told to skip: those after the creation column, never Done. */
+export function skipOptions(columns: Column[], columnId: string): Column[] {
+  const index = columns.findIndex((c) => c.id === columnId);
+  if (index < 0) return [];
+  return columns.slice(index + 1).filter((c) => c.id !== DONE_COLUMN_ID);
+}
+
+/** Submits the add-card form: a blank title submits nothing; the form state is fresh afterwards either way. */
+export function submitAddCard(
+  title: string,
+  skip: string[],
+  onAdd: (title: string, skip: string[]) => void,
+): { title: string; skip: string[] } {
+  if (title.trim()) onAdd(title.trim(), skip);
+  return { title: "", skip: [] };
+}
+
+export function AddCard({
+  skipOptions: skipColumns = [],
   onAdd,
   initialOpen,
   onClose,
   closeOnEmptyBlur,
 }: {
-  onAdd: (title: string) => void;
+  skipOptions?: Column[];
+  onAdd: (title: string, skip: string[]) => void;
   initialOpen?: boolean;
   onClose?: () => void;
   closeOnEmptyBlur?: boolean;
 }) {
   const [open, setOpen] = useState(initialOpen ?? false);
   const [title, setTitle] = useState("");
+  const [skip, setSkip] = useState<string[]>([]);
   const formRef = useRef<HTMLDivElement>(null);
   const close = () => {
     setOpen(false);
@@ -380,8 +407,9 @@ function AddCard({
       </button>
     );
   const submit = () => {
-    if (title.trim()) onAdd(title.trim());
-    setTitle("");
+    const fresh = submitAddCard(title, skip, onAdd);
+    setTitle(fresh.title);
+    setSkip(fresh.skip);
   };
   return (
     <div className="add-card-form" ref={formRef}>
@@ -404,6 +432,11 @@ function AddCard({
           } else if (e.key === "Escape") close();
         }}
       />
+      {/* Keep the focus in the textarea while the picker is used, so opening it does not count as leaving the form. */}
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: mouse-only focus guard, the picker inside stays keyboard accessible */}
+      <div onMouseDown={(e) => e.target instanceof HTMLInputElement || e.preventDefault()}>
+        <SkipColumnsPicker columns={skipColumns} value={skip} onChange={setSkip} />
+      </div>
       <div className="row">
         <button type="button" className="primary" onClick={submit}>
           Ajouter

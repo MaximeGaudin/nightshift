@@ -85,13 +85,14 @@ export function ColumnGlyph({ col }: { col: Pick<Column, "type" | "emoji"> }) {
   return <ColumnIcon type={col.type} />;
 }
 
-export type IconName = "moon" | "close" | "plus" | "bolt" | "folder" | "trash" | "play" | "stop" | "lock" | "arrowRight";
+export type IconName = "moon" | "close" | "plus" | "bolt" | "folder" | "trash" | "play" | "stop" | "lock" | "arrowRight" | "skip";
 
 const ICONS: Record<IconName, ReactNode> = {
   moon: <path d="M11.8 8.6A5 5 0 0 1 5.4 2.2a5 5 0 1 0 6.4 6.4z" fill="currentColor" />,
   close: <path d="M3.5 3.5l7 7M10.5 3.5l-7 7" />,
   plus: <path d="M7 2.5v9M2.5 7h9" />,
   arrowRight: <path d="M2.5 7h9M8 3.5L11.5 7 8 10.5" />,
+  skip: <path d="M2.5 3.5L6 7l-3.5 3.5M7.5 3.5L11 7l-3.5 3.5" />,
   bolt: BOLT,
   folder: <path d="M1.75 4a1 1 0 0 1 1-1h2.6l1.3 1.4h4.6a1 1 0 0 1 1 1v5.1a1 1 0 0 1-1 1h-8.5a1 1 0 0 1-1-1z" />,
   trash: <path d="M2.5 3.8h9M5.5 3.8V2.5h3v1.3M3.7 3.8l.6 7.7h5.4l.6-7.7M5.8 6v3.5M8.2 6v3.5" />,

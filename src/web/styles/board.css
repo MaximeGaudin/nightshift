@@ -426,6 +426,36 @@ button.add-card:hover:not(:disabled) {
   font-variant-numeric: tabular-nums;
   padding-right: 24px;
 }
+.card-skipped {
+  display: inline-flex;
+  vertical-align: middle;
+  margin-left: var(--sp-2);
+  color: var(--muted);
+}
+.skip-picker {
+  font-size: var(--fs-xs);
+  color: var(--muted);
+}
+.skip-picker summary {
+  cursor: pointer;
+  user-select: none;
+}
+.skip-picker summary:hover {
+  color: var(--text);
+}
+.skip-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: var(--sp-2) 0 0 var(--sp-2);
+}
+.skip-picker-item {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  color: var(--text);
+  cursor: pointer;
+}
 .card-next {
   position: absolute;
   top: calc(var(--sp-1) + var(--sp-2) - 2px);
