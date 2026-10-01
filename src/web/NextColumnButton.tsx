@@ -1,12 +1,12 @@
 import { useState } from "react";
+import { resolveNextColumn } from "../shared/skip.ts";
 import type { Board, Card, Column } from "../shared/types.ts";
 import { api } from "./api.ts";
 
 /** Colonne suivante si la colonne de la fiche est inerte, sinon undefined. */
 export function nextInertTarget(board: Board, card: Card): Column | undefined {
-  const index = board.columns.findIndex((c) => c.id === card.columnId);
-  if (index < 0 || board.columns[index]?.type !== "inert") return undefined;
-  return board.columns[index + 1];
+  if (board.columns.find((c) => c.id === card.columnId)?.type !== "inert") return undefined;
+  return resolveNextColumn(board.columns, card);
 }
 
 export interface SendToNextArgs {

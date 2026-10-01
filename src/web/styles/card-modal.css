@@ -312,3 +312,7 @@ textarea.card-desc-body {
   max-height: 180px;
   background: var(--surface);
 }
+
+.card-side > .skip-picker {
+  flex-shrink: 0;
+}
