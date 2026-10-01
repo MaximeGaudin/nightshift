@@ -1,11 +1,45 @@
 /* Project picker zone: picker page, recent projects, folder browser. */
 
-.picker { max-width: 720px; width: 100%; margin: 0 auto; padding: 40px 24px; display: flex; flex-direction: column; gap: 24px; overflow: auto; }
-.modal .picker { padding: 24px; }
-.picker h1 { font-size: 26px; display: flex; align-items: center; gap: 10px; }
-.picker h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); margin-bottom: 8px; }
-.recent, .browser { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 4px; }
-.recent button { width: 100%; text-align: left; display: flex; flex-direction: column; }
-.recent button.active { border-color: var(--accent); }
-.browser { margin-top: 10px; max-height: 320px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; padding: 4px; }
-.browser button { width: 100%; text-align: left; border: 0; background: none; padding: 4px 8px; }
+.picker {
+  max-width: 720px; width: 100%; margin: 0 auto;
+  padding: calc(var(--sp-6) * 2) var(--sp-6);
+  display: flex; flex-direction: column; gap: var(--sp-6); overflow: auto;
+}
+.modal .picker { padding: var(--sp-6); }
+.picker header { display: flex; flex-direction: column; gap: var(--sp-2); }
+.picker header p { margin: 0; }
+.picker h1 { font-size: var(--fs-xl); font-weight: 600; letter-spacing: -0.01em; display: flex; align-items: center; gap: var(--sp-3); }
+.picker .moon { display: inline-flex; color: var(--accent); line-height: 1; font-size: inherit; }
+.picker h2 {
+  font-size: var(--fs-xs); font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--muted); margin-bottom: var(--sp-3);
+}
+.picker form.row { gap: var(--sp-3); }
+.picker form.row input { flex: 1; font-family: var(--font-mono); font-size: var(--fs-sm); }
+.picker form.row button { flex: 0 0 auto; }
+
+/* Shared list look: one bordered surface, 32px rows. */
+.recent, .browser {
+  list-style: none; margin: 0; padding: var(--sp-1);
+  display: flex; flex-direction: column; gap: 1px;
+  border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
+}
+.recent button, .browser button {
+  width: 100%; min-height: 32px; text-align: left;
+  display: flex; align-items: center; gap: var(--sp-3);
+  border: 0; border-radius: var(--radius-sm); background: transparent;
+  padding: var(--sp-1) var(--sp-3);
+}
+.recent button:hover:not(:disabled), .browser button:hover:not(:disabled) { background: var(--surface-hover); border-color: transparent; }
+.recent .icon-folder, .browser .icon-folder { color: var(--muted); }
+
+/* Recent projects: name + muted path, selection = --accent-soft. */
+.recent-text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.recent-text strong { font-weight: 500; }
+.recent-text .muted { font-size: var(--fs-xs); }
+.recent button.active, .recent button.active:hover:not(:disabled) { background: var(--accent-soft); }
+.recent button.active .icon-folder { color: var(--accent); }
+
+/* Folder browser */
+.browser { margin-top: var(--sp-4); max-height: 320px; overflow: auto; }
+.browser button { min-height: 28px; font-size: var(--fs-md); }
