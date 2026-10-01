@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/logo/logo.svg" width="64" height="64" alt="Nightshift"></p>
+
 # Nightshift
 
 A kanban board that orchestrates Claude Code agents. One folder is one board: the whole board state lives in a single file, `nightshift.json`, at the folder root. Drop a card in a skill column and a `claude -p` agent picks it up in your project folder, reports progress, asks you questions when it is blocked, and hands the card to the next column. Leave it running and review the results in the morning.
