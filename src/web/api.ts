@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { SequenceState } from "../shared/sequence.ts";
 import type { LogLine, ProjectSnapshot, ServerEvent, Settings, SkillInfo } from "../shared/types.ts";
 
 async function call<T = unknown>(method: string, url: string, body?: unknown): Promise<T> {
@@ -44,6 +45,8 @@ export const api = {
   stopTest: (project: string, id: string) => call("POST", `/api/cards/${id}/test/stop`, { project }),
   cancel: (project: string, id: string) => call("POST", `/api/cards/${id}/cancel`, { project }),
   log: (project: string, id: string) => call<LogLine[]>("GET", `/api/cards/${id}/log?${q(project)}`),
+  sequencePlay: (project: string) => call<{ sequence: SequenceState }>("POST", "/api/sequence/play", { project }),
+  sequencePause: (project: string) => call<{ sequence: SequenceState }>("POST", "/api/sequence/pause", { project }),
   skills: (project: string) => call<SkillInfo[]>("GET", `/api/skills?${q(project)}`),
   skill: (project: string, name: string) =>
     call<SkillInfo & { content: string }>("GET", `/api/skill?${q(project)}&name=${encodeURIComponent(name)}`),
