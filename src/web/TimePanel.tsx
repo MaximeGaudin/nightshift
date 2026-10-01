@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { cardTimeSlices, formatDuration, formatPercent, type TimePart, type TimeSlice } from "../shared/timeline.ts";
+import { cardTimeSlices, type DurationUnits, formatDuration, formatPercent, type TimePart, type TimeSlice } from "../shared/timeline.ts";
 import type { Board, Card } from "../shared/types.ts";
 import { type MessageKey, t, useT } from "./i18n/index.ts";
 
@@ -47,6 +47,13 @@ export function startTicker(onTick: () => void, ms = 1000): () => void {
   return () => clearInterval(id);
 }
 
+const durationUnits = (): DurationUnits => ({
+  second: t("time.unit.second"),
+  minute: t("time.unit.minute"),
+  hour: t("time.unit.hour"),
+  day: t("time.unit.day"),
+});
+
 /** Pie and legend at a given instant. Pure rendering, no timer. */
 export function TimePanelView({ card, board, nowMs }: { card: Card; board: Board; nowMs: number }) {
   useT();
@@ -58,7 +65,12 @@ export function TimePanelView({ card, board, nowMs }: { card: Card; board: Board
     const idx = hueIndex(board, s);
     const labelKey = PART_LABEL_KEY[s.part];
     const label = labelKey ? t(labelKey) : "";
-    const params = { column: s.columnName, part: label, duration: formatDuration(s.ms), percent: formatPercent(s.ms, total) };
+    const params = {
+      column: s.columnName,
+      part: label,
+      duration: formatDuration(s.ms, durationUnits()),
+      percent: formatPercent(s.ms, total, t("time.percentSign")),
+    };
     const title = t(label ? "card.time.sliceTitleWithPart" : "card.time.sliceTitle", params);
     // One slice per column and part (see cardTimeSlices): that pair is the identity of the slice.
     const key = `${s.columnId ?? `name:${s.columnName}`}:${s.part}`;
@@ -117,8 +129,10 @@ export function TimePanelView({ card, board, nowMs }: { card: Card; board: Board
             </svg>
             <span className="time-col truncate">{p.s.columnName}</span>
             <span className="time-part text-xs text-muted-foreground">{p.label}</span>
-            <span className="time-dur tabular-nums">{formatDuration(p.s.ms)}</span>
-            <span className="time-pct text-right text-xs text-muted-foreground tabular-nums">{formatPercent(p.s.ms, total)}</span>
+            <span className="time-dur tabular-nums">{formatDuration(p.s.ms, durationUnits())}</span>
+            <span className="time-pct text-right text-xs text-muted-foreground tabular-nums">
+              {formatPercent(p.s.ms, total, t("time.percentSign"))}
+            </span>
           </li>
         ))}
       </ul>

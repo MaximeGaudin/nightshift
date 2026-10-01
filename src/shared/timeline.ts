@@ -145,20 +145,33 @@ export function cardTimeSlices(card: Card, columns: Column[], nowMs: number): Ti
   return out;
 }
 
-/** "45 s", "14 min", "2 h 14 min", "3 j 4 h". */
-export function formatDuration(ms: number): string {
-  const s = Math.floor(Math.max(0, ms) / 1000);
-  if (s < 60) return `${s} s`;
-  const min = Math.floor(s / 60);
-  if (min < 60) return `${min} min`;
-  const h = Math.floor(min / 60);
-  if (h < 24) return `${h} h ${min % 60} min`;
-  return `${Math.floor(h / 24)} j ${h % 24} h`;
+/** Unit suffixes of formatDuration; the web passes translated ones, the default is French. */
+export interface DurationUnits {
+  second: string;
+  minute: string;
+  hour: string;
+  day: string;
 }
 
+export const FR_DURATION_UNITS: DurationUnits = { second: "s", minute: "min", hour: "h", day: "j" };
+
+/** "45 s", "14 min", "2 h 14 min", "3 j 4 h" (French units by default). */
+export function formatDuration(ms: number, u: DurationUnits = FR_DURATION_UNITS): string {
+  const s = Math.floor(Math.max(0, ms) / 1000);
+  if (s < 60) return `${s} ${u.second}`;
+  const min = Math.floor(s / 60);
+  if (min < 60) return `${min} ${u.minute}`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h} ${u.hour} ${min % 60} ${u.minute}`;
+  return `${Math.floor(h / 24)} ${u.day} ${h % 24} ${u.hour}`;
+}
+
+/** Percent sign spacing: French puts a space before it ("33 %"), English does not ("33%"). */
+export const FR_PERCENT_SIGN = " %";
+
 /** Integer percent of `part` in `total`; "< 1 %" when positive but rounds to 0. */
-export function formatPercent(part: number, total: number): string {
-  if (total <= 0 || part <= 0) return "0 %";
+export function formatPercent(part: number, total: number, sign: string = FR_PERCENT_SIGN): string {
+  if (total <= 0 || part <= 0) return `0${sign}`;
   const pct = Math.round((part / total) * 100);
-  return pct === 0 ? "< 1 %" : `${pct} %`;
+  return pct === 0 ? `< 1${sign}` : `${pct}${sign}`;
 }

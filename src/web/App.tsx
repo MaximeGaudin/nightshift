@@ -334,11 +334,17 @@ export function isSequential(snap: Pick<ProjectSnapshot, "sequence">, cardId: st
 }
 
 export function SequenceButton({ snap, guard }: { snap: ProjectSnapshot; guard: (p: Promise<unknown>) => void }) {
+  const { t } = useT();
   const active = snap.sequence.status === "active";
   return (
     <IconButton
       className="sequence-toggle"
-      label={sequenceLabel(snap.sequence, snap.board)}
+      label={sequenceLabel(snap.sequence, snap.board, {
+        stopped: t("board.sequence.stopped"),
+        active: t("board.sequence.active"),
+        paused: t("board.sequence.paused"),
+        pausedHint: t("board.sequence.pausedHint"),
+      })}
       disabled={snap.agentsDisabled || !!snap.lockedBy}
       onClick={() => guard(active ? api.sequencePause(snap.path) : api.sequencePlay(snap.path))}
     >

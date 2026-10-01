@@ -69,4 +69,13 @@ export const board = {
   "board.app.skills": "Skills",
   "board.app.settings": "Settings",
   "board.app.search": "Search",
+  "board.sequence.stopped": "Sequential mode: stopped",
+  "board.sequence.active": "Sequential mode: active",
+  "board.sequence.paused": "Sequential mode: paused",
+  "board.sequence.pausedHint": "(the next one will not start)",
+  "time.unit.second": "s",
+  "time.unit.minute": "min",
+  "time.unit.hour": "h",
+  "time.unit.day": "d",
+  "time.percentSign": "%",
 } as const;

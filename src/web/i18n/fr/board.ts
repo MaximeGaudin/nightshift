@@ -71,4 +71,13 @@ export const board: Record<keyof typeof enboard, string> = {
   "board.app.skills": "Skills",
   "board.app.settings": "Réglages",
   "board.app.search": "Rechercher",
+  "board.sequence.stopped": "Mode séquentiel : arrêté",
+  "board.sequence.active": "Mode séquentiel : actif",
+  "board.sequence.paused": "Mode séquentiel : en pause",
+  "board.sequence.pausedHint": "(la suivante ne partira pas)",
+  "time.unit.second": "s",
+  "time.unit.minute": "min",
+  "time.unit.hour": "h",
+  "time.unit.day": "j",
+  "time.percentSign": " %",
 };

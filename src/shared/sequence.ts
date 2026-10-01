@@ -55,11 +55,27 @@ export function sequenceFailure(board: Board, card: Card, running: boolean): str
   return undefined;
 }
 
+/** Wording of the sequence tooltip; the web passes translated pieces, the default is the original French. */
+export interface SequenceLabels {
+  stopped: string;
+  active: string;
+  /** Text after the card reference when the sequence is paused. */
+  paused: string;
+  pausedHint: string;
+}
+
+export const FR_SEQUENCE_LABELS: SequenceLabels = {
+  stopped: "Mode séquentiel : arrêté",
+  active: "Mode séquentiel : actif",
+  paused: "Mode séquentiel : en pause",
+  pausedHint: "(la suivante ne partira pas)",
+};
+
 /** Tooltip of the sequence control. */
-export function sequenceLabel(state: SequenceState, board: Board): string {
-  if (state.status === "stopped") return "Mode séquentiel : arrêté";
+export function sequenceLabel(state: SequenceState, board: Board, labels: SequenceLabels = FR_SEQUENCE_LABELS): string {
+  if (state.status === "stopped") return labels.stopped;
   const card = state.cardId ? board.cards.find((c) => c.id === state.cardId) : undefined;
   const ref = card ? ` — ${cardRef(card)}` : "";
-  if (state.status === "active") return `Mode séquentiel : actif${ref}`;
-  return `Mode séquentiel : en pause${ref} (la suivante ne partira pas)`;
+  if (state.status === "active") return `${labels.active}${ref}`;
+  return `${labels.paused}${ref} ${labels.pausedHint}`;
 }
