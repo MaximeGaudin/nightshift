@@ -105,7 +105,7 @@ const surfaces: Record<string, () => ReactNode> = {
   "skills modal": () => <SkillsModal project="/tmp/demo" onClose={noop} />,
   "columns editor": () => <ColumnsEditor snap={snap} onClose={noop} />,
   "command palette": () => (
-    <CommandPalette commands={buildCommands({ snap, recentProjects: settings.recentProjects })} onRun={noop} onClose={noop} />
+    <CommandPalette commands={buildCommands({ snap, recentProjects: settings.recentProjects, skills: [] })} onRun={noop} onClose={noop} />
   ),
   "shortcuts help": () => <ShortcutsHelp onClose={noop} />,
   "sequence button": () => <SequenceButton snap={snap} guard={noop} />,
