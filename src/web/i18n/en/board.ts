@@ -12,6 +12,8 @@ export const board = {
   "board.card.questions_other": "{count} questions",
   "board.progress.step": "Step {step}/{total}",
   "board.progress.aria": "Step {step} of {total}: {label}",
+  "board.progress.activity": "Working",
+  "board.progress.activityAria": "Current activity: {label}",
   "board.screenshot.missing": "Screenshot not found — {alt}",
   "board.screenshot.default": "Screenshot",
   "board.addCard": "Add a card",
