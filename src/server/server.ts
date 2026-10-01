@@ -171,6 +171,9 @@ export function startServer({ port, development, agents = true }: { port: number
       "/api/cards/:id/answer": {
         POST: h((b, url, req) => orch.answer(project(b, url), req.params.id!, Array.isArray(b.answers) ? b.answers.map(String) : [])),
       },
+      "/api/cards/:id/feedback": {
+        POST: h((b, url, req) => orch.feedback(project(b, url), req.params.id!, typeof b.text === "string" ? b.text : "")),
+      },
       "/api/cards/:id/screenshot": {
         GET: h((_b, url, req) => {
           const card = project({}, url).card(req.params.id!);
