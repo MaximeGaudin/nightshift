@@ -1,4 +1,4 @@
-import { existsSync, type FSWatcher, readFileSync, renameSync, statSync, watch, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, type FSWatcher, readFileSync, renameSync, statSync, watch, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { replayHistory } from "../shared/timeline.ts";
 import {
@@ -208,6 +208,8 @@ export class Project {
   private listeners = new Set<() => void>();
   private watcher: FSWatcher | null = null;
   private lastWrittenMtime = 0;
+  /** Set when a reload failed: the file on disk holds an edit we could not read and must not silently overwrite. */
+  private unreadableOnDisk = false;
 
   constructor(path: string) {
     this.path = path;
@@ -223,12 +225,25 @@ export class Project {
 
   /** Loads the file into `board`. Writes it back at once when numbering had to be migrated or repaired. */
   private read() {
-    const raw = JSON.parse(readFileSync(this.file, "utf8"));
+    let raw: any;
+    try {
+      raw = JSON.parse(readFileSync(this.file, "utf8"));
+    } catch (e) {
+      throw new Error(`nightshift.json invalide : ${this.file} (${e instanceof Error ? e.message : String(e)})`);
+    }
+    this.unreadableOnDisk = false;
     this.board = normalizeBoard(raw, basename(this.path));
     if (numberingChanged(raw, this.board) || doneColumnChanged(raw, this.board)) this.write();
   }
 
   private write() {
+    // An external edit we failed to parse is about to be overwritten: keep a copy.
+    if (this.unreadableOnDisk) {
+      try {
+        copyFileSync(this.file, `${this.file}.invalid`);
+      } catch {}
+      this.unreadableOnDisk = false;
+    }
     const tmp = `${this.file}.tmp`;
     writeFileSync(tmp, `${JSON.stringify(this.board, null, 2)}\n`);
     renameSync(tmp, this.file);
@@ -250,11 +265,14 @@ export class Project {
     try {
       const mtime = statSync(this.file).mtimeMs;
       if (mtime === this.lastWrittenMtime) return;
-      this.lastWrittenMtime = mtime;
       this.read();
+      this.lastWrittenMtime = mtime;
       this.emit();
-    } catch {
-      // Partial write or invalid JSON: keep the in-memory board.
+    } catch (e) {
+      // Partial write or invalid JSON: keep the in-memory board, retry on the next change, and remember that
+      // the file holds an edit we did not load so the next write backs it up.
+      console.error(e instanceof Error ? e.message : String(e));
+      this.unreadableOnDisk = true;
     }
   }
 
