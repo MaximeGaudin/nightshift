@@ -14,6 +14,7 @@ export function SettingsModal({ settings, onClose }: { settings: Settings; onClo
         permissionMode: s.permissionMode,
         model: s.model,
         extraArgs: s.extraArgs,
+        soundNotifications: s.soundNotifications,
       })
       .then(onClose)
       .catch((e) => setError(e.message));
@@ -76,6 +77,19 @@ export function SettingsModal({ settings, onClose }: { settings: Settings; onClo
             onChange={(e) => setS({ ...s, extraArgs: e.target.value })}
           />
         </label>
+        <label style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <input
+            type="checkbox"
+            style={{ width: "auto" }}
+            checked={s.soundNotifications}
+            onChange={(e) => setS({ ...s, soundNotifications: e.target.checked })}
+          />
+          Sons de notification
+        </label>
+        <p className="hint small">
+          Joue un son quand une carte a besoin de vous (colonne inerte, question, erreur). Le navigateur exige un premier clic sur la
+          page.
+        </p>
         <p className="hint small">Réglages globaux, stockés dans ~/.nightshift/settings.json.</p>
       </div>
     </Modal>
