@@ -25,25 +25,25 @@ const tile = (c: Card, snap: ProjectSnapshot) =>
 
 test("seq-ui-button", () => {
   for (const [status, icon] of [
-    ["stopped", "icon-play"],
-    ["active", "icon-pause"],
-    ["paused", "icon-play"],
+    ["stopped", "lucide-play"],
+    ["active", "lucide-pause"],
+    ["paused", "lucide-play"],
   ] as const) {
     const sequence = { status, ...(status === "stopped" ? {} : { cardId: "card_1" }) };
     const snap = snapWith({ sequence });
     const html = render(snap);
     expect(html).toContain(icon);
     const label = sequenceLabel(sequence, board as never);
-    expect(html).toContain(`title="${label.replace(/&/g, "&amp;")}"`);
     expect(html).toContain(`aria-label="${label}"`);
-    expect(html).not.toMatch(/<button[^>]*disabled/);
+    expect(html).not.toMatch(/<button[^>]*\sdisabled(=|\s|>)/);
     expect(html).not.toContain("sequence-notice");
   }
-  expect(render(snapWith({ sequence: { status: "stopped" }, agentsDisabled: true }))).toMatch(/<button[^>]*disabled/);
-  expect(render(snapWith({ sequence: { status: "stopped" }, lockedBy: 42 }))).toMatch(/<button[^>]*disabled/);
+  expect(render(snapWith({ sequence: { status: "stopped" }, agentsDisabled: true }))).toMatch(/<button[^>]*\sdisabled(=|\s|>)/);
+  expect(render(snapWith({ sequence: { status: "stopped" }, lockedBy: 42 }))).toMatch(/<button[^>]*\sdisabled(=|\s|>)/);
 
   const notice = render(snapWith({ sequence: { status: "paused", cardId: "card_1", notice: "en erreur : boom" } }));
-  expect(notice).toContain('class="sequence-notice" role="status"');
+  expect(notice).toMatch(/class="[^"]*sequence-notice[^"]*"/);
+  expect(notice).toContain('role="status"');
   expect(notice).toContain("en erreur : boom");
 });
 

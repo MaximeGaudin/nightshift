@@ -1,16 +1,28 @@
-import { useCallback, useEffect, useState } from "react";
+import { Columns3, Info, Moon, Pause, Play, Settings as SettingsIcon, Sparkles, TriangleAlert } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { sequenceLabel } from "../shared/sequence.ts";
 import type { ProjectSnapshot } from "../shared/types.ts";
 import { api, useServerEvents, useSettings } from "./api.ts";
 import { Board } from "./Board.tsx";
 import { CardModal } from "./CardModal.tsx";
 import { ColumnsEditor } from "./ColumnsEditor.tsx";
-import { Icon } from "./icons.tsx";
+import { CommandPalette } from "./CommandPalette.tsx";
+import { buildCommands, type CommandAction } from "./commands.ts";
+import { AppDialog } from "./components/app-dialog.tsx";
+import { IconButton } from "./components/icon-button.tsx";
+import { Alert } from "./components/ui/alert.tsx";
+import { Button } from "./components/ui/button.tsx";
+import { Kbd } from "./components/ui/kbd.tsx";
+import { Skeleton } from "./components/ui/skeleton.tsx";
+import { Toaster } from "./components/ui/sonner.tsx";
+import { NewCardDialog } from "./NewCardDialog.tsx";
+import { notifyError } from "./notify.ts";
 import { ProjectPicker } from "./ProjectPicker.tsx";
 import { SettingsModal } from "./SettingsModal.tsx";
+import { ShortcutsHelp } from "./ShortcutsHelp.tsx";
 import { SkillsModal } from "./SkillsModal.tsx";
+import { shortcutFor } from "./shortcuts.ts";
 import { installAudioUnlock, notifyAttention } from "./sound.ts";
-import { ErrorBanner } from "./ui.tsx";
 
 const readProjectParam = () => new URLSearchParams(location.search).get("project");
 
@@ -29,16 +41,47 @@ function useProjectParam(): [string | null, (p: string | null) => void] {
   return [project, set];
 }
 
+type Modal = "settings" | "columns" | "skills" | "projects";
+
+function BoardSkeleton() {
+  return (
+    <div className="flex h-full flex-col" role="status" aria-label="Chargement…">
+      <div className="flex h-11 items-center gap-3 border-b bg-card px-4">
+        <Skeleton className="size-5" />
+        <Skeleton className="h-4 w-40" />
+        <Skeleton className="ml-auto h-6 w-24" />
+      </div>
+      <div className="flex flex-1 gap-4 overflow-hidden p-4">
+        {[3, 2, 1, 2].map((n, i) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: static placeholder columns
+          <div key={i} className="flex w-72 shrink-0 flex-col gap-2">
+            <Skeleton className="h-5 w-28" />
+            {Array.from({ length: n }, (_, j) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: static placeholder cards
+              <Skeleton key={j} className="h-16 w-full" />
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function App() {
   const [project, setProject] = useProjectParam();
   const [snap, setSnap] = useState<ProjectSnapshot | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [modal, setModal] = useState<"settings" | "columns" | "skills" | "projects" | null>(null);
+  // Opening the project failed: go back to the project picker.
+  const [openFailed, setOpenFailed] = useState(false);
+  const [modal, setModal] = useState<Modal | null>(null);
   const [openCard, setOpenCard] = useState<string | null>(null);
-  const settings = useSettings(setError);
+  const [palette, setPalette] = useState(false);
+  const [help, setHelp] = useState(false);
+  const [newCard, setNewCard] = useState<{ title: string } | null>(null);
+  const settings = useSettings(notifyError);
 
   useEffect(() => {
     setSnap(null);
+    setOpenFailed(false);
     if (!project) return;
     // Switching project quickly: only the answer of the latest open may be shown.
     let cancelled = false;
@@ -50,7 +93,9 @@ export function App() {
         if (s.path !== project) setProject(s.path);
       })
       .catch((e) => {
-        if (!cancelled) setError(e.message);
+        if (cancelled) return;
+        notifyError(e.message);
+        setOpenFailed(true);
       });
     return () => {
       cancelled = true;
@@ -74,23 +119,69 @@ export function App() {
     document.title = boardName ? `${boardName} · Nightshift` : "Nightshift";
   }, [boardName]);
 
-  const guard = useCallback((p: Promise<unknown>) => p.catch((e) => setError(e.message)), []);
+  const guard = useCallback((p: Promise<unknown>) => p.catch((e) => notifyError(e.message)), []);
 
-  if (!project || (!snap && error)) {
+  // Single global keyboard listener; it reads the latest state through a ref.
+  const dialogOpen = !!(modal || openCard || palette || help || newCard);
+  const keyState = useRef({ dialogOpen, ready: false });
+  keyState.current = { dialogOpen, ready: !!snap };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!keyState.current.ready || e.defaultPrevented) return;
+      const action = shortcutFor(e, { dialogOpen: keyState.current.dialogOpen });
+      if (!action) return;
+      e.preventDefault();
+      if (action === "palette") setPalette(true);
+      else if (action === "newCard") setNewCard({ title: "" });
+      else setHelp(true);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const runAction = (action: CommandAction, search: string) => {
+    setPalette(false);
+    if (!snap) return;
+    switch (action.type) {
+      case "openCard":
+        setOpenCard(action.cardId);
+        break;
+      case "newCard":
+        setNewCard({ title: search });
+        break;
+      case "openModal":
+        setModal(action.modal);
+        break;
+      case "openProject":
+        setProject(action.path);
+        break;
+      case "sequence":
+        guard(action.play ? api.sequencePlay(snap.path) : api.sequencePause(snap.path));
+        break;
+    }
+  };
+
+  if (!project || (!snap && openFailed)) {
     return (
-      <div className="app">
-        <ErrorBanner error={error} onClose={() => setError(null)} />
+      <div className="flex h-full flex-col overflow-y-auto">
         <ProjectPicker
           recent={settings?.recentProjects ?? []}
           onPick={(p) => {
-            setError(null);
+            setOpenFailed(false);
             setProject(p);
           }}
         />
+        <Toaster />
       </div>
     );
   }
-  if (!snap) return <div className="app loading">Chargement…</div>;
+  if (!snap)
+    return (
+      <>
+        <BoardSkeleton />
+        <Toaster />
+      </>
+    );
 
   const running = Object.values(snap.live).filter((s) => s === "running").length;
   const queued = Object.values(snap.live).filter((s) => s === "queued").length;
@@ -100,52 +191,67 @@ export function App() {
   const card = openCard ? snap.board.cards.find((c) => c.id === openCard) : undefined;
 
   return (
-    <div className="app">
-      <header className="topbar">
-        <div className="brand">
-          <span className="moon">
-            <Icon name="moon" size={18} />
-          </span>
-          <div className="brand-text">
-            <h1>{snap.board.name}</h1>
-            <button type="button" className="path ghost" onClick={() => setModal("projects")} title="Changer de projet">
+    <div className="flex h-full flex-col">
+      <header className="flex min-h-11 shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-b bg-card px-4 py-1.5">
+        <div className="flex min-w-0 items-center gap-2">
+          <Moon className="size-[18px] shrink-0 text-primary" aria-hidden="true" />
+          <div className="flex min-w-0 items-baseline gap-2">
+            <h1 className="truncate text-[15px] font-semibold tracking-tight">{snap.board.name}</h1>
+            <button
+              type="button"
+              className="truncate rounded-sm font-mono text-xs text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={() => setModal("projects")}
+              title="Changer de projet"
+            >
               {snap.path}
             </button>
           </div>
         </div>
-        <div className="agent-status" aria-live="polite">
-          <span className={`dot ${running ? "on" : ""}`} />
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground" aria-live="polite">
+          <span className={`size-1.5 rounded-full ${running ? "bg-ok" : "bg-muted-foreground/40"}`} aria-hidden="true" />
           {running} / {settings?.maxParallel ?? "?"} agents actifs
-          {queued > 0 && <span className="muted"> · {queued} en attente</span>}
+          {queued > 0 && <span> · {queued} en attente</span>}
           {questions > 0 && (
-            <span className="questions">
+            <span className="font-medium text-warn">
               · {questions} question{questions > 1 ? "s" : ""} pour vous
             </span>
           )}
         </div>
-        <nav className="actions">
-          <SequenceControl snap={snap} guard={guard} />
-          <button type="button" className="ghost" onClick={() => setModal("columns")}>
+        <nav className="ml-auto flex items-center gap-1">
+          <SequenceButton snap={snap} guard={guard} />
+          <Button variant="ghost" onClick={() => setModal("columns")}>
+            <Columns3 aria-hidden="true" />
             Colonnes
-          </button>
-          <button type="button" className="ghost" onClick={() => setModal("skills")}>
+          </Button>
+          <Button variant="ghost" onClick={() => setModal("skills")}>
+            <Sparkles aria-hidden="true" />
             Skills
-          </button>
-          <button type="button" className="ghost" onClick={() => setModal("settings")}>
+          </Button>
+          <Button variant="ghost" onClick={() => setModal("settings")}>
+            <SettingsIcon aria-hidden="true" />
             Réglages
-          </button>
+          </Button>
+          <Button variant="outline" size="sm" className="ml-1 text-muted-foreground" onClick={() => setPalette(true)}>
+            Rechercher <Kbd>⌘K</Kbd>
+          </Button>
         </nav>
       </header>
-      <ErrorBanner error={error} onClose={() => setError(null)} />
-      {snap.agentsDisabled && (
-        <div className="lock-banner" role="status">
-          Instance de test (--no-agents) : aucun agent ne sera lancé depuis cette fenêtre.
-        </div>
-      )}
-      {snap.lockedBy && (
-        <div className="lock-banner" role="status">
-          Un autre processus Nightshift (pid {snap.lockedBy}) exécute déjà les agents de ce projet. Cette fenêtre affiche et édite le kanban
-          mais ne lance aucun agent tant que l'autre processus tourne.
+      {(snap.agentsDisabled || snap.lockedBy || snap.sequence.notice) && (
+        <div className="flex shrink-0 flex-col gap-1.5 px-4 pt-3">
+          {snap.agentsDisabled && (
+            <Alert role="status">
+              <Info aria-hidden="true" />
+              Instance de test (--no-agents) : aucun agent ne sera lancé depuis cette fenêtre.
+            </Alert>
+          )}
+          {snap.lockedBy && (
+            <Alert role="status" variant="warn">
+              <TriangleAlert aria-hidden="true" />
+              Un autre processus Nightshift (pid {snap.lockedBy}) exécute déjà les agents de ce projet. Cette fenêtre affiche et édite le
+              kanban mais ne lance aucun agent tant que l'autre processus tourne.
+            </Alert>
+          )}
+          <SequenceNotice snap={snap} />
         </div>
       )}
       <Board snap={snap} onOpen={setOpenCard} guard={guard} />
@@ -160,28 +266,56 @@ export function App() {
           testing={snap.testing?.includes(card.id) ?? false}
           sequential={isSequential(snap, card.id)}
           onClose={() => setOpenCard(null)}
-          onError={setError}
+          onError={notifyError}
         />
       )}
       {modal === "columns" && <ColumnsEditor snap={snap} onClose={() => setModal(null)} />}
       {modal === "skills" && <SkillsModal project={snap.path} onClose={() => setModal(null)} />}
-      {modal === "settings" && settings && <SettingsModal settings={settings} onClose={() => setModal(null)} />}
-      {modal === "projects" && (
-        // biome-ignore lint/a11y/noStaticElementInteractions: clicking outside the dialog is a mouse shortcut; the project picker has its own cancel button
-        <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && setModal(null)}>
-          <div className="modal wide">
-            <ProjectPicker
-              recent={settings?.recentProjects ?? []}
-              current={snap.path}
-              onPick={(p) => {
-                setModal(null);
-                setProject(p);
-              }}
-              onCancel={() => setModal(null)}
-            />
-          </div>
-        </div>
+      {modal === "settings" && settings && (
+        <SettingsModal
+          settings={settings}
+          currentProject={snap.path}
+          onOpenProject={(p) => {
+            setModal(null);
+            setProject(p);
+          }}
+          onClose={() => setModal(null)}
+        />
       )}
+      {modal === "projects" && (
+        <AppDialog size="lg" title="Changer de projet" onClose={() => setModal(null)}>
+          <ProjectPicker
+            embedded
+            recent={settings?.recentProjects ?? []}
+            current={snap.path}
+            onPick={(p) => {
+              setModal(null);
+              setProject(p);
+            }}
+            onCancel={() => setModal(null)}
+          />
+        </AppDialog>
+      )}
+      {palette && (
+        <CommandPalette
+          commands={buildCommands({ snap, recentProjects: settings?.recentProjects ?? [] })}
+          onRun={runAction}
+          onClose={() => setPalette(false)}
+        />
+      )}
+      {help && <ShortcutsHelp onClose={() => setHelp(false)} />}
+      {newCard && (
+        <NewCardDialog
+          columns={snap.board.columns}
+          initialTitle={newCard.title}
+          onAdd={(title, skip) => {
+            const first = snap.board.columns[0];
+            if (first) guard(api.createCard(snap.path, first.id, title, "", skip));
+          }}
+          onClose={() => setNewCard(null)}
+        />
+      )}
+      <Toaster />
     </div>
   );
 }
@@ -191,26 +325,35 @@ export function isSequential(snap: Pick<ProjectSnapshot, "sequence">, cardId: st
   return snap.sequence.status !== "stopped" && snap.sequence.cardId === cardId;
 }
 
-export function SequenceControl({ snap, guard }: { snap: ProjectSnapshot; guard: (p: Promise<unknown>) => void }) {
+export function SequenceButton({ snap, guard }: { snap: ProjectSnapshot; guard: (p: Promise<unknown>) => void }) {
   const active = snap.sequence.status === "active";
-  const label = sequenceLabel(snap.sequence, snap.board);
+  return (
+    <IconButton
+      className="sequence-toggle"
+      label={sequenceLabel(snap.sequence, snap.board)}
+      disabled={snap.agentsDisabled || !!snap.lockedBy}
+      onClick={() => guard(active ? api.sequencePause(snap.path) : api.sequencePlay(snap.path))}
+    >
+      {active ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
+    </IconButton>
+  );
+}
+
+export function SequenceNotice({ snap }: { snap: Pick<ProjectSnapshot, "sequence"> }) {
+  if (!snap.sequence.notice) return null;
+  return (
+    <Alert role="status" variant="warn" className="sequence-notice">
+      <TriangleAlert aria-hidden="true" />
+      {snap.sequence.notice}
+    </Alert>
+  );
+}
+
+export function SequenceControl({ snap, guard }: { snap: ProjectSnapshot; guard: (p: Promise<unknown>) => void }) {
   return (
     <>
-      <button
-        type="button"
-        className="ghost sequence-toggle"
-        title={label}
-        aria-label={label}
-        disabled={snap.agentsDisabled || !!snap.lockedBy}
-        onClick={() => guard(active ? api.sequencePause(snap.path) : api.sequencePlay(snap.path))}
-      >
-        <Icon name={active ? "pause" : "play"} size={14} />
-      </button>
-      {snap.sequence.notice && (
-        <span className="sequence-notice" role="status">
-          {snap.sequence.notice}
-        </span>
-      )}
+      <SequenceButton snap={snap} guard={guard} />
+      <SequenceNotice snap={snap} />
     </>
   );
 }
