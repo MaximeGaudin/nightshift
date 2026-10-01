@@ -355,7 +355,20 @@ export class Orchestrator {
     }
   }
 
+  /** Drops everything kept for a deleted card: in-memory logs, last test output and the log file. */
+  purgeCard(p: Project, cardId: string) {
+    const k = this.key(p, cardId);
+    this.logs.delete(k);
+    this.lastTestLines.delete(k);
+    const file = this.logFile(p, cardId);
+    if (file) rmSync(file, { force: true });
+  }
+
+  private logWriteFailed = false;
+
   private log(p: Project, cardId: string, kind: LogLine["kind"], text: string) {
+    // A deleted card keeps no log (late messages of its stopped agent would recreate the file).
+    if (!p.card(cardId)) return;
     const line: LogLine = { at: new Date().toISOString(), kind, text };
     const k = this.key(p, cardId);
     const arr = this.logs.get(k) ?? [];
@@ -365,7 +378,12 @@ export class Orchestrator {
     try {
       const file = this.logFile(p, cardId, true);
       if (file) appendFileSync(file, `${JSON.stringify(line)}\n`);
-    } catch {}
+    } catch (e) {
+      if (!this.logWriteFailed) {
+        this.logWriteFailed = true;
+        console.error(`Could not write the agent log (further failures are not reported): ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
     this.broadcast({ type: "log", project: p.path, cardId, line });
   }
 

@@ -239,6 +239,7 @@ export function startServer({ port, development, agents = true }: { port: number
             board.cards = board.cards.filter((c) => c.id !== req.params.id);
           });
           removeScreenshots(req.params.id!);
+          orch.purgeCard(p, req.params.id!);
         }),
       },
       "/api/cards/:id/move": {
