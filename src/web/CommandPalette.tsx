@@ -62,8 +62,13 @@ export function CommandPalette({
                       disabled={c.disabled}
                       onSelect={() => onRun(c.action, search.trim())}
                     >
-                      <span className="truncate">{commandLabel(c, search)}</span>
-                      {c.subtitle && <span className="ml-auto truncate pl-3 text-xs text-muted-foreground">{c.subtitle}</span>}
+                      <span className="min-w-0 truncate">{commandLabel(c, search)}</span>
+                      {/* The label wins the space: a long subtitle (a skill description) is cut first. */}
+                      {c.subtitle && (
+                        <span className="ml-auto min-w-0 max-w-[50%] shrink-[100] truncate pl-3 text-xs text-muted-foreground">
+                          {c.subtitle}
+                        </span>
+                      )}
                     </CommandItem>
                   ))}
                 </CommandGroup>
