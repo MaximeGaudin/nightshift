@@ -53,13 +53,17 @@
   flex: 1; display: flex; gap: var(--sp-4);
   padding: var(--sp-4) var(--sp-5); overflow-x: auto; align-items: flex-start;
 }
+/* Auto margins only take positive free space: centers the columns, never clips the first one on overflow. */
+.board > :first-child { margin-left: auto; }
+.board > :last-child { margin-right: auto; }
 .column {
-  /* min-width: 0 keeps every column at 290px even when a long skill badge would widen it. */
-  flex: 0 0 290px; min-width: 0; max-height: 100%; display: flex; flex-direction: column;
+  /* Wide columns share the free space equally, between 290px and 560px; the fixed basis and max-width
+     stop a long skill badge from widening a column. Strips (.compact, .done-collapsed) opt out below. */
+  flex: 1 0 290px; min-width: 290px; max-width: 560px; max-height: 100%; display: flex; flex-direction: column;
   background: transparent; border-radius: var(--radius-lg); border: 1px solid transparent;
   transition: border-color var(--dur), background var(--dur), flex-basis var(--dur);
 }
-.column.compact { flex: 0 0 48px; align-self: stretch; min-width: 0; max-height: 100%; overflow: hidden; }
+.column.compact { flex: 0 0 48px; align-self: stretch; min-width: 0; max-width: none; max-height: 100%; overflow: hidden; }
 .column-band {
   flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column;
   align-items: center; justify-content: flex-start; gap: var(--sp-3); padding: var(--sp-3) 0;
@@ -164,7 +168,7 @@ button.add-card:hover:not(:disabled) { color: var(--text); }
 
 /* ---------- Done column ---------- */
 .column.done-collapsed {
-  flex: 0 0 44px; align-items: center; gap: var(--sp-3); padding: var(--sp-3) 0; cursor: pointer;
+  flex: 0 0 44px; min-width: 0; max-width: none; align-items: center; gap: var(--sp-3); padding: var(--sp-3) 0; cursor: pointer;
   border-color: var(--border, transparent);
 }
 .column.done-collapsed:hover, .column.done-collapsed:focus-visible { background: var(--accent-soft); }
