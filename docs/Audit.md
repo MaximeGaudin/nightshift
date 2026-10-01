@@ -4,6 +4,7 @@
 - Commit audité : `767f30a` (branche `nightshift/card_49c12198e8-t2-audit`, après la Task 1)
 - Périmètre : tout `src/`, `bin/`, `test/`, `README.md`, `.gitignore`, `package.json`, `biome.json`.
 - Vérifications faites : `bunx biome check .` (0 erreur, 12 avertissements, 1 info), `bun test` (167 tests verts, ~29 s), `bun audit` (aucune vulnérabilité connue, donc aucune mise à jour de dépendance), sondes locales sur un serveur de test (voir A1, A3, A8, A12).
+- Statut final : 2026-10-01, 39 constats sur 39 corrigés (0 reporté), `bun run check` : code de sortie 0 (Biome sans avertissement, tsc, 227 tests verts), `bun run test:coverage` : code de sortie 0.
 - Hors périmètre (spec) : i18n, accès LAN/auth, CI, refonte.
 - Revu sans constat : service des captures (`resolveScreenshot` : realpath + liste blanche issue de la description), `persistScreenshots`, rendu Markdown (`safeHref`, images limitées aux captures de la carte), `createSkill` (nom validé par `NAME_RE`), `Bun.spawn` des agents (tableau d'arguments, prompt par stdin, pas de shell), écriture atomique de `nightshift.json` et `settings.json`.
 
@@ -11,45 +12,45 @@
 
 | id | catégorie | sévérité | emplacement | tâche | statut | commit |
 |----|-----------|----------|-------------|-------|--------|--------|
-| A1 | sécurité | critique | src/server/server.ts:56-57,62-65,201-218,235 | Task 3 | à corriger | |
-| A2 | sécurité | haute | src/server/server.ts:74-89 | Task 3 | à corriger | |
-| A3 | sécurité | haute | src/server/orchestrator.ts:329-347 | Task 4 | à corriger | |
-| A4 | robustesse | haute | src/server/orchestrator.ts:548-552,638,787 | Task 4 | à corriger | |
-| A5 | sécurité | haute | src/web/TestPanel.tsx:112 | Task 4 | à corriger | |
-| A6 | robustesse | moyenne | bin/nightshift.ts:6,12 | Task 5 | à corriger | |
-| A7 | robustesse | moyenne | src/server/orchestrator.ts:423-431,861-882 | Task 4 | à corriger | |
-| A8 | robustesse | moyenne | src/server/server.ts:46 | Task 8 | à corriger | |
-| A9 | robustesse | moyenne | src/server/server.ts:54, src/server/orchestrator.ts:294-297 | Task 8 | à corriger | |
-| A10 | robustesse | moyenne | src/server/server.ts:92-123 | Task 8 | à corriger | |
-| A11 | robustesse | moyenne | src/server/server.ts:125-163 | Task 8 | à corriger | |
-| A12 | robustesse | moyenne | src/server/server.ts:232 | Task 8 | à corriger | |
-| A13 | robustesse | moyenne | src/server/settings.ts:26-52 | Task 6 | à corriger | |
-| A14 | robustesse | moyenne | src/server/skills.ts:30,80 | Task 7 | à corriger | |
-| A15 | robustesse | moyenne | src/server/store.ts:225-229,249-259 | Task 4 | à corriger | |
-| A16 | tests | moyenne | test/nightshift.test.ts:6-9, test/column-emoji.test.ts:8-9 | Task 4 | à corriger | |
-| A17 | tests | moyenne | src/server/server.ts (routes), test/ | Task 8 | à corriger | |
-| A18 | tests | moyenne | src/server/settings.ts, test/ | Task 6 | à corriger | |
-| A19 | tests | moyenne | src/server/skills.ts, test/ | Task 7 | à corriger | |
-| A20 | docs | basse | README.md:5-12,20-22,36-40, .gitignore:4, package.json:8 | Task 9 | à corriger | |
+| A1 | sécurité | critique | src/server/server.ts:56-57,62-65,201-218,235 | Task 3 | corrigé | d8f7c0e, d6683db |
+| A2 | sécurité | haute | src/server/server.ts:74-89 | Task 3 | corrigé | d8f7c0e, d6683db |
+| A3 | sécurité | haute | src/server/orchestrator.ts:329-347 | Task 4 | corrigé | 1556b88 |
+| A4 | robustesse | haute | src/server/orchestrator.ts:548-552,638,787 | Task 4 | corrigé | cccb7c6 |
+| A5 | sécurité | haute | src/web/TestPanel.tsx:112 | Task 4 | corrigé | 162aace |
+| A6 | robustesse | moyenne | bin/nightshift.ts:6,12 | Task 5 | corrigé | 6593a7b |
+| A7 | robustesse | moyenne | src/server/orchestrator.ts:423-431,861-882 | Task 4 | corrigé | 18ac9b5 |
+| A8 | robustesse | moyenne | src/server/server.ts:46 | Task 8 | corrigé | 1a31e7e |
+| A9 | robustesse | moyenne | src/server/server.ts:54, src/server/orchestrator.ts:294-297 | Task 8 | corrigé | 75c78ad |
+| A10 | robustesse | moyenne | src/server/server.ts:92-123 | Task 8 | corrigé | 52308b4 |
+| A11 | robustesse | moyenne | src/server/server.ts:125-163 | Task 8 | corrigé | eed9b3e |
+| A12 | robustesse | moyenne | src/server/server.ts:232 | Task 8 | corrigé | c10e2db |
+| A13 | robustesse | moyenne | src/server/settings.ts:26-52 | Task 6 | corrigé | 2ef7f7a |
+| A14 | robustesse | moyenne | src/server/skills.ts:30,80 | Task 7 | corrigé | 6db6d5f |
+| A15 | robustesse | moyenne | src/server/store.ts:225-229,249-259 | Task 4 | corrigé | c2f4a70, 092e62f |
+| A16 | tests | moyenne | test/nightshift.test.ts:6-9, test/column-emoji.test.ts:8-9 | Task 4 | corrigé | 8df9332 |
+| A17 | tests | moyenne | src/server/server.ts (routes), test/ | Task 8 | corrigé | 74bfa9e |
+| A18 | tests | moyenne | src/server/settings.ts, test/ | Task 6 | corrigé | 2ef7f7a |
+| A19 | tests | moyenne | src/server/skills.ts, test/ | Task 7 | corrigé | 6db6d5f |
+| A20 | docs | basse | README.md:3,9-10,26-30, .gitignore:4, package.json:8 | Task 9 | corrigé | ffbe957, 60eebd2 |
 | A21 | lint | basse | biome.json, package.json, ensemble du dépôt | Task 1 | corrigé | be6cb27, 767f30a |
-| A22 | robustesse | basse | bin/nightshift.ts:21-40 | Task 9 | à corriger | |
-| A23 | bonnes pratiques | basse | src/server/orchestrator.ts:212-219,349-360 | Task 9 | à corriger | |
-| A24 | robustesse | basse | src/server/orchestrator.ts:834-848 | Task 9 | à corriger | |
-| A25 | bonnes pratiques | basse | src/server/server.ts:38 | Task 9 | à corriger | |
-| A26 | robustesse | basse | src/server/skills.ts:45,67-72,81 | Task 9 | à corriger | |
-| A27 | robustesse | basse | src/server/store.ts:231-247 | Task 9 | à corriger | |
-| A28 | robustesse | basse | src/web/api.ts:54-60,75, src/web/App.tsx:41-51 | Task 9 | à corriger | |
-| A29 | robustesse | basse | src/web/CardModal.tsx:112-114,122,213 | Task 9 | à corriger | |
-| A30 | tests | basse | test/nightshift.test.ts (17 `Bun.sleep`, 33 `mkdtempSync`), test/run-progress.test.ts, test/time-panel.test.tsx:94,98 | Task 9 | à corriger | |
-| A31 | lint | basse | règle `suspicious/noExplicitAny` (86), 11 fichiers | Task 9 | à corriger | |
-| A32 | lint | basse | règle `style/noNonNullAssertion` (138), 27 fichiers | Task 9 | à corriger | |
-| A33 | lint | basse | règle `suspicious/noArrayIndexKey` (24) | Task 9 | à corriger | |
-| A34 | lint | basse | règles `noAssignInExpressions` (4), `noImplicitAnyLet` (3), `useIterableCallbackReturn` (3) | Task 9 | à corriger | |
-| A35 | lint | basse | règle `suspicious/noControlCharactersInRegex` (3) : orchestrator.ts:843, markdown.tsx:281 | Task 9 | à corriger | |
-| A36 | lint | basse | règle `correctness/useExhaustiveDependencies` (15), src/web | Task 9 | à corriger | |
-| A37 | lint | basse | règle `a11y/useButtonType` (39), src/web | Task 9 | à corriger | |
-| A38 | lint | basse | règles a11y diverses (12), src/web | Task 9 | à corriger | |
-| A39 | lint | basse | avertissements restants : `noDescendingSpecificity` (7), `noImportantStyles` (4), `noCommaOperator` (1) | Task 9 | à corriger | |
+| A22 | robustesse | basse | bin/nightshift.ts:21-40 | Task 9 | corrigé | 60eebd2 |
+| A23 | bonnes pratiques | basse | src/server/orchestrator.ts:212-219,349-360 | Task 9 | corrigé | 4830f69 |
+| A24 | robustesse | basse | src/server/orchestrator.ts:834-848 | Task 9 | corrigé | a8c718c |
+| A25 | bonnes pratiques | basse | src/server/server.ts:38 | Task 9 | corrigé | a02291c |
+| A26 | robustesse | basse | src/server/skills.ts:45,67-72,81 | Task 9 | corrigé | 793a65b |
+| A27 | robustesse | basse | src/server/store.ts:231-247 | Task 9 | corrigé | 27ddf12 |
+| A28 | robustesse | basse | src/web/api.ts:54-60,75, src/web/App.tsx:41-51 | Task 9 | corrigé | 9628976 |
+| A29 | robustesse | basse | src/web/CardModal.tsx:112-114,122,213 | Task 9 | corrigé | 9628976 |
+| A30 | tests | basse | test/nightshift.test.ts (17 `Bun.sleep`, 33 `mkdtempSync`), test/run-progress.test.ts, test/time-panel.test.tsx:94,98 | Task 9 | corrigé | 9c16e79, 05b9ca5, d6e5022 |
+| A31 | lint | basse | règle `suspicious/noExplicitAny` (86), 11 fichiers | Task 9 | corrigé | 238ab45 |
+| A32 | lint | basse | règle `style/noNonNullAssertion` (138), 27 fichiers | Task 9 | corrigé | 6513886 |
+| A33 | lint | basse | règle `suspicious/noArrayIndexKey` (24) | Task 9 | corrigé | 49b046f |
+| A34 | lint | basse | règles `noAssignInExpressions` (4), `noImplicitAnyLet` (3), `useIterableCallbackReturn` (3) | Task 9 | corrigé | 9cee1fd |
+| A35 | lint | basse | règle `suspicious/noControlCharactersInRegex` (3) : orchestrator.ts:843, markdown.tsx:281 | Task 9 | corrigé | 9cee1fd |
+| A36 | lint | basse | règle `correctness/useExhaustiveDependencies` (15), src/web | Task 9 | corrigé | d478937 |
+| A37 | lint | basse | règle `a11y/useButtonType` (39), src/web | Task 9 | corrigé | dc6b198 |
+| A38 | lint | basse | règles a11y diverses (12), src/web | Task 9 | corrigé | 3952e50 |
+| A39 | lint | basse | avertissements restants : `noDescendingSpecificity` (7), `noImportantStyles` (4), `noCommaOperator` (1) | Task 9 | corrigé | 9a0aa10, 9cee1fd |
 
 Total : 39 constats (1 critique, 4 hautes, 14 moyennes, 20 basses).
 
@@ -63,7 +64,7 @@ Total : 39 constats (1 critique, 4 hautes, 14 moyennes, 20 basses).
 
 **Test.** `guard-host`, `guard-origin`, `guard-content-type`, `server-security-csrf`, `server-security-rebinding`, `server-security-ws`, `server-security-bind`.
 
-**Statut.** à corriger.
+**Statut.** corrigé (d8f7c0e, d6683db).
 
 ### A2 — `/api/fs` expose le disque à toute origine
 
@@ -73,7 +74,7 @@ Total : 39 constats (1 critique, 4 hautes, 14 moyennes, 20 basses).
 
 **Test.** `server-security-rebinding` (GET /api/fs avec Host `attacker.example:<port>` renvoie 403).
 
-**Statut.** à corriger.
+**Statut.** corrigé (d8f7c0e, d6683db).
 
 ### A3 — Traversée de chemin dans `GET /api/cards/:id/log`
 
@@ -83,7 +84,7 @@ Total : 39 constats (1 critique, 4 hautes, 14 moyennes, 20 basses).
 
 **Test.** `log-traversal` : `GET /api/cards/..%2F..%2Fsecret/log` ne renvoie pas le contenu d'un fichier `.jsonl` placé dans `NIGHTSHIFT_HOME`.
 
-**Statut.** à corriger.
+**Statut.** corrigé (1556b88).
 
 ### A4 — Rejet de promesse non géré dans `start()` : la sortie d'un agent peut arrêter le serveur
 
@@ -93,7 +94,7 @@ Total : 39 constats (1 critique, 4 hautes, 14 moyennes, 20 basses).
 
 **Test.** `run-survives-bad-agent-output` : sortie fake-claude avec `test.url` numérique ; le serveur reste vivant et la carte passe en `error` ou applique la sortie sans l'url.
 
-**Statut.** à corriger.
+**Statut.** corrigé (cccb7c6).
 
 ### A5 — XSS : URL de test rendue en lien sans filtre
 
@@ -103,7 +104,7 @@ Total : 39 constats (1 critique, 4 hautes, 14 moyennes, 20 basses).
 
 **Test.** `test-url-put`, `test-url-agent`, `test-url-render`.
 
-**Statut.** à corriger.
+**Statut.** corrigé (162aace).
 
 ### A6 — `--port` / `PORT` non validés
 
@@ -113,7 +114,7 @@ Total : 39 constats (1 critique, 4 hautes, 14 moyennes, 20 basses).
 
 **Test.** `cli-port-invalid`, `cli-port-valid`, e2e `bun bin/nightshift.ts --port abc --no-open --no-agents` (code 2).
 
-**Statut.** à corriger.
+**Statut.** corrigé (6593a7b).
 
 ### A7 — Arrêt : agents et commandes de test peuvent survivre au processus
 
@@ -123,7 +124,7 @@ Total : 39 constats (1 critique, 4 hautes, 14 moyennes, 20 basses).
 
 **Test.** `shutdown-kills-sigterm-ignoring-test` : commande de test `trap '' TERM; sleep 30`, `shutdown()`, le processus n'existe plus.
 
-**Statut.** à corriger.
+**Statut.** corrigé (18ac9b5).
 
 ### A8 — JSON invalide silencieusement remplacé par `{}`
 
@@ -133,7 +134,7 @@ Total : 39 constats (1 critique, 4 hautes, 14 moyennes, 20 basses).
 
 **Test.** `routes-invalid-json`.
 
-**Statut.** à corriger.
+**Statut.** corrigé (1a31e7e).
 
 ### A9 — Toute route ouvre (et crée) un projet à la volée
 
@@ -143,7 +144,7 @@ Total : 39 constats (1 critique, 4 hautes, 14 moyennes, 20 basses).
 
 **Test.** `routes-status-codes` (projet inconnu : 404, aucun `nightshift.json` créé).
 
-**Statut.** à corriger.
+**Statut.** corrigé (75c78ad).
 
 ### A10 — `PUT /api/board` : validation incomplète des colonnes
 
@@ -153,7 +154,7 @@ Total : 39 constats (1 critique, 4 hautes, 14 moyennes, 20 basses).
 
 **Test.** `routes-validation` (PUT /api/board `columns: []` : 400; retirer une colonne avec cartes : 400; id dupliqué : 400).
 
-**Statut.** à corriger.
+**Statut.** corrigé (52308b4).
 
 ### A11 — Routes cartes : entrées non typées
 
@@ -163,7 +164,7 @@ Total : 39 constats (1 critique, 4 hautes, 14 moyennes, 20 basses).
 
 **Test.** `routes-validation` (POST /api/cards avec `title: {}` : 400).
 
-**Statut.** à corriger.
+**Statut.** corrigé (eed9b3e).
 
 ### A12 — `PUT /api/skill` sans `content` écrit « undefined » dans le SKILL.md
 
@@ -173,7 +174,7 @@ Total : 39 constats (1 critique, 4 hautes, 14 moyennes, 20 basses).
 
 **Test.** `routes-validation` (PUT /api/skill sans content : 400, fichier inchangé).
 
-**Statut.** à corriger.
+**Statut.** corrigé (c10e2db).
 
 ### A13 — Réglages : aucune validation de type (HTTP et chargement)
 
@@ -183,7 +184,7 @@ Total : 39 constats (1 critique, 4 hautes, 14 moyennes, 20 basses).
 
 **Test.** `settings-reject`, `settings-load-legacy`.
 
-**Statut.** à corriger.
+**Statut.** corrigé (2ef7f7a).
 
 ### A14 — Aller-retour frontmatter des skills cassé
 
@@ -193,7 +194,7 @@ Total : 39 constats (1 critique, 4 hautes, 14 moyennes, 20 basses).
 
 **Test.** `skills-roundtrip`, `skills-frontmatter-legacy`.
 
-**Statut.** à corriger.
+**Statut.** corrigé (6db6d5f).
 
 ### A15 — `nightshift.json` invalide : message obscur et écrasement d'une édition externe
 
@@ -203,7 +204,7 @@ Total : 39 constats (1 critique, 4 hautes, 14 moyennes, 20 basses).
 
 **Test.** `store-invalid-json` : fichier invalide à l'ouverture donne une erreur nommant le fichier; édition externe invalide puis mutation conserve une copie du contenu invalide.
 
-**Statut.** à corriger.
+**Statut.** corrigé (c2f4a70, 092e62f).
 
 ### A16 — Tests : singletons partagés entre fichiers
 
@@ -213,7 +214,7 @@ Total : 39 constats (1 critique, 4 hautes, 14 moyennes, 20 basses).
 
 **Test.** `tests-isolation` : deux fichiers de test utilisant des `NIGHTSHIFT_HOME` différents ne partagent ni réglages ni projets.
 
-**Statut.** à corriger.
+**Statut.** corrigé (8df9332).
 
 ### A17 — Routes HTTP sans test de validation ni de codes d'erreur
 
@@ -223,7 +224,7 @@ Total : 39 constats (1 critique, 4 hautes, 14 moyennes, 20 basses).
 
 **Test.** `routes-invalid-json`, `routes-validation`.
 
-**Statut.** à corriger.
+**Statut.** corrigé (74bfa9e).
 
 ### A18 — `settings.ts` sans test
 
@@ -233,7 +234,7 @@ Total : 39 constats (1 critique, 4 hautes, 14 moyennes, 20 basses).
 
 **Test.** `settings-reject`, `settings-load-legacy`.
 
-**Statut.** à corriger.
+**Statut.** corrigé (2ef7f7a).
 
 ### A19 — `skills.ts` sans test
 
@@ -243,17 +244,17 @@ Total : 39 constats (1 critique, 4 hautes, 14 moyennes, 20 basses).
 
 **Test.** `skills-roundtrip`, `skills-frontmatter-legacy`.
 
-**Statut.** à corriger.
+**Statut.** corrigé (6db6d5f).
 
 ### A20 — README, `.gitignore` et scripts en décalage
 
-**Problème.** (1) `.gitignore:4` ignore `nightshift.json` dans CE dépôt (board de dogfooding) alors que README.md:3 dit « committable » et README.md:36 « commit it » : à préciser. (2) Le serveur n'est pas documenté comme écoutant sur 127.0.0.1 seulement (après A1). (3) README.md:9-10 annonce `bun run dev` « avec hot reload » mais `package.json:8` définit `dev` comme `bun bin/nightshift.ts`, identique à `start` (pas de `--hot`) ; or `start` tourne en mode développement (HMR et echo console, bin/nightshift.ts:21) tant que `NODE_ENV` n'est pas `production`. (4) Options et variables non documentées : `-p`, `--no-agents`, `PORT`, `NIGHTSHIFT_HOME`, `NIGHTSHIFT_USER_SKILLS`, `NIGHTSHIFT_NO_OPEN`; dossiers `~/.nightshift/screenshots` et `locks`; scripts `lint`, `format`, `check`, `test:coverage`. (5) `README.md` ne mentionne pas Biome.
+**Problème.** (1) `.gitignore:4` ignore `nightshift.json` dans CE dépôt (board de dogfooding) alors que README.md:3 dit « committable » et README.md:28 « commit it » : à préciser. (2) Le serveur n'est pas documenté comme écoutant sur 127.0.0.1 seulement (après A1). (3) README.md:9-10 annonce `bun run dev` « avec hot reload » (la mention est à la ligne 10) mais `package.json:8` définit `dev` comme `bun bin/nightshift.ts`, identique à `start` (pas de `--hot`) ; or `start` tourne en mode développement (HMR et echo console, bin/nightshift.ts:21) tant que `NODE_ENV` n'est pas `production`. (4) Options et variables non documentées : `-p`, `--no-agents`, `PORT`, `NIGHTSHIFT_HOME`, `NIGHTSHIFT_USER_SKILLS`, `NIGHTSHIFT_NO_OPEN`; dossiers `~/.nightshift/screenshots` et `locks`; scripts `lint`, `format`, `check`, `test:coverage`. (5) `README.md` ne mentionne pas Biome.
 
 **Correctif.** Mettre à jour README (phrase sur `nightshift.json` ignoré dans ce dépôt, écoute 127.0.0.1, options, variables, scripts) ; corriger le script `dev` (`bun --hot bin/nightshift.ts`) ou la phrase.
 
 **Test.** aucun : pas de changement de comportement (sauf le script `dev`, vérifié à la main).
 
-**Statut.** à corriger.
+**Statut.** corrigé (ffbe957, 60eebd2). README mis à jour (nightshift.json ignoré dans ce dépôt mais à committer dans les projets, écoute 127.0.0.1 seule, options `--port/-p`, `--no-open`, `--no-agents`, `--help`, variables `PORT`, `NIGHTSHIFT_HOME`, `NIGHTSHIFT_USER_SKILLS`, `NIGHTSHIFT_NO_OPEN`, dossiers `screenshots` et `locks`, scripts, Biome). Le script `dev` reste `bun bin/nightshift.ts` (un `--hot` relancerait aussi l'ouverture du projet et du navigateur) : c'est la phrase du README qui a été corrigée. Les lignes citées plus haut sont celles du README avant correction.
 
 ### A21 — Lint et format : Biome absent (alias `A-lint`)
 
@@ -273,7 +274,7 @@ Total : 39 constats (1 critique, 4 hautes, 14 moyennes, 20 basses).
 
 **Test.** aucun : pas de changement de comportement testable de façon stable (sauf option inconnue : test `parseArgs`).
 
-**Statut.** à corriger.
+**Statut.** corrigé (60eebd2). Test : `cli-sighup` (échoue avant), `cli-browser-missing` (helper `openBrowser` qui ne lève plus). L'option inconnue était déjà rejetée par `parseArgs` (Task 5).
 
 ### A23 — Orchestrateur : mémoire et fichiers de log jamais purgés
 
@@ -283,7 +284,7 @@ Total : 39 constats (1 critique, 4 hautes, 14 moyennes, 20 basses).
 
 **Test.** `card-delete-cleans-logs` : après DELETE, le fichier de log n'existe plus.
 
-**Statut.** à corriger.
+**Statut.** corrigé (4830f69). Test : `card-delete-cleans-logs`.
 
 ### A24 — Sortie des commandes de test : dernière ligne sans saut de ligne perdue
 
@@ -293,7 +294,7 @@ Total : 39 constats (1 critique, 4 hautes, 14 moyennes, 20 basses).
 
 **Test.** `test-output-last-line` : `printf last` apparaît dans `testLog`.
 
-**Statut.** à corriger.
+**Statut.** corrigé (a8c718c). Test : `test-output-last-line`. « Exited » attend la fin des flux (bornée à 500 ms si un processus fils garde les tubes ouverts).
 
 ### A25 — Codes HTTP : tout est 400
 
@@ -303,7 +304,7 @@ Total : 39 constats (1 critique, 4 hautes, 14 moyennes, 20 basses).
 
 **Test.** `routes-status-codes` (PATCH /api/cards/:id inconnue, projet inconnu, GET /api/skill inconnu : 404 `{error}`).
 
-**Statut.** à corriger.
+**Statut.** corrigé (a02291c). Test : `routes-status-codes`. Le test `routes-unknown-project` (A9) attend désormais 404 « Unknown project » au lieu de 400 ; « Missing project » reste 400.
 
 ### A26 — Skills : écriture non atomique et erreurs avalées
 
@@ -313,7 +314,7 @@ Total : 39 constats (1 critique, 4 hautes, 14 moyennes, 20 basses).
 
 **Test.** `skills-save-atomic` : aucun `.tmp` restant, contenu écrit en entier.
 
-**Statut.** à corriger.
+**Statut.** corrigé (793a65b). Test : `skills-save-atomic` (un lien dur vers l'ancien fichier garde son contenu, donc l'écriture passe bien par un rename). Helper partagé `src/server/fsutil.ts` (aussi utilisé par `store.ts` et `settings.ts`).
 
 ### A27 — Store : échec d'écriture et surveillance fragiles
 
@@ -323,7 +324,7 @@ Total : 39 constats (1 critique, 4 hautes, 14 moyennes, 20 basses).
 
 **Test.** `store-write-failure` : écriture impossible (dossier en lecture seule) lève et laisse le board mémoire identique au fichier.
 
-**Statut.** à corriger.
+**Statut.** corrigé (27ddf12). Test : `store-write-failure` (le fichier temporaire est un dossier, l'écriture échoue même pour root). `mutate` restaure aussi l'état mémoire si la fonction de mutation lève.
 
 ### A28 — Client : WebSocket sans reprise propre, promesses sans `catch`
 
@@ -333,7 +334,7 @@ Total : 39 constats (1 critique, 4 hautes, 14 moyennes, 20 basses).
 
 **Test.** aucun : pas de changement de comportement testable de façon stable.
 
-**Statut.** à corriger.
+**Statut.** corrigé (9628976). Tests : `client-reconnect`, `client-parse` (fonctions pures `reconnectDelay`, `parseServerEvent`). L'annulation de l'effet d'ouverture de projet n'a pas de test (pas de DOM dans la suite).
 
 ### A29 — Fiche : erreurs avalées puis action poursuivie
 
@@ -343,7 +344,7 @@ Total : 39 constats (1 critique, 4 hautes, 14 moyennes, 20 basses).
 
 **Test.** aucun : pas de changement de comportement testable de façon stable.
 
-**Statut.** à corriger.
+**Statut.** corrigé (9628976). Test : `card-modal-failed-action` (`attempt`, `deleteThenClose`, `sendThenClear`). Une sauvegarde qui échoue à la fermeture est signalée dans la bannière de l'application (la fiche se ferme quand même).
 
 ### A30 — Tests : attentes par `sleep` fixe et dossiers temporaires jamais supprimés
 
@@ -353,7 +354,7 @@ Total : 39 constats (1 critique, 4 hautes, 14 moyennes, 20 basses).
 
 **Test.** aucun : pas de changement de comportement (suite relancée 3 fois, verte).
 
-**Statut.** à corriger.
+**Statut.** corrigé (9c16e79, 05b9ca5, d6e5022). Les attentes d'absence passent par `quiet()` (délai borné et commenté) ; les mtime sont fixés dans le passé au lieu d'attendre ; les dossiers temporaires sont supprimés (`tempDir` / `removeTempDirs`, arrêt du serveur enfant).
 
 ### A31 — Règle Biome désactivée : `suspicious/noExplicitAny` (86 occurrences)
 
@@ -363,7 +364,7 @@ Total : 39 constats (1 critique, 4 hautes, 14 moyennes, 20 basses).
 
 **Test.** aucun : pas de changement de comportement.
 
-**Statut.** à corriger.
+**Statut.** corrigé (238ab45). Plus aucun `any` explicite (corps de requête `Raw`, événements du flux `claude` et sortie structurée typés). Règle réactivée, aucune exception.
 
 ### A32 — Règle Biome désactivée : `style/noNonNullAssertion` (138 occurrences)
 
@@ -373,7 +374,7 @@ Total : 39 constats (1 critique, 4 hautes, 14 moyennes, 20 basses).
 
 **Test.** aucun : pas de changement de comportement.
 
-**Statut.** à corriger.
+**Statut.** corrigé (6513886). Toutes les assertions retirées (les types suffisent) ; les autres sont devenues des gardes explicites. Règle réactivée.
 
 ### A33 — Règle Biome désactivée : `suspicious/noArrayIndexKey` (24 occurrences)
 
@@ -383,7 +384,7 @@ Total : 39 constats (1 critique, 4 hautes, 14 moyennes, 20 basses).
 
 **Test.** aucun : pas de changement de comportement.
 
-**Statut.** à corriger.
+**Statut.** corrigé (49b046f). Clés stables pour `TimePanel`, rendu Markdown par un `Fragment` par nœud ; `biome-ignore` justifiés pour les listes en ajout seul. Règle réactivée.
 
 ### A34 — Règles Biome désactivées : `noAssignInExpressions` (4), `noImplicitAnyLet` (3), `useIterableCallbackReturn` (3)
 
@@ -393,7 +394,7 @@ Total : 39 constats (1 critique, 4 hautes, 14 moyennes, 20 basses).
 
 **Test.** aucun : pas de changement de comportement (tests existants de découpage de lignes).
 
-**Statut.** à corriger.
+**Statut.** corrigé (9cee1fd). Les trois règles sont réactivées.
 
 ### A35 — Règle Biome désactivée : `suspicious/noControlCharactersInRegex` (3 occurrences)
 
@@ -403,7 +404,7 @@ Total : 39 constats (1 critique, 4 hautes, 14 moyennes, 20 basses).
 
 **Test.** aucun : pas de changement de comportement.
 
-**Statut.** à corriger.
+**Statut.** corrigé (9cee1fd). Règle réactivée avec `biome-ignore` justifié sur les trois expressions (orchestrator.ts ANSI, markdown.tsx `safeHref`).
 
 ### A36 — Règle Biome désactivée : `correctness/useExhaustiveDependencies` (15 occurrences)
 
@@ -413,7 +414,7 @@ Total : 39 constats (1 critique, 4 hautes, 14 moyennes, 20 basses).
 
 **Test.** aucun : pas de changement de comportement.
 
-**Statut.** à corriger.
+**Statut.** corrigé (d478937). Dépendances complétées (callbacks mémoïsés, `dirty` et `editing` lus par ref, aucune boucle de rechargement) ; deux `biome-ignore` justifiés pour les effets de défilement. Règle réactivée.
 
 ### A37 — Règle Biome désactivée : `a11y/useButtonType` (39 occurrences)
 
@@ -423,7 +424,7 @@ Total : 39 constats (1 critique, 4 hautes, 14 moyennes, 20 basses).
 
 **Test.** aucun : pas de changement de comportement (les tests de rendu existants passent).
 
-**Statut.** à corriger.
+**Statut.** corrigé (dc6b198). Les 39 boutons étaient hors formulaire : `type="button"`. Règle réactivée.
 
 ### A38 — Règles Biome a11y désactivées (12 occurrences)
 
@@ -433,7 +434,7 @@ Total : 39 constats (1 critique, 4 hautes, 14 moyennes, 20 basses).
 
 **Test.** aucun : pas de changement de comportement.
 
-**Statut.** à corriger.
+**Statut.** corrigé (3952e50). Capture ouverte par un vrai `<button>` (clavier) ; `biome-ignore` justifiés pour l'autofocus, les clics hors modale et la fiche focusable. Règle réactivée. Test : `card-screenshot-keyboard-open`.
 
 ### A39 — Avertissements Biome restants (12)
 
@@ -443,8 +444,8 @@ Total : 39 constats (1 critique, 4 hautes, 14 moyennes, 20 basses).
 
 **Test.** aucun : pas de changement de comportement.
 
-**Statut.** à corriger.
+**Statut.** corrigé (9a0aa10, 9cee1fd). `noDescendingSpecificity` corrigé par réordonnancement, `!important` du mode « mouvement réduit » justifié par `biome-ignore`, opérateur virgule du test supprimé (A34), dépréciation `recommended` de `biome.json` migrée.
 
 ## Open questions
 
-Aucune pour l'instant.
+Aucune : aucun constat n'est reporté, toutes les règles Biome sont réactivées.
