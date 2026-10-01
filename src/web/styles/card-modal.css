@@ -1,0 +1,30 @@
+/* Card modal zone: layout, last run, agent questions, live log. */
+
+.card-modal { display: grid; grid-template-columns: 1.2fr 1fr; gap: 18px; flex: 1; min-height: 0; }
+.card-edit { display: flex; flex-direction: column; gap: 12px; min-height: 0; }
+.card-edit textarea { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+.card-side { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+.last-run { padding: 10px 12px; border-radius: 8px; background: var(--surface-2); font-size: 13px; }
+.last-run p { margin: 4px 0; }
+.last-run.st-success { background: var(--ok-soft); }
+.last-run.st-error, .last-run.st-cancelled { background: var(--err-soft); }
+.log {
+  flex: 1; overflow: auto; background: var(--surface-2); border-radius: 8px; padding: 8px 10px;
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.log-line { display: grid; grid-template-columns: 70px 1fr; gap: 8px; padding: 2px 0; }
+.log-line time { color: var(--muted); }
+.log-line span { white-space: pre-wrap; word-break: break-word; }
+.log-line.tool span { color: var(--accent); }
+.log-line.info span { color: var(--muted); }
+.log-line.error span { color: var(--err); }
+
+.question { display: flex; flex-direction: column; gap: 8px; max-height: 60%; overflow: auto; flex-shrink: 0; padding: 10px 12px; border-radius: 8px; background: var(--warn-soft); }
+.question .hint { margin: 0; }
+.qa > span { color: var(--text); font-size: 13px; white-space: pre-wrap; }
+.qa textarea { min-height: 54px; }
+.question button { align-self: flex-end; }
+
+@media (max-width: 800px) {
+  .card-modal { grid-template-columns: 1fr; }
+}

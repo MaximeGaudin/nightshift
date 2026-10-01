@@ -1,0 +1,30 @@
+/* Modal zone: overlay, modal shell, banners, hints, forms, tabs. */
+
+.overlay { position: fixed; inset: 0; background: var(--overlay); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 10; }
+.modal {
+  background: var(--surface); border-radius: 14px; width: min(560px, 100%); max-height: 100%;
+  display: flex; flex-direction: column; box-shadow: var(--shadow-lg);
+}
+.modal.wide { width: min(1100px, 100%); height: min(780px, 100%); }
+.modal-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-bottom: 1px solid var(--border); }
+.modal-head h2 { font-size: 16px; }
+.modal-body { padding: 16px 18px; overflow: auto; flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.modal-foot { display: flex; gap: 8px; padding: 12px 18px; border-top: 1px solid var(--border); }
+
+.error-banner {
+  display: flex; align-items: center; gap: 8px; justify-content: space-between;
+  margin: 10px 20px 0; padding: 8px 12px; border-radius: 8px;
+  background: var(--err-soft); color: var(--err);
+}
+.modal .error-banner { margin: 0 0 12px; }
+.error-text { color: var(--err); white-space: pre-wrap; font-size: 12px; margin: 6px 0 0; }
+
+.hint { color: var(--muted); font-size: 13px; margin: 4px 0 10px; }
+.hint.warn { color: var(--warn); background: var(--warn-soft); padding: 6px 10px; border-radius: 6px; }
+.form { display: flex; flex-direction: column; gap: 14px; }
+.grow { flex: 1; display: flex; min-height: 0; }
+.grow textarea, textarea.grow { flex: 1; resize: none; }
+
+.tabs { display: flex; gap: 4px; }
+.tabs button { border: 0; background: none; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+.tabs button[aria-selected="true"] { color: var(--text); background: var(--surface-2); }
