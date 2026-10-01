@@ -1,5 +1,6 @@
 import { Columns3, Info, Moon, Pause, Play, Settings as SettingsIcon, Sparkles, TriangleAlert } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { sequenceLabel } from "../shared/sequence.ts";
 import type { ProjectSnapshot } from "../shared/types.ts";
 import { api, useServerEvents, useSettings } from "./api.ts";
@@ -14,6 +15,7 @@ import { Alert } from "./components/ui/alert.tsx";
 import { Button } from "./components/ui/button.tsx";
 import { Kbd } from "./components/ui/kbd.tsx";
 import { Skeleton } from "./components/ui/skeleton.tsx";
+import { resolveLocale, setLocale, useT } from "./i18n/index.ts";
 import { NewCardDialog } from "./NewCardDialog.tsx";
 import { notifyError } from "./notify.ts";
 import { ProjectPicker } from "./ProjectPicker.tsx";
@@ -43,8 +45,9 @@ function useProjectParam(): [string | null, (p: string | null) => void] {
 type Modal = "settings" | "columns" | "skills" | "projects";
 
 function BoardSkeleton() {
+  const { t } = useT();
   return (
-    <div className="flex h-full flex-col" role="status" aria-label="Chargement…">
+    <div className="flex h-full flex-col" role="status" aria-label={t("board.app.loading")}>
       <div className="flex h-11 items-center gap-3 border-b bg-card px-4">
         <Skeleton className="size-5" />
         <Skeleton className="h-4 w-40" />
@@ -67,6 +70,7 @@ function BoardSkeleton() {
 }
 
 export function App() {
+  const { t, tn } = useT();
   const [project, setProject] = useProjectParam();
   const [snap, setSnap] = useState<ProjectSnapshot | null>(null);
   // Opening the project failed: go back to the project picker.
@@ -79,6 +83,10 @@ export function App() {
   const [help, setHelp] = useState(false);
   const [newCard, setNewCard] = useState<{ title: string } | null>(null);
   const settings = useSettings(notifyError);
+  const language = settings?.language;
+  useEffect(() => {
+    if (language) setLocale(resolveLocale(language, navigator.language));
+  }, [language]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: openAttempt is a retry trigger, not read
   useEffect(() => {
@@ -90,6 +98,9 @@ export function App() {
     api
       .open(project)
       .then((s) => {
+        // Told once by the server: shown even if the user already switched project.
+        if (s.templateSkillsNotCopied?.length)
+          toast.warning(t("common.templateSkillsNotCopied", { names: s.templateSkillsNotCopied.join(", ") }));
         if (cancelled) return;
         setSnap(s);
         if (s.path !== project) setProject(s.path);
@@ -204,7 +215,7 @@ export function App() {
               type="button"
               className="truncate rounded-sm font-mono text-xs text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
               onClick={() => setModal("projects")}
-              title="Changer de projet"
+              title={t("board.app.switchProject")}
             >
               {snap.path}
             </button>
@@ -212,30 +223,26 @@ export function App() {
         </div>
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground" aria-live="polite">
           <span className={`size-1.5 rounded-full ${running ? "bg-ok" : "bg-muted-foreground/40"}`} aria-hidden="true" />
-          {running} / {settings?.maxParallel ?? "?"} agents actifs
-          {queued > 0 && <span> · {queued} en attente</span>}
-          {questions > 0 && (
-            <span className="font-medium text-warn">
-              · {questions} question{questions > 1 ? "s" : ""} pour vous
-            </span>
-          )}
+          {t("board.app.agentsActive", { running, max: settings?.maxParallel ?? "?" })}
+          {queued > 0 && <span> · {t("board.app.queued", { count: queued })}</span>}
+          {questions > 0 && <span className="font-medium text-warn">· {tn("board.app.questions", questions)}</span>}
         </div>
         <nav className="ml-auto flex items-center gap-1">
           <SequenceButton snap={snap} guard={guard} />
           <Button variant="ghost" onClick={() => setModal("columns")}>
             <Columns3 aria-hidden="true" />
-            Colonnes
+            {t("board.app.columns")}
           </Button>
           <Button variant="ghost" onClick={() => setModal("skills")}>
             <Sparkles aria-hidden="true" />
-            Skills
+            {t("board.app.skills")}
           </Button>
           <Button variant="ghost" onClick={() => setModal("settings")}>
             <SettingsIcon aria-hidden="true" />
-            Réglages
+            {t("board.app.settings")}
           </Button>
           <Button variant="outline" size="sm" className="ml-1 text-muted-foreground" onClick={() => setPalette(true)}>
-            Rechercher <Kbd>⌘K</Kbd>
+            {t("board.app.search")} <Kbd>⌘K</Kbd>
           </Button>
         </nav>
       </header>
@@ -244,14 +251,13 @@ export function App() {
           {snap.agentsDisabled && (
             <Alert role="status">
               <Info aria-hidden="true" />
-              Instance de test (--no-agents) : aucun agent ne sera lancé depuis cette fenêtre.
+              {t("board.app.noAgents")}
             </Alert>
           )}
           {snap.lockedBy && (
             <Alert role="status" variant="warn">
               <TriangleAlert aria-hidden="true" />
-              Un autre processus Nightshift (pid {snap.lockedBy}) exécute déjà les agents de ce projet. Cette fenêtre affiche et édite le
-              kanban mais ne lance aucun agent tant que l'autre processus tourne.
+              {t("board.app.locked", { pid: snap.lockedBy })}
             </Alert>
           )}
           <SequenceNotice snap={snap} />
@@ -286,7 +292,7 @@ export function App() {
         />
       )}
       {modal === "projects" && (
-        <AppDialog size="lg" title="Changer de projet" onClose={() => setModal(null)}>
+        <AppDialog size="lg" title={t("board.app.switchProject")} onClose={() => setModal(null)}>
           <ProjectPicker
             embedded
             recent={settings?.recentProjects ?? []}

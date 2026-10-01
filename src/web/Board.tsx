@@ -52,6 +52,7 @@ import { Badge } from "./components/ui/badge.tsx";
 import { DoneColumn } from "./DoneColumn.tsx";
 import { readDoneCollapsed, sortDoneCards, writeDoneCollapsed } from "./doneColumn.ts";
 import { usePrefersReducedMotion } from "./hooks/use-reduced-motion.ts";
+import { useT } from "./i18n/index.ts";
 import { ColumnGlyph } from "./icons.tsx";
 import { cn } from "./lib/utils.ts";
 import { notifyError } from "./notify.ts";
@@ -140,6 +141,7 @@ export function Board({
   onOpen: (id: string) => void;
   guard: (p: Promise<unknown>) => void;
 }) {
+  const { t } = useT();
   const reduced = usePrefersReducedMotion();
   const [activeId, setActiveId] = useState<string | null>(null);
   const [overColumn, setOverColumn] = useState<string | null>(null);
@@ -271,16 +273,18 @@ export function Board({
     return target ? hoverPosition(shownCards, String(activeId), target) : null;
   };
   const announcements: Announcements = {
-    onDragStart: ({ active }) => `Carte ${label(active.id)} saisie`,
+    onDragStart: ({ active }) => t("board.dnd.picked", { ref: label(active.id) }),
     onDragOver: ({ active, over }) => {
       const p = position(active.id, over);
-      return p ? `Carte ${label(active.id)} au-dessus de ${colName(p.columnId)}, position ${p.position}` : undefined;
+      return p ? t("board.dnd.over", { ref: label(active.id), column: colName(p.columnId), position: p.position }) : undefined;
     },
     onDragEnd: ({ active, over }) => {
       const p = position(active.id, over);
-      return p ? `Carte ${label(active.id)} déposée dans ${colName(p.columnId)}` : `Carte ${label(active.id)} relâchée`;
+      return p
+        ? t("board.dnd.dropped", { ref: label(active.id), column: colName(p.columnId) })
+        : t("board.dnd.released", { ref: label(active.id) });
     },
-    onDragCancel: ({ active }) => `Déplacement de la carte ${label(active.id)} annulé`,
+    onDragCancel: ({ active }) => t("board.dnd.cancelled", { ref: label(active.id) }),
   };
 
   const sendNext = (card: Card, nextId: string) => {
@@ -327,8 +331,7 @@ export function Board({
       accessibility={{
         announcements,
         screenReaderInstructions: {
-          draggable:
-            "Pour déplacer la carte, appuyez sur Espace, choisissez la destination avec les flèches, puis appuyez sur Espace pour la déposer. Échap annule le déplacement. Entrée ouvre la carte.",
+          draggable: t("board.dnd.instructions"),
         },
       }}
     >
@@ -368,7 +371,7 @@ export function Board({
                       {col.type === "skill" && (
                         <span
                           className="column-parallel rounded-sm border px-1.5 text-xs text-muted-foreground tabular-nums"
-                          title="agents actifs / limite de la colonne"
+                          title={t("board.column.parallelTitle")}
                         >
                           {colCards.filter((c) => snap.live[c.id] === "running").length} / {columnMaxParallel(col)}
                         </span>
@@ -377,17 +380,21 @@ export function Board({
                     {col.type === "skill" ? (
                       <div className="column-badges ml-auto flex min-w-0 gap-1">
                         <Badge variant="default" className="badge skill min-w-0 shrink font-mono" title={col.instructions || undefined}>
-                          <span className="truncate">{col.skill || "aucun skill"}</span>
+                          <span className="truncate">{col.skill || t("board.column.noSkill")}</span>
                         </Badge>
                         {col.model && (
-                          <Badge variant="outline" className="badge model font-mono text-muted-foreground" title={`Modèle : ${col.model}`}>
+                          <Badge
+                            variant="outline"
+                            className="badge model font-mono text-muted-foreground"
+                            title={t("board.column.model", { model: col.model })}
+                          >
                             {col.model}
                           </Badge>
                         )}
                       </div>
                     ) : (
                       <Badge variant="secondary" className="badge inert ml-auto">
-                        inerte
+                        {t("board.column.inert")}
                       </Badge>
                     )}
                   </header>
@@ -398,7 +405,7 @@ export function Board({
                       ))}
                       {colCards.length === 0 && (
                         <div className="rounded-md border border-dashed px-3 py-5 text-center text-xs text-muted-foreground">
-                          Aucune fiche. Glissez une fiche ici ou ajoutez-en une.
+                          {t("board.column.empty")}
                         </div>
                       )}
                     </div>

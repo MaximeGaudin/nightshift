@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { api } from "./api.ts";
 import { Button } from "./components/ui/button.tsx";
 import { Input } from "./components/ui/input.tsx";
+import { useT } from "./i18n/index.ts";
 
 export function ProjectPicker({
   recent,
@@ -18,6 +19,7 @@ export function ProjectPicker({
   /** Inside a dialog: no brand header. */
   embedded?: boolean;
 }) {
+  const { t } = useT();
   const [path, setPath] = useState(current ?? "");
   const [browse, setBrowse] = useState<{ dir: string; parent: string | null; dirs: string[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -48,13 +50,14 @@ export function ProjectPicker({
             Nightshift
           </h1>
           <p className="text-[13px] text-muted-foreground">
-            Un dossier = un kanban. L'état est stocké dans <code className="font-mono text-xs">nightshift.json</code> à la racine du
-            dossier.
+            {t("board.picker.intro.before")}
+            <code className="font-mono text-xs">nightshift.json</code>
+            {t("board.picker.intro.after")}
           </p>
         </header>
       )}
       <section className="flex flex-col gap-2">
-        <h2 className="text-[15px] font-semibold">Projets récents</h2>
+        <h2 className="text-[15px] font-semibold">{t("board.picker.recent")}</h2>
         {recent.length > 0 ? (
           <ul className="flex flex-col rounded-lg border bg-card p-1">
             {recent.map((p) => (
@@ -72,13 +75,13 @@ export function ProjectPicker({
         ) : (
           <div className="flex flex-col items-center gap-1 rounded-lg border border-dashed px-4 py-8 text-center">
             <FolderOpen className="size-5 text-muted-foreground" aria-hidden="true" />
-            <p className="text-[13px] font-medium">Aucun projet récent</p>
-            <p className="text-xs text-muted-foreground">Ouvrez un dossier ci-dessous pour créer votre premier kanban.</p>
+            <p className="text-[13px] font-medium">{t("board.picker.noRecent")}</p>
+            <p className="text-xs text-muted-foreground">{t("board.picker.noRecentHint")}</p>
           </div>
         )}
       </section>
       <section className="flex flex-col gap-2">
-        <h2 className="text-[15px] font-semibold">Ouvrir un dossier</h2>
+        <h2 className="text-[15px] font-semibold">{t("board.picker.openFolder")}</h2>
         <form
           className="flex items-center gap-2"
           onSubmit={(e) => {
@@ -89,16 +92,16 @@ export function ProjectPicker({
           <Input
             value={path}
             onChange={(e) => setPath(e.target.value)}
-            placeholder="/chemin/vers/le/projet"
-            aria-label="Chemin du dossier"
+            placeholder={t("board.picker.pathPlaceholder")}
+            aria-label={t("board.picker.pathAria")}
           />
           <Button type="button" variant="outline" onClick={() => go(path)}>
-            Parcourir
+            {t("board.picker.browse")}
           </Button>
-          <Button type="submit">Ouvrir</Button>
+          <Button type="submit">{t("board.picker.open")}</Button>
           {onCancel && (
             <Button type="button" variant="ghost" onClick={onCancel}>
-              Annuler
+              {t("common.cancel")}
             </Button>
           )}
         </form>
