@@ -2,6 +2,7 @@
 // Stand-in for the `claude` CLI: emits stream-json events and a structured result.
 // FAKE_DELAY_MS controls run duration; a card titled "fail" produces an error result,
 // "slow" sleeps ~5 s before the normal result, "stay" returns move "stay".
+// In --resume mode the prompt may contain FAKE_MOVE=<value> (move), FAKE_ASK (one question) or FAKE_FAIL (error result).
 // FAKE_ARGS_LOG, when set, receives one JSON line per run: { title, resumed, model }.
 import { appendFileSync } from "node:fs";
 // Nightshift sends the prompt on stdin (never argv).
@@ -27,6 +28,13 @@ if (title === "no-output" && !resumed) {
   process.exit(137); // killed mid-run: no result event at all
 } else if (title === "ask" && !resumed) {
   emit({ type: "result", is_error: false, session_id: "sess-ask", structured_output: { move: "stay", summary: "need input", questions: ["Color?", "Size?"] } });
+} else if (resumed && prompt.includes("FAKE_FAIL")) {
+  emit({ type: "result", is_error: true, result: "feedback boom", session_id: "sess-fb" });
+} else if (resumed && prompt.includes("FAKE_ASK")) {
+  emit({ type: "result", is_error: false, session_id: "sess-fb", structured_output: { move: "stay", summary: "need input", questions: ["Which one?"] } });
+} else if (resumed && /FAKE_MOVE=/.test(prompt)) {
+  const move = prompt.match(/FAKE_MOVE=(\S+)/)![1]!;
+  emit({ type: "result", is_error: false, session_id: "sess-fb", structured_output: { title: "feedback done", description: prompt, move, summary: "feedback applied" } });
 } else if (resumed) {
   emit({ type: "result", is_error: false, session_id: "sess-ask", structured_output: { title: "answered", description: prompt, move: "next", summary: "resumed" } });
 } else if (title === "fail") {

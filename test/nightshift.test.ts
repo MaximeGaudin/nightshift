@@ -955,3 +955,163 @@ test("done column: nextColumn from col_done is undefined", () => {
   expect(p.nextColumn(DONE_COLUMN_ID)).toBeUndefined();
   expect(p.nextColumn(p.board.columns.at(-2)!.id)!.id).toBe(DONE_COLUMN_ID);
 });
+
+// ---- user feedback ----------------------------------------------------------
+
+/** Project where a card runs through "Work" and lands in the inert "To Test", ready to receive feedback. */
+async function feedbackBoard(extra: object[] = []) {
+  const b = await attentionBoard([{ name: "Work", type: "skill", skill: "enrich" }, { name: "To Test", type: "inert" }, ...extra]);
+  const [work, toTest] = b.cols;
+  const landed = async (title: string) => {
+    const { id } = await post("/api/cards", { project: b.dir, columnId: work.id, title });
+    await waitFor(async () => (await b.card(id))?.columnId === toTest.id && (await b.idle(id)));
+    return id as string;
+  };
+  const send = (id: string, text: string) => post(`/api/cards/${id}/feedback`, { project: b.dir, text });
+  const settled = (id: string, ok: (c: any) => boolean) => waitFor(async () => ok(await b.card(id)) && (await b.idle(id)));
+  return { ...b, work, toTest, landed, send, settled };
+}
+
+test("feedback in inert column resumes the session and applies move", async () => {
+  const b = await feedbackBoard();
+  try {
+    const id = await b.landed("go");
+    const before = argsEntries().length;
+    expect((await b.send(id, "fix FAKE_MOVE=stay")).error).toBeUndefined();
+    await b.settled(id, (c) => c.title === "feedback done");
+    const card = await b.card(id);
+    expect(argsEntries().slice(before).filter((e) => e.resumed)).toHaveLength(1);
+    expect(card.columnId).toBe(b.toTest.id);
+    expect(card.lastRun.columnId).toBe(b.toTest.id);
+    expect(card.lastRun.status).toBe("success");
+    expect(card.lastRun.sessionId).toBeDefined();
+    expect(card.lastRun.skill).toBe("enrich");
+    expect(card.pendingAnswer).toBeUndefined();
+    expect(card.description).toContain("<feedback>\nfix FAKE_MOVE=stay\n</feedback>");
+    expect(card.description).toContain(`(id: ${b.toTest.id}, inert)`);
+    expect(card.description).toContain("Board columns, in order:");
+    expect(card.description).toContain(`1. Work (id: ${b.work.id}, skill: enrich)`);
+    expect(card.description).toContain('the skill "enrich"');
+    expect(card.history.some((h: any) => h.text === "Feedback sent to agent")).toBe(true);
+    const log = await fetch(`${base}/api/cards/${id}/log?project=${encodeURIComponent(b.dir)}`).then((r) => r.json());
+    expect(log.some((l: any) => l.text.startsWith("Retour utilisateur : fix"))).toBe(true);
+  } finally {
+    b.stop();
+  }
+});
+
+test("feedback move next goes to the column after the current one", async () => {
+  const b = await feedbackBoard([{ name: "Review", type: "skill", skill: "enrich" }]);
+  try {
+    const review = b.cols[2];
+    const id = await b.landed("go");
+    await b.send(id, "ship it FAKE_MOVE=next");
+    await b.settled(id, (c) => c.columnId !== b.toTest.id && c.lastRun?.columnId === review.id);
+    const entries = argsEntries().filter((e) => e.title === "feedback done ✓" || e.title === "feedback done");
+    expect(entries.some((e) => !e.resumed)).toBe(true);
+    expect((await b.card(id)).history.some((h: any) => h.kind === "run" && h.text.startsWith("Review:"))).toBe(true);
+  } finally {
+    b.stop();
+  }
+});
+
+test("second feedback keeps the session skill", async () => {
+  const b = await feedbackBoard();
+  try {
+    const id = await b.landed("go");
+    await b.send(id, "one FAKE_MOVE=stay");
+    await b.settled(id, (c) => c.lastRun?.summary === "feedback applied");
+    await b.send(id, "two FAKE_MOVE=stay");
+    await b.settled(id, (c) => c.description.includes("<feedback>\ntwo"));
+    const card = await b.card(id);
+    expect(card.columnId).toBe(b.toTest.id);
+    expect(card.description).toContain('Follow the skill "enrich"');
+    expect(card.lastRun.skill).toBe("enrich");
+  } finally {
+    b.stop();
+  }
+});
+
+test("feedback question in inert column can be answered", async () => {
+  const b = await feedbackBoard();
+  try {
+    const id = await b.landed("go");
+    await b.send(id, "hmm FAKE_ASK");
+    await b.settled(id, (c) => c.lastRun?.status === "question");
+    let card = await b.card(id);
+    expect(card.columnId).toBe(b.toTest.id);
+    expect(card.lastRun.questions).toEqual(["Which one?"]);
+    const before = argsEntries().length;
+    expect((await post(`/api/cards/${id}/answer`, { project: b.dir, answers: ["the blue one"] })).error).toBeUndefined();
+    await b.settled(id, (c) => c.lastRun?.status === "success" && c.lastRun.summary === "resumed");
+    card = await b.card(id);
+    expect(argsEntries().slice(before).filter((e) => e.resumed)).toHaveLength(1);
+    expect(card.description).toContain("A1: the blue one");
+    expect(card.description).toContain('with the skill "enrich"');
+  } finally {
+    b.stop();
+  }
+});
+
+test("feedback in inert column ignores the column limit and survives cancelStaleJobs", async () => {
+  updateSettings({ maxParallel: 3 });
+  const b = await feedbackBoard();
+  try {
+    const ids = [await b.landed("go1"), await b.landed("go2")];
+    let maxRunning = 0;
+    await Promise.all(ids.map((id) => b.send(id, "both FAKE_MOVE=stay")));
+    await waitFor(async () => {
+      const s = await getProject(b.dir);
+      maxRunning = Math.max(maxRunning, Object.values(s.live).filter((v) => v === "running").length);
+      return Object.keys(s.live).length === 0;
+    });
+    expect(maxRunning).toBe(2);
+    for (const id of ids) {
+      const card = await b.card(id);
+      expect(card.lastRun.status).toBe("success");
+      expect(card.lastRun.summary).toBe("feedback applied");
+      expect(card.columnId).toBe(b.toTest.id);
+      const log = await fetch(`${base}/api/cards/${id}/log?project=${encodeURIComponent(b.dir)}`).then((r) => r.json());
+      expect(log.some((l: any) => l.text.includes("stopping agent"))).toBe(false);
+    }
+  } finally {
+    updateSettings({ maxParallel: 2 });
+    b.stop();
+  }
+});
+
+test("feedback is refused without session or while queued", async () => {
+  const b = await feedbackBoard();
+  try {
+    const fresh = await post("/api/cards", { project: b.dir, columnId: b.toTest.id, title: "fresh" });
+    expect((await b.send(fresh.id, "hello")).error).toBe("This card has no session to send feedback to");
+    const id = await b.landed("go");
+    expect((await b.send(id, "   ")).error).toBe("Empty feedback");
+    expect((await b.send(id, "first FAKE_MOVE=stay")).error).toBeUndefined();
+    expect((await b.send(id, "second")).error).toBe("This card has no session to send feedback to");
+    await b.settled(id, (c) => c.lastRun?.summary === "feedback applied");
+    expect((await b.send(id, "third FAKE_MOVE=stay")).error).toBeUndefined();
+    await b.settled(id, (c) => c.description.includes("<feedback>\nthird"));
+  } finally {
+    b.stop();
+  }
+});
+
+test("failed feedback leaves the card in place", async () => {
+  const b = await feedbackBoard();
+  try {
+    const id = await b.landed("go");
+    await b.send(id, "break FAKE_FAIL");
+    await b.settled(id, (c) => c.lastRun?.status === "error");
+    let card = await b.card(id);
+    expect(card.columnId).toBe(b.toTest.id);
+    expect(card.pendingAnswer).toBeUndefined();
+    expect(card.lastRun.sessionId).toBeDefined();
+    expect((await b.send(id, "again FAKE_MOVE=stay")).error).toBeUndefined();
+    await b.settled(id, (c) => c.lastRun?.status === "success");
+    card = await b.card(id);
+    expect(card.columnId).toBe(b.toTest.id);
+  } finally {
+    b.stop();
+  }
+});
