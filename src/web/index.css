@@ -183,3 +183,28 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* Indeterminate run progress (activity only, no known step): a sliding segment. */
+.run-progress-indeterminate {
+  position: relative;
+}
+.run-progress-indeterminate > .run-progress-fill {
+  position: absolute;
+  inset-block: 0;
+  width: 40%;
+  animation: run-progress-slide 1.4s ease-in-out infinite;
+}
+@keyframes run-progress-slide {
+  from {
+    left: -40%;
+  }
+  to {
+    left: 100%;
+  }
+}
+/* Reduced motion kills the animation globally: leave a static partial segment instead. */
+@media (prefers-reduced-motion: reduce) {
+  .run-progress-indeterminate > .run-progress-fill {
+    left: 0;
+  }
+}

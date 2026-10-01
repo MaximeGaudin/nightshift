@@ -5,6 +5,25 @@ export function RunProgress({ progress, live }: { progress?: RunProgressData; li
   const { t } = useT();
   if (live !== "running" || !progress) return null;
   const { step, total, label } = progress;
+  if (progress.source === "activity") {
+    return (
+      <div className="run-progress mt-2 flex min-w-0 flex-col gap-1">
+        <div className="run-progress-head flex min-w-0 items-baseline gap-1.5 text-[11px] text-muted-foreground">
+          <span className="run-progress-activity shrink-0">{t("board.progress.activity")}</span>
+          <span className="run-progress-label min-w-0 flex-1 truncate" title={label}>
+            {label}
+          </span>
+        </div>
+        <div
+          className="run-progress-bar run-progress-indeterminate h-1 overflow-hidden rounded-full bg-border"
+          role="progressbar"
+          aria-label={t("board.progress.activityAria", { label })}
+        >
+          <div className="run-progress-fill h-full rounded-full bg-primary" />
+        </div>
+      </div>
+    );
+  }
   const pct = total > 0 ? Math.min(100, Math.max(0, ((step - 1) / total) * 100)) : 0;
   return (
     <div className="run-progress mt-2 flex min-w-0 flex-col gap-1">

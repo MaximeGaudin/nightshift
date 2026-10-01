@@ -14,6 +14,8 @@ export const board: Record<keyof typeof enboard, string> = {
   "board.card.questions_other": "{count} questions",
   "board.progress.step": "Étape {step}/{total}",
   "board.progress.aria": "Étape {step} sur {total} : {label}",
+  "board.progress.activity": "En cours",
+  "board.progress.activityAria": "Activité en cours : {label}",
   "board.screenshot.missing": "Capture introuvable — {alt}",
   "board.screenshot.default": "Capture",
   "board.addCard": "Ajouter une fiche",
