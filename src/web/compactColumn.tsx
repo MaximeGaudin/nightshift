@@ -1,5 +1,16 @@
+import { Plus } from "lucide-react";
 import { type Column, columnEmoji, columnMaxParallel } from "../shared/types.ts";
-import { ColumnGlyph, Icon } from "./icons.tsx";
+import { IconButton } from "./components/icon-button.tsx";
+import { ColumnGlyph } from "./icons.tsx";
+
+/** Shell of a wide column: shares the free space equally between 290px and 560px; the fixed basis stops a long badge from widening it. */
+export const WIDE_COLUMN =
+  "column flex max-h-full min-w-[290px] max-w-[560px] flex-[1_0_290px] flex-col rounded-lg border border-transparent transition-colors duration-150";
+/** Shell of a strip (compact or collapsed Done): fixed width, opts out of the wide rules above. */
+export const STRIP_COLUMN =
+  "column flex max-h-full min-w-0 max-w-none flex-col overflow-hidden rounded-lg border border-transparent transition-colors duration-150";
+/** Highlight of the column under the dragged card. */
+export const DROP_TARGET = "drop-target border-primary bg-primary/8";
 
 /** A column collapses into a thin band when it is empty and not manually expanded. */
 export function isCompactColumn(cardCount: number, expanded: boolean): boolean {
@@ -23,13 +34,15 @@ export function compactColumnTitle(col: Column): string {
 /** Content of a compact column (the caller renders the surrounding <section>). */
 export function CompactColumnBand({ col, onAdd }: { col: Column; onAdd: () => void }) {
   return (
-    <div className="column-band">
+    <div className="column-band flex min-h-0 flex-1 flex-col items-center justify-start gap-2 overflow-hidden py-3 *:shrink-0">
       <ColumnGlyph col={col} />
-      <span className="count">0</span>
-      <button type="button" className="band-add ghost" aria-label="Ajouter une fiche" title="Ajouter une fiche" onClick={onAdd}>
-        <Icon name="plus" />
-      </button>
-      <h2 className="band-name">{col.name}</h2>
+      <span className="count text-xs text-muted-foreground tabular-nums">0</span>
+      <IconButton label="Ajouter une fiche" className="band-add ghost size-6" onClick={onAdd}>
+        <Plus size={14} strokeWidth={1.75} aria-hidden="true" focusable="false" />
+      </IconButton>
+      <h2 className="band-name max-h-full min-h-0 shrink! flex-auto overflow-hidden text-[13px] font-medium text-ellipsis whitespace-nowrap [writing-mode:vertical-rl]">
+        {col.name}
+      </h2>
     </div>
   );
 }

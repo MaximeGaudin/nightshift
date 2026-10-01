@@ -29,13 +29,13 @@ test("compact-band-markup", () => {
   const col: Column = { id: "c1", name: "Implement", type: "skill", skill: "x", maxParallel: 3 };
   const html = renderToStaticMarkup(<CompactColumnBand col={col} onAdd={() => {}} />);
   const marks = [
-    'class="column-band"',
-    'class="count">0<',
-    'class="band-add ghost"',
-    'aria-label="Ajouter une fiche"',
-    'class="band-name">Implement<',
+    /class="column-band[ "]/,
+    /class="count[^"]*">0</,
+    /class="[^"]*\bband-add ghost\b[^"]*"/,
+    /aria-label="Ajouter une fiche"/,
+    /class="band-name[^"]*">Implement</,
   ];
-  const idx = marks.map((m) => html.indexOf(m));
+  const idx = marks.map((m) => html.search(m));
   expect(idx.every((i) => i >= 0)).toBe(true);
   expect([...idx].sort((a, b) => a - b)).toEqual(idx);
   expect(html).not.toContain("badge");

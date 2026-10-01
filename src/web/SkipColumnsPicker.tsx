@@ -1,4 +1,6 @@
 import { type Column, columnEmoji } from "../shared/types.ts";
+import { Button } from "./components/ui/button.tsx";
+import { cn } from "./lib/utils.ts";
 
 export interface SkipColumnsPickerProps {
   /** Columns offered, already filtered by the caller (no Done, no current column…). */
@@ -35,15 +37,24 @@ export function SkipColumnsPicker({ columns, value, onChange }: SkipColumnsPicke
     onChange(columns.filter((c) => set.has(c.id)).map((c) => c.id));
   };
   return (
-    <div className="skip-picker">
-      <details>
-        <summary>Sauter des colonnes{checked > 0 ? ` (${checked})` : ""}</summary>
-        <div className="skip-picker-list">
+    <div className="skip-picker flex items-start gap-1.5 text-xs text-muted-foreground">
+      <details className="min-w-0 flex-1">
+        <summary className="cursor-pointer leading-6 select-none hover:text-foreground">
+          Sauter des colonnes{checked > 0 ? ` (${checked})` : ""}
+        </summary>
+        <div className="skip-picker-list flex flex-wrap gap-1 pt-1.5">
           {columns.map((c) => {
             const emoji = columnEmoji(c);
+            const on = value.includes(c.id);
             return (
-              <label key={c.id} className="skip-picker-item">
-                <input type="checkbox" checked={value.includes(c.id)} onChange={(e) => toggle(c.id, e.target.checked)} />
+              <label
+                key={c.id}
+                className={cn(
+                  "skip-picker-item flex cursor-pointer flex-row items-center gap-1 rounded-sm border px-1.5 py-0.5 text-xs font-normal whitespace-nowrap text-foreground transition-colors duration-150 hover:border-foreground/25",
+                  on && "border-primary",
+                )}
+              >
+                <input type="checkbox" className="size-3 accent-primary" checked={on} onChange={(e) => toggle(c.id, e.target.checked)} />
                 <span>{emoji ? `${emoji} ${c.name}` : c.name}</span>
               </label>
             );
@@ -51,15 +62,17 @@ export function SkipColumnsPicker({ columns, value, onChange }: SkipColumnsPicke
         </div>
       </details>
       {inert.length > 0 && (
-        <button
+        <Button
           type="button"
-          className="skip-picker-inert"
+          variant="outline"
+          size="sm"
+          className={cn("skip-picker-inert shrink-0 text-muted-foreground", inertOn && "border-primary text-foreground")}
           aria-pressed={inertOn}
           title={`Sauter les colonnes inertes : ${inert.map((c) => c.name).join(", ")}`}
           onClick={() => onChange(toggleInertColumns(columns, value))}
         >
           Sauter les inertes
-        </button>
+        </Button>
       )}
     </div>
   );

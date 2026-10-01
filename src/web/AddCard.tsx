@@ -1,6 +1,8 @@
+import { Plus } from "lucide-react";
 import { useRef, useState } from "react";
 import { type Column, DONE_COLUMN_ID } from "../shared/types.ts";
-import { Icon } from "./icons.tsx";
+import { Button } from "./components/ui/button.tsx";
+import { Textarea } from "./components/ui/textarea.tsx";
 import { SkipColumnsPicker } from "./SkipColumnsPicker.tsx";
 
 /** Columns a new card can be told to skip: those after the creation column, never Done. */
@@ -43,10 +45,15 @@ export function AddCard({
   };
   if (!open)
     return (
-      <button type="button" className="add-card ghost" onClick={() => setOpen(true)}>
-        <Icon name="plus" size={12} />
+      <Button
+        type="button"
+        variant="ghost"
+        className="add-card mx-0.5 mb-2 justify-start text-muted-foreground hover:text-foreground"
+        onClick={() => setOpen(true)}
+      >
+        <Plus size={12} strokeWidth={1.75} aria-hidden="true" focusable="false" />
         Ajouter une fiche
-      </button>
+      </Button>
     );
   const submit = () => {
     const fresh = submitAddCard(title, skip, onAdd);
@@ -54,10 +61,10 @@ export function AddCard({
     setSkip(fresh.skip);
   };
   return (
-    <div className="add-card-form" ref={formRef}>
-      <textarea
-        // biome-ignore lint/a11y/noAutofocus: the form opens on user request ("add a card"), the title field is what they want to type in
+    <div className="add-card-form flex flex-col gap-1.5 px-0.5 pb-2" ref={formRef}>
+      <Textarea
         autoFocus
+        className="min-h-[60px]"
         value={title}
         onBlur={(e) => {
           if (!closeOnEmptyBlur || title.trim() !== "") return;
@@ -79,13 +86,13 @@ export function AddCard({
       <div onMouseDown={(e) => e.target instanceof HTMLInputElement || e.preventDefault()}>
         <SkipColumnsPicker columns={skipColumns} value={skip} onChange={setSkip} />
       </div>
-      <div className="row">
-        <button type="button" className="primary" onClick={submit}>
+      <div className="row flex gap-1.5">
+        <Button type="button" onClick={submit}>
           Ajouter
-        </button>
-        <button type="button" onClick={close}>
+        </Button>
+        <Button type="button" variant="ghost" onClick={close}>
           Annuler
-        </button>
+        </Button>
       </div>
     </div>
   );

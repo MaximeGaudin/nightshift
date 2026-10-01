@@ -47,7 +47,7 @@ test("submit passes the title and skip, then the next form is fresh", () => {
 
 test("tile shows the skipped indicator, none when empty", () => {
   const card = { id: "c1", title: "Hi", description: "", columnId: "col_fdc888c3ed" } as unknown as Card;
-  const base = { project: "/p", card, dragging: false, onOpen: () => {}, onDragStart: () => {}, onDragEnd: () => {} };
+  const base = { project: "/p", card, onOpen: () => {} };
   const html = renderToStaticMarkup(<CardTile {...base} skipped={["To Test"]} />);
   expect(html).toContain('title="Colonnes sautées : To Test"');
   expect(html).toContain('aria-label="Colonnes sautées : To Test"');

@@ -11,17 +11,7 @@ const board = { name: "b", columns: [], cards: [card, other] };
 const snapWith = (extra: object) => ({ path: "/p", board, live: {}, ...extra }) as unknown as ProjectSnapshot;
 const render = (snap: ProjectSnapshot) => renderToStaticMarkup(<SequenceControl snap={snap} guard={() => {}} />);
 const tile = (c: Card, snap: ProjectSnapshot) =>
-  renderToStaticMarkup(
-    <CardTile
-      project="/p"
-      card={c}
-      dragging={false}
-      onOpen={() => {}}
-      onDragStart={() => {}}
-      onDragEnd={() => {}}
-      sequential={isSequential(snap, c.id)}
-    />,
-  );
+  renderToStaticMarkup(<CardTile project="/p" card={c} onOpen={() => {}} sequential={isSequential(snap, c.id)} />);
 
 test("seq-ui-button", () => {
   for (const [status, icon] of [

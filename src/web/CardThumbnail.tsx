@@ -9,7 +9,7 @@ export function CardThumbnail({ project, card }: { project: string; card: Card }
   if (!first || failed) return null;
   return (
     <img
-      className="card-thumb"
+      className="card-thumb mb-2 -mt-2 -mx-3 block max-h-[120px] w-[calc(100%+1.5rem)] max-w-none rounded-t-[7px] object-cover object-top"
       src={screenshotUrl(project, card.id, first.file)}
       alt={first.alt}
       loading="lazy"

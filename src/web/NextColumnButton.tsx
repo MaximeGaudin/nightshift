@@ -2,6 +2,7 @@ import { useState } from "react";
 import { resolveNextColumn } from "../shared/skip.ts";
 import { agentBlocker, type Board, type Card, type Column, type LiveStatus } from "../shared/types.ts";
 import { api } from "./api.ts";
+import { Button } from "./components/ui/button.tsx";
 
 /** Colonne suivante si la colonne de la fiche est inerte, sinon undefined. */
 export function nextInertTarget(board: Board, card: Card): Column | undefined {
@@ -62,9 +63,8 @@ export function NextColumnButton({
   if (!target) return null;
   const blocker = agentBlocker(card, live);
   return (
-    <button
+    <Button
       type="button"
-      className="primary"
       disabled={busy || blocker !== undefined}
       title={blocker ? BLOCKER_TITLES[blocker] : undefined}
       onClick={async () => {
@@ -77,6 +77,6 @@ export function NextColumnButton({
       }}
     >
       Envoyer à {target.name} →
-    </button>
+    </Button>
   );
 }

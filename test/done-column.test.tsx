@@ -48,11 +48,7 @@ test("sortDoneCards newest first", () => {
 test("DoneColumn renders collapsed and expanded", () => {
   const props = {
     cards,
-    dragging: false,
     dropActive: false,
-    onDragOverDone() {},
-    onDragLeaveDone() {},
-    onDropDone() {},
     onToggle() {},
     renderCard: (c: Card) => <b>{c.title}</b>,
   };
