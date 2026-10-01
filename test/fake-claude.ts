@@ -3,7 +3,8 @@
 // FAKE_DELAY_MS controls run duration; a card titled "fail" produces an error result,
 // "slow" sleeps ~5 s before the normal result, "stay" returns move "stay",
 // "progress" emits a TodoWrite, a progress marker, then another TodoWrite; "progress-todo" only a TodoWrite,
-// "progress-subagent" a marker then subagent events that must be ignored.
+// "progress-none" only a Bash tool_use with a description, "progress-marker-after-tool" a tool_use, a marker, a tool_use,
+// "progress-activity-subagent" a main tool_use then a subagent one, "progress-subagent" a marker then subagent events that must be ignored.
 // In --resume mode the prompt may contain FAKE_MOVE=<value> (move), FAKE_ASK (one question), FAKE_FAIL (error result)
 // or FAKE_SLOW (sleeps ~5 s first).
 // FAKE_ARGS_LOG, when set, receives one JSON line per run: { title, resumed, model }.
@@ -61,6 +62,34 @@ if (title === "progress") {
     type: "assistant",
     parent_tool_use_id: "toolu_1",
     message: { content: [{ type: "text", text: "[nightshift-progress] 5/9 Sous-agent" }] },
+  });
+} else if (title === "progress-none") {
+  // No marker, no TodoWrite: only tool calls, the card falls back to the activity progress.
+  emit({
+    type: "assistant",
+    message: { content: [{ type: "tool_use", name: "Bash", input: { command: "bun test", description: "Run the tests" } }] },
+  });
+} else if (title === "progress-marker-after-tool") {
+  const tool = (description: string, extra: object = {}) => ({
+    type: "assistant",
+    ...extra,
+    message: { content: [{ type: "tool_use", name: "Bash", input: { command: "ls", description } }] },
+  });
+  emit(tool("First tool"));
+  await Bun.sleep(500);
+  emit({ type: "assistant", message: { content: [{ type: "text", text: "[nightshift-progress] 1/3 A" }] } });
+  await Bun.sleep(500);
+  emit(tool("Last tool")); // after a marker: must not revert to activity
+} else if (title === "progress-activity-subagent") {
+  emit({
+    type: "assistant",
+    message: { content: [{ type: "tool_use", name: "Bash", input: { command: "ls", description: "Main tool" } }] },
+  });
+  await Bun.sleep(500);
+  emit({
+    type: "assistant",
+    parent_tool_use_id: "toolu_1",
+    message: { content: [{ type: "tool_use", name: "Bash", input: { command: "ls", description: "Sub tool" } }] },
   });
 } else if (title === "progress-todo") {
   emit(todos("in_progress", "pending"));

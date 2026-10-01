@@ -72,6 +72,8 @@ interface Job {
   progress?: RunProgress;
   /** A valid marker was seen in the current process: TodoWrite no longer counts. */
   markerSeen?: boolean;
+  /** A TodoWrite was seen in the current process: tool activity no longer overwrites it. */
+  todoSeen?: boolean;
 }
 
 const MAX_LOG_LINES = 3000;
@@ -240,6 +242,13 @@ function summarizeToolInput(name: string, input: unknown): string {
   if (!isRaw(input)) return name;
   const v = input.command ?? input.file_path ?? input.pattern ?? input.skill ?? input.url ?? input.description ?? input.query;
   return v ? `${name}: ${String(v).slice(0, 200)}` : name;
+}
+
+/** One-line label of a tool call for the activity progress: its description, else a summary of its input. */
+export function activityLabel(name: string, input: unknown): string {
+  const d = isRaw(input) ? input.description : undefined;
+  const raw = typeof d === "string" && d.trim() ? d : summarizeToolInput(name, input);
+  return raw.replace(/\s+/g, " ").trim().slice(0, 120);
 }
 
 // Column model wins over the global setting; neither means no --model (CLI default).
@@ -743,6 +752,7 @@ export class Orchestrator {
     const p = job.project;
     job.progress = undefined;
     job.markerSeen = false;
+    job.todoSeen = false;
     const settings = getSettings();
     const model = resolveModel(column, settings);
     // The prompt holds the card text. Passed as an argument it would show in every process list, and an
@@ -831,9 +841,16 @@ export class Orchestrator {
           }
         } else if (block.type === "tool_use" && block.name !== "StructuredOutput") {
           this.log(p, cardId, "tool", summarizeToolInput(block.name ?? "tool", block.input));
-          if (own && block.name === "TodoWrite" && !job.markerSeen) {
+          if (!own) continue;
+          if (block.name === "TodoWrite") {
+            if (job.markerSeen) continue;
             const t = progressFromTodos(block.input);
-            if (t) this.setProgress(job, t, "todo");
+            if (t) {
+              job.todoSeen = true;
+              this.setProgress(job, t, "todo");
+            }
+          } else if (!job.markerSeen && !job.todoSeen) {
+            this.setProgress(job, { step: 0, total: 0, label: activityLabel(block.name ?? "tool", block.input) }, "activity");
           }
         }
       }
@@ -846,7 +863,7 @@ export class Orchestrator {
   /** Stores a new progress value and broadcasts the board, unless nothing changed. */
   private setProgress(job: Job, v: { step: number; total: number; label: string }, source: RunProgress["source"]) {
     const cur = job.progress;
-    if (cur && cur.step === v.step && cur.total === v.total && cur.label === v.label) return;
+    if (cur && cur.step === v.step && cur.total === v.total && cur.label === v.label && cur.source === source) return;
     job.progress = { step: v.step, total: v.total, label: v.label, source, at: new Date().toISOString() };
     this.broadcast({ type: "board", project: job.project.path, snapshot: this.snapshot(job.project) });
   }
