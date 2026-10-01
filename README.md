@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/logo/variant-1.svg" width="64" height="64" alt="Nightshift"></p>
+
 # Nightshift
 
 A kanban board that orchestrates Claude Code agents. One folder = one board; the whole board state lives in a single file, `nightshift.json`, at the folder root (commit it in your projects; this repository ignores its own, see Files).
