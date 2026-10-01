@@ -71,6 +71,8 @@ export function App() {
   const [snap, setSnap] = useState<ProjectSnapshot | null>(null);
   // Opening the project failed: go back to the project picker.
   const [openFailed, setOpenFailed] = useState(false);
+  // Bumped on each pick so picking the same path again after a failure re-runs the open.
+  const [openAttempt, setOpenAttempt] = useState(0);
   const [modal, setModal] = useState<Modal | null>(null);
   const [openCard, setOpenCard] = useState<string | null>(null);
   const [palette, setPalette] = useState(false);
@@ -78,6 +80,7 @@ export function App() {
   const [newCard, setNewCard] = useState<{ title: string } | null>(null);
   const settings = useSettings(notifyError);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: openAttempt is a retry trigger, not read
   useEffect(() => {
     setSnap(null);
     setOpenFailed(false);
@@ -99,7 +102,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [project, setProject]);
+  }, [project, setProject, openAttempt]);
 
   useEffect(() => installAudioUnlock(), []);
 
@@ -167,6 +170,7 @@ export function App() {
           recent={settings?.recentProjects ?? []}
           onPick={(p) => {
             setOpenFailed(false);
+            setOpenAttempt((n) => n + 1);
             setProject(p);
           }}
         />
