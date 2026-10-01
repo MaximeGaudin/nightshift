@@ -9,6 +9,7 @@
 @import "./styles/editors.css";
 @import "./styles/picker.css";
 @import "./styles/markdown.css";
+@import "./styles/time-panel.css";
 
 /* ---------- Tokens ---------- */
 :root {

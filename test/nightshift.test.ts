@@ -201,6 +201,8 @@ test("loop guard ignores runs before the last user action", async () => {
     const card = srv.orch.get(proj).card(id)!;
     for (let i = 0; i < 20; i++) srv.orch.get(proj).addHistory(card, "run", "Enrich: stale");
   });
+  // The user move must be strictly later than the stale runs (same-millisecond entries count as recent).
+  await Bun.sleep(5);
   await post(`/api/cards/${id}/move`, { project: proj, columnId: enrich.id });
   await waitFor(async () => (await get()).columnId !== enrich.id);
   expect((await get()).lastRun?.error).toBeUndefined();
@@ -1132,4 +1134,121 @@ test("cancelled feedback keeps the session so feedback can be sent again", async
   } finally {
     b.stop();
   }
+});
+
+// ---- time transitions recorded in card history ---------------------------------
+
+
+async function openSkillBoard(prefix: string, maxParallel?: number) {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  await post("/api/projects/open", { path: dir });
+  const res = await post(
+    "/api/board",
+    {
+      project: dir,
+      columns: [
+        { name: "Backlog", type: "inert" },
+        { name: "Enrich", type: "skill", skill: "enrich", ...(maxParallel ? { maxParallel } : {}) },
+        { name: "Done", type: "inert" },
+      ],
+    },
+    "PUT",
+  );
+  return { dir, backlog: res.board.columns[0], enrich: res.board.columns[1], done: res.board.columns[2] };
+}
+
+test("pipeline writes transitions: moved, queued, started, run", async () => {
+  const { dir, backlog, enrich } = await openSkillBoard("ns-trans-");
+  const { id } = await post("/api/cards", { project: dir, columnId: backlog.id, title: "trans" });
+  await post(`/api/cards/${id}/move`, { project: dir, columnId: enrich.id });
+  await waitFor(async () => (await getProject(dir)).board.cards.find((c: any) => c.id === id)?.lastRun?.status === "success");
+  const card = (await getProject(dir)).board.cards.find((c: any) => c.id === id);
+  const kinds = card.history.map((h: any) => h.kind).slice(0, 5);
+  expect(kinds).toEqual(["created", "moved", "queued", "started", "run"]);
+  for (const h of card.history.slice(0, 5)) {
+    if (h.kind === "run") expect(h.columnId).toBeUndefined();
+    else expect(h.columnId).toBe(h.kind === "created" ? backlog.id : enrich.id);
+  }
+});
+
+test("queue time is due to the column limit", async () => {
+  const { cardTimeSlices } = await import("../src/shared/timeline.ts");
+  const { dir, enrich } = await openSkillBoard("ns-queuetime-", 1);
+  await post("/api/cards", { project: dir, columnId: enrich.id, title: "q1" });
+  await post("/api/cards", { project: dir, columnId: enrich.id, title: "q2" });
+  await waitFor(async () => Object.keys((await getProject(dir)).live).length === 0);
+  const board = (await getProject(dir)).board;
+  const [c1, c2] = board.cards.filter((c: any) => c.title.startsWith("q"));
+  const run1 = c1.history.find((h: any) => h.kind === "run");
+  const started2 = c2.history.find((h: any) => h.kind === "started");
+  expect(started2.at >= run1.at).toBe(true);
+  const slices = cardTimeSlices(c2, board.columns, Date.now());
+  expect(slices.find((s) => s.columnId === enrich.id && s.part === "queued")!.ms).toBeGreaterThan(0);
+});
+
+test("answer and retry put the card back in the queue", async () => {
+  const { dir, enrich, done } = await openSkillBoard("ns-requeue-");
+  const { id } = await post("/api/cards", { project: dir, columnId: enrich.id, title: "ask" });
+  const card = async () => (await getProject(dir)).board.cards.find((c: any) => c.id === id);
+  await waitFor(async () => (await card()).lastRun?.status === "question");
+  await post(`/api/cards/${id}/answer`, { project: dir, answers: ["blue", ""] });
+  await waitFor(async () => (await card()).columnId === done.id);
+  let h = (await card()).history;
+  const i = h.findIndex((e: any) => e.text.startsWith("Answered"));
+  expect(h[i].kind).toBe("edited");
+  expect(h[i + 1]).toMatchObject({ kind: "queued", columnId: enrich.id });
+
+  const f = await post("/api/cards", { project: dir, columnId: enrich.id, title: "fail" });
+  const failed = async () => (await getProject(dir)).board.cards.find((c: any) => c.id === f.id);
+  await waitFor(async () => (await failed()).lastRun?.status === "error");
+  await post(`/api/cards/${f.id}/retry`, { project: dir });
+  h = (await failed()).history;
+  const r = h.findIndex((e: any) => e.text.startsWith("Retry requested"));
+  expect(h[r].kind).toBe("edited");
+  expect(h[r + 1]).toMatchObject({ kind: "queued", columnId: enrich.id });
+  await waitFor(async () => Object.keys((await getProject(dir)).live).length === 0);
+});
+
+test("history cap keeps the time in timeBase", async () => {
+  const { cardTimeSlices } = await import("../src/shared/timeline.ts");
+  const dir = mkdtempSync(join(tmpdir(), "ns-cap-"));
+  const p = new Project(dir);
+  const [a, b] = p.board.columns.filter((c) => c.type === "inert");
+  const card = p.board.cards[0] ?? (p.mutate((bd) => bd.cards.push({ id: "k", number: 1, title: "t", description: "", columnId: a!.id, createdAt: "2026-01-01T00:00:00.000Z", updatedAt: "2026-01-01T00:00:00.000Z", enteredColumnAt: "2026-01-01T00:00:00.000Z", history: [] })), p.card("k")!);
+  const t0 = Date.parse("2026-01-01T00:00:00.000Z");
+  const at = (i: number) => new Date(t0 + i * 60_000).toISOString();
+  const full: any[] = [{ at: at(0), kind: "created", text: `Created in ${a!.name}`, columnId: a!.id }];
+  for (let i = 1; i <= 60; i++) {
+    const [from, to] = i % 2 ? [a!, b!] : [b!, a!];
+    full.push({ at: at(i), kind: "moved", text: `Moved by user: ${from.name} → ${to.name}`, columnId: to.id });
+  }
+  const before = cardTimeSlices({ ...card, createdAt: at(0), history: full, timeBase: undefined } as any, p.board.columns, t0 + 100 * 60_000);
+  card.createdAt = at(0);
+  card.history = [];
+  for (const e of full) {
+    p.addHistory(card, e.kind, e.text, e.columnId);
+    card.history[card.history.length - 1]!.at = e.at;
+  }
+  expect(card.history.length).toBeLessThanOrEqual(50);
+  expect(card.timeBase).toBeDefined();
+  const after = cardTimeSlices(card, p.board.columns, t0 + 100 * 60_000);
+  expect(after).toEqual(before);
+  p.close();
+});
+
+test("--no-agents instance records queued but never started", async () => {
+  const { Orchestrator } = await import("../src/server/orchestrator.ts");
+  const dir = mkdtempSync(join(tmpdir(), "ns-noagents-hist-"));
+  writeFileSync(
+    join(dir, "nightshift.json"),
+    JSON.stringify({ version: 1, name: "n", columns: [{ id: "i", name: "I", type: "inert" }, { id: "s", name: "S", type: "skill", skill: "enrich" }], cards: [{ id: "k", title: "t", columnId: "i", history: [] }] }),
+  );
+  const passive = new Orchestrator({ agents: false });
+  const p = passive.open(dir);
+  p.mutate((board) => p.moveCard(board, "k", "s", undefined, "Moved by user"));
+  await Bun.sleep(300);
+  const kinds = p.card("k")!.history.map((h) => h.kind);
+  expect(kinds).toContain("queued");
+  expect(kinds).not.toContain("started");
+  passive.shutdown();
 });

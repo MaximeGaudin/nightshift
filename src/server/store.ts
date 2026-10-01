@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, renameSync, statSync, watch, writeFileSync, type FSWatcher } from "node:fs";
 import { basename, join } from "node:path";
-import { doneColumn, ensureDoneColumn, normalizeColumnEmoji, normalizeColumnParallel, type Board, type Card, type Column, type ColumnType, type HistoryEntry } from "../shared/types.ts";
+import { replayHistory } from "../shared/timeline.ts";
+import { doneColumn, ensureDoneColumn, normalizeColumnEmoji, normalizeColumnParallel, type Board, type Card, type Column, type ColumnType, type HistoryEntry, type TimeState } from "../shared/types.ts";
 
 export const BOARD_FILE = "nightshift.json";
 
@@ -79,7 +80,7 @@ export function doneColumnChanged(raw: any, board: Board): boolean {
 }
 
 export const COLUMN_KEYS = ["id", "name", "type", "skill", "instructions", "model", "maxParallel", "emoji"];
-const CARD_KEYS = ["id", "number", "title", "description", "columnId", "createdAt", "updatedAt", "enteredColumnAt", "lastRun", "pendingAnswer", "test", "history"];
+const CARD_KEYS = ["id", "number", "title", "description", "columnId", "createdAt", "updatedAt", "enteredColumnAt", "lastRun", "pendingAnswer", "test", "history", "timeBase"];
 const BOARD_KEYS = ["version", "name", "columns", "cards", "nextCardNumber"];
 
 /**
@@ -90,6 +91,26 @@ const BOARD_KEYS = ["version", "name", "columns", "cards", "nextCardNumber"];
 export function unknownFields(raw: any, known: string[]): Record<string, unknown> {
   if (!raw || typeof raw !== "object") return {};
   return Object.fromEntries(Object.entries(raw).filter(([k]) => !known.includes(k)));
+}
+
+const TIME_PARTS = ["inert", "queued", "running", "human", "legacy"];
+const validPart = (v: any) => typeof v === "string" && TIME_PARTS.includes(v);
+
+function normalizeTimeBase(raw: any): TimeState | undefined {
+  if (!raw || typeof raw !== "object" || !Array.isArray(raw.totals)) return undefined;
+  const totals: TimeState["totals"] = [];
+  for (const t of raw.totals) {
+    if (!t || typeof t !== "object" || typeof t.columnName !== "string" || !validPart(t.part)) return undefined;
+    if (typeof t.ms !== "number" || !Number.isFinite(t.ms) || t.ms < 0) return undefined;
+    if (t.columnId !== undefined && typeof t.columnId !== "string") return undefined;
+    totals.push({ ...(t.columnId !== undefined ? { columnId: t.columnId } : {}), columnName: t.columnName, part: t.part, ms: t.ms });
+  }
+  const c = raw.cursor;
+  if (c === undefined) return { totals };
+  if (!c || typeof c !== "object" || typeof c.at !== "string" || typeof c.columnName !== "string") return undefined;
+  if (c.part !== null && !validPart(c.part)) return undefined;
+  if (c.columnId !== undefined && typeof c.columnId !== "string") return undefined;
+  return { totals, cursor: { at: c.at, ...(c.columnId !== undefined ? { columnId: c.columnId } : {}), columnName: c.columnName, part: c.part } };
 }
 
 /** Normalizes a parsed board so the rest of the code can trust its shape. */
@@ -118,7 +139,12 @@ export function normalizeBoard(raw: any, fallbackName: string): Board {
   columns.splice(0, columns.length, ...ensureDoneColumn(columns));
   const colIds = new Set(columns.map((c) => c.id));
   const rawCards: any[] = Array.isArray(raw?.cards) ? raw.cards.filter((c: any) => c && typeof c.id === "string") : [];
-  const cards: Card[] = rawCards.map((c: any) => ({
+  const cards: Card[] = rawCards.map((c: any) => {
+    const rawHistory: HistoryEntry[] = Array.isArray(c.history) ? c.history : [];
+    let timeBase = normalizeTimeBase(c.timeBase);
+    // Entries cut by the cap are folded into the checkpoint first, so their time is not lost.
+    if (rawHistory.length > 50) timeBase = replayHistory(timeBase, rawHistory.slice(0, -50), c.createdAt ?? now());
+    return {
     ...unknownFields(c, CARD_KEYS),
     id: c.id,
     number: 0,
@@ -133,8 +159,10 @@ export function normalizeBoard(raw: any, fallbackName: string): Board {
     ...(c.test && typeof c.test.command === "string" && c.test.command.trim()
       ? { test: { command: c.test.command, ...(c.test.url ? { url: String(c.test.url) } : {}) } }
       : {}),
-    history: Array.isArray(c.history) ? c.history.slice(-50) : [],
-  }));
+    history: rawHistory.slice(-50),
+    ...(timeBase ? { timeBase } : {}),
+  };
+  });
   const nextCardNumber = assignNumbers(cards, rawCards.map((c) => c.number), raw?.nextCardNumber);
   return { ...unknownFields(raw, BOARD_KEYS), version: 1, name: String(raw?.name ?? fallbackName), columns, cards, nextCardNumber };
 }
@@ -237,9 +265,19 @@ export class Project {
     return i >= 0 ? this.board.columns[i + 1] : undefined;
   }
 
-  addHistory(card: Card, kind: HistoryEntry["kind"], text: string) {
-    card.history.push({ at: now(), kind, text });
-    if (card.history.length > 50) card.history.splice(0, card.history.length - 50);
+  addHistory(card: Card, kind: HistoryEntry["kind"], text: string, columnId?: string) {
+    card.history.push({ at: now(), kind, text, ...(columnId !== undefined ? { columnId } : {}) });
+    if (card.history.length > 50) {
+      // Fold the dropped entries into the checkpoint before they disappear.
+      const dropped = card.history.splice(0, card.history.length - 50);
+      card.timeBase = replayHistory(card.timeBase, dropped, card.createdAt);
+    }
+  }
+
+  /** Records that a card waits for an agent, when it is in a skill column and needs a run. */
+  addQueued(card: Card, board: Board = this.board) {
+    if (!needsRun(board, card)) return;
+    this.addHistory(card, "queued", `Queued in ${this.column(card.columnId)!.name}`, card.columnId);
   }
 
   /** Moves a card to a column at an index (end when omitted). Resets its run state for that column. */
@@ -261,7 +299,8 @@ export class Project {
       card.enteredColumnAt = now();
       card.updatedAt = now();
       delete card.pendingAnswer;
-      this.addHistory(card, "moved", `${reason}: ${from?.name ?? "?"} → ${col.name}`);
+      this.addHistory(card, "moved", `${reason}: ${from?.name ?? "?"} → ${col.name}`, columnId);
+      this.addQueued(card, board);
     }
   }
 }

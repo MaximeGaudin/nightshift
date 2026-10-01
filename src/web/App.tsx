@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { cardRef, columnMaxParallel, isDoneColumn, DONE_COLUMN_ID, type Card, type Column, type LiveStatus, type ProjectSnapshot } from "../shared/types.ts";
+import { cardRef, columnMaxParallel, isDoneColumn, DONE_COLUMN_ID, type Card, type Column, type LiveStatus, type RunProgress as RunProgressData, type ProjectSnapshot } from "../shared/types.ts";
+import { RunProgress } from "./RunProgress.tsx";
 import { api, useServerEvents, useSettings } from "./api.ts";
 import { CardModal } from "./CardModal.tsx";
 import { CompactColumnBand, compactColumnTitle, isCompactColumn } from "./compactColumn.tsx";
@@ -143,7 +144,7 @@ export function App() {
       )}
       <Board snap={snap} onOpen={setOpenCard} guard={guard} />
 
-      {card && <CardModal project={snap.path} card={card} board={snap.board} live={snap.live[card.id]} testing={snap.testing?.includes(card.id) ?? false} onClose={() => setOpenCard(null)} />}
+      {card && <CardModal project={snap.path} card={card} board={snap.board} live={snap.live[card.id]} progress={snap.progress?.[card.id]} testing={snap.testing?.includes(card.id) ?? false} onClose={() => setOpenCard(null)} />}
       {modal === "columns" && <ColumnsEditor snap={snap} onClose={() => setModal(null)} />}
       {modal === "skills" && <SkillsModal project={snap.path} onClose={() => setModal(null)} />}
       {modal === "settings" && settings && <SettingsModal settings={settings} onClose={() => setModal(null)} />}
@@ -203,6 +204,7 @@ function Board({
     <CardTile
       card={card}
       live={snap.live[card.id]}
+      progress={snap.progress?.[card.id]}
       dragging={drag === card.id}
       onOpen={() => onOpen(card.id)}
       onDragStart={() => setDrag(card.id)}
@@ -297,6 +299,7 @@ function Board({
                     <CardTile
                       card={card}
                       live={snap.live[card.id]}
+                      progress={snap.progress?.[card.id]}
                       dragging={drag === card.id}
                       onOpen={() => onOpen(card.id)}
                       onDragStart={() => setDrag(card.id)}
@@ -332,6 +335,7 @@ function Board({
 function CardTile({
   card,
   live,
+  progress,
   dragging,
   onOpen,
   onDragStart,
@@ -339,6 +343,7 @@ function CardTile({
 }: {
   card: Card;
   live?: LiveStatus;
+  progress?: RunProgressData;
   dragging: boolean;
   onOpen: () => void;
   onDragStart: () => void;
@@ -383,6 +388,7 @@ function CardTile({
           )}
         </div>
       )}
+      <RunProgress progress={progress} live={live} />
     </article>
   );
 }

@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { canSendFeedback, cardRef, columnEmoji, type Board, type Card, type LiveStatus, type LogLine } from "../shared/types.ts";
+import { canSendFeedback, cardRef, columnEmoji, type Board, type Card, type LiveStatus, type RunProgress as RunProgressData, type LogLine } from "../shared/types.ts";
+import { RunProgress } from "./RunProgress.tsx";
 import { api, useServerEvents } from "./api.ts";
 import { FeedbackForm } from "./FeedbackForm.tsx";
 import { StatusIcon } from "./icons.tsx";
 import { Markdown } from "./markdown.tsx";
 import { TestPanel } from "./TestPanel.tsx";
+import { TimePanel } from "./TimePanel.tsx";
 import { ErrorBanner, Modal, timeAgo } from "./ui.tsx";
 
 export function CardModal({
@@ -12,6 +14,7 @@ export function CardModal({
   card,
   board,
   live,
+  progress,
   testing,
   onClose,
 }: {
@@ -19,6 +22,7 @@ export function CardModal({
   card: Card;
   board: Board;
   live?: LiveStatus;
+  progress?: RunProgressData;
   testing: boolean;
   onClose: () => void;
 }) {
@@ -26,7 +30,7 @@ export function CardModal({
   const [description, setDescription] = useState(card.description);
   const [log, setLog] = useState<LogLine[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<"log" | "history">("log");
+  const [tab, setTab] = useState<"log" | "history" | "time">("log");
   const [answers, setAnswers] = useState<string[]>([]);
   const logRef = useRef<HTMLDivElement>(null);
   // Description shows rendered markdown by default; an empty one opens straight in the editor.
@@ -64,8 +68,12 @@ export function CardModal({
   });
   useEffect(() => {
     const el = logRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (el && tab !== "time") el.scrollTop = el.scrollHeight;
   }, [log.length, tab]);
+  // The time tab opens at the top, where the pie chart is.
+  useEffect(() => {
+    if (tab === "time" && logRef.current) logRef.current.scrollTop = 0;
+  }, [tab]);
 
   const guard = (p: Promise<unknown>) => p.catch((e) => setError(e.message));
   const save = () =>
@@ -233,7 +241,11 @@ export function CardModal({
             <button role="tab" aria-selected={tab === "history"} onClick={() => setTab("history")}>
               Historique
             </button>
+            <button role="tab" aria-selected={tab === "time"} onClick={() => setTab("time")}>
+              Temps
+            </button>
           </div>
+          {tab === "log" && <RunProgress progress={progress} live={live} />}
           <div className="log" ref={logRef}>
             {tab === "log" ? (
               log.length ? (
@@ -246,6 +258,8 @@ export function CardModal({
               ) : (
                 <p className="muted">Aucun run pour cette fiche.</p>
               )
+            ) : tab === "time" ? (
+              <TimePanel card={card} board={board} />
             ) : (
               [...card.history].reverse().map((h, i) => (
                 <div key={i} className={`log-line ${h.kind}`}>
