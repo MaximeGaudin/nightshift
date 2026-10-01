@@ -5,12 +5,9 @@ import { join } from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-process.env.NIGHTSHIFT_HOME = mkdtempSync(join(tmpdir(), "ns-emoji-home-"));
-process.env.NIGHTSHIFT_USER_SKILLS = mkdtempSync(join(tmpdir(), "ns-emoji-skills-"));
+import { type ChildServer, startChildServer } from "./helpers.ts";
 
 const { doneColumnChanged, normalizeBoard, numberingChanged } = await import("../src/server/store.ts");
-const { startServer } = await import("../src/server/server.ts");
-const { updateSettings } = await import("../src/server/settings.ts");
 const { normalizeColumnEmoji } = await import("../src/shared/types.ts");
 const { ColumnGlyph } = await import("../src/web/icons.tsx");
 
@@ -65,22 +62,16 @@ test("emoji-no-rewrite", () => {
   expect(numberingChanged(withEmoji, n)).toBe(false);
 });
 
-let srv: ReturnType<typeof startServer>;
-let base = "";
-beforeAll(() => {
-  updateSettings({ maxParallel: 1 });
-  srv = startServer({ port: 0 });
-  base = `http://localhost:${srv.server.port}`;
+// The server runs in a child process with its own NIGHTSHIFT_HOME (see test/helpers.ts).
+let srv: ChildServer;
+beforeAll(async () => {
+  srv = await startChildServer({ settings: { maxParallel: 1 } });
 });
-afterAll(() => {
-  srv.orch.shutdown();
-  srv.server.stop(true);
-});
+afterAll(() => srv.stop());
 
 test("emoji-save via board endpoint", async () => {
   const proj = mkdtempSync(join(tmpdir(), "ns-emoji-proj-"));
-  const post = (path: string, body: unknown, method = "POST") =>
-    fetch(base + path, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json());
+  const post = (path: string, body: unknown, method = "POST") => srv.call(path, { method, body }).then((r) => r.json());
   await post("/api/projects/open", { path: proj });
   const res = await post(
     "/api/board",
