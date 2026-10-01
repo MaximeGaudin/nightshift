@@ -7,7 +7,7 @@ Thanks for helping. Please read the [Code of Conduct](CODE_OF_CONDUCT.md) first.
 Prerequisites: [Bun](https://bun.sh) >= 1.4.2, git, and the Claude Code CLI (only needed to run real agents; tests use `test/fake-claude.ts`).
 
 ```sh
-git clone <repo-url> nightshift && cd nightshift
+git clone https://github.com/MaximeGaudin/nightshift.git nightshift && cd nightshift
 bun install
 bun start <project>      # run against a project folder
 ```

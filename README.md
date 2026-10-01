@@ -16,7 +16,7 @@ A kanban board that orchestrates Claude Code agents. One folder is one board: th
 ## Quick start
 
 ```sh
-git clone <repo-url> nightshift && cd nightshift && bun install && bun start <project>
+git clone https://github.com/MaximeGaudin/nightshift.git nightshift && cd nightshift && bun install && bun start <project>
 ```
 
 `<project>` is the folder you want a board for (it defaults to the current directory).
