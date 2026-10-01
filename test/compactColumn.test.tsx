@@ -35,3 +35,22 @@ test("compact-band-markup", () => {
   expect(html).not.toContain("badge");
   expect(html).not.toContain("column-parallel");
 });
+
+test("compact-band-emoji", () => {
+  const col: Column = { id: "c1", name: "Test", type: "skill", skill: "x", emoji: "🧪" };
+  const html = renderToStaticMarkup(<CompactColumnBand col={col} onAdd={() => {}} />);
+  expect(html).toContain("🧪");
+  expect(html).not.toContain('<svg class="col-icon');
+});
+
+test("compact-band-no-emoji", () => {
+  const skill: Column = { id: "c1", name: "A", type: "skill", skill: "x" };
+  const inert: Column = { id: "c2", name: "B", type: "inert" };
+  expect(renderToStaticMarkup(<CompactColumnBand col={skill} onAdd={() => {}} />)).toContain("col-icon col-skill");
+  expect(renderToStaticMarkup(<CompactColumnBand col={inert} onAdd={() => {}} />)).toContain("col-icon col-inert");
+});
+
+test("compact-title-emoji", () => {
+  const col: Column = { id: "c3", name: "Backlog", type: "inert", emoji: "📥" };
+  expect(compactColumnTitle(col)).toBe("📥 Backlog — inerte");
+});

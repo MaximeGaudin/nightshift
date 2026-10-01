@@ -1,10 +1,14 @@
-import { cardRef, type Card, type LiveStatus } from "../shared/types.ts";
+import { cardRef, type Card, type LiveStatus, type RunProgress as RunProgressData } from "../shared/types.ts";
+import { CardThumbnail } from "./CardThumbnail.tsx";
 import { Icon, StatusIcon } from "./icons.tsx";
 import { toPlainText } from "./markdown.tsx";
+import { RunProgress } from "./RunProgress.tsx";
 
 export function CardTile({
+  project,
   card,
   live,
+  progress,
   dragging,
   onOpen,
   onDragStart,
@@ -13,8 +17,10 @@ export function CardTile({
   onSendNext,
   sending,
 }: {
+  project: string;
   card: Card;
   live?: LiveStatus;
+  progress?: RunProgressData;
   dragging: boolean;
   onOpen: () => void;
   onDragStart: () => void;
@@ -49,6 +55,7 @@ export function CardTile({
       tabIndex={0}
       onKeyDown={(e) => e.key === "Enter" && onOpen()}
     >
+      <CardThumbnail project={project} card={card} />
       <div className="card-ref">
         {cardRef(card)}
         {next && (
@@ -85,6 +92,7 @@ export function CardTile({
           )}
         </div>
       )}
+      <RunProgress progress={progress} live={live} />
     </article>
   );
 }

@@ -3,7 +3,7 @@
 // the source is rendered as escaped text, never injected. Malformed syntax falls
 // back to text and the renderer never throws.
 
-import type { CSSProperties, ReactNode } from "react";
+import { Fragment, type CSSProperties, type ReactNode } from "react";
 
 // ---------- AST ----------
 
@@ -13,7 +13,8 @@ type Inline =
   | { t: "code"; v: string }
   | { t: "strong"; c: Inline[] }
   | { t: "em"; c: Inline[] }
-  | { t: "link"; href: string; c: Inline[] };
+  | { t: "link"; href: string; c: Inline[] }
+  | { t: "img"; alt: string; dest: string; src: string };
 
 type Align = "left" | "center" | "right" | null;
 
@@ -423,10 +424,11 @@ function parseInline(s: string, depth = 0, inLink = false): Inline[] {
     }
 
     if (c === "!" && s[i + 1] === "[") {
-      // Images are not rendered: their source stays as text.
+      // Images are never rendered here: the caller may supply renderImage, else the source stays as text.
       const img = matchLink(s, i + 1);
       if (img) {
-        buf += s.slice(i, img.end);
+        flush();
+        out.push({ t: "img", alt: img.label, dest: img.dest, src: s.slice(i, img.end) });
         i = img.end;
         continue;
       }
@@ -473,7 +475,9 @@ function parseInline(s: string, depth = 0, inLink = false): Inline[] {
 
 // ---------- React rendering ----------
 
-function renderInline(nodes: Inline[]): ReactNode[] {
+export type RenderImage = (alt: string, dest: string) => ReactNode | null;
+
+function renderInline(nodes: Inline[], ri?: RenderImage): ReactNode[] {
   return nodes.map((n, k) => {
     switch (n.t) {
       case "text":
@@ -483,22 +487,25 @@ function renderInline(nodes: Inline[]): ReactNode[] {
       case "code":
         return <code key={k}>{n.v}</code>;
       case "strong":
-        return <strong key={k}>{renderInline(n.c)}</strong>;
+        return <strong key={k}>{renderInline(n.c, ri)}</strong>;
       case "em":
-        return <em key={k}>{renderInline(n.c)}</em>;
+        return <em key={k}>{renderInline(n.c, ri)}</em>;
+      case "img": {
+        const node = ri ? ri(n.alt, n.dest) : null;
+        return node === null || node === undefined ? n.src : <Fragment key={k}>{node}</Fragment>;
+      }
       case "link":
         return (
           <a key={k} href={n.href} target="_blank" rel="noreferrer">
-            {renderInline(n.c)}
+            {renderInline(n.c, ri)}
           </a>
         );
     }
   });
 }
 
-const inline = (s: string) => renderInline(parseInline(s));
-
-function renderItem(item: ListItem, k: number): ReactNode {
+function renderItem(item: ListItem, k: number, ri?: RenderImage): ReactNode {
+  const inline = (s: string) => renderInline(parseInline(s), ri);
   const box = item.task === null ? null : <input type="checkbox" disabled checked={item.task} readOnly />;
   // A leading paragraph sits inline next to the bullet or checkbox.
   const [head, ...rest] = item.blocks;
@@ -507,20 +514,26 @@ function renderItem(item: ListItem, k: number): ReactNode {
     <li key={k} className={item.task === null ? undefined : "task"}>
       {box}
       {lead}
-      {renderBlocks(head?.t === "para" ? rest : item.blocks)}
+      {renderBlocks(head?.t === "para" ? rest : item.blocks, ri)}
     </li>
   );
 }
 
-function renderBlocks(blocks: Block[]): ReactNode[] {
+function renderBlocks(blocks: Block[], ri?: RenderImage): ReactNode[] {
+  const inline = (s: string) => renderInline(parseInline(s), ri);
   return blocks.map((b, k) => {
     switch (b.t) {
       case "heading": {
         const H = `h${b.level}` as "h1";
         return <H key={k}>{inline(b.text)}</H>;
       }
-      case "para":
-        return <p key={k}>{inline(b.text)}</p>;
+      case "para": {
+        const nodes = parseInline(b.text);
+        // A rendered image is a block (<figure>), which is not allowed inside <p>.
+        const hasFigure = !!ri && nodes.some((n) => n.t === "img" && ri(n.alt, n.dest) != null);
+        const P = hasFigure ? "div" : "p";
+        return <P key={k}>{renderInline(nodes, ri)}</P>;
+      }
       case "code":
         return (
           <pre key={k}>
@@ -528,12 +541,12 @@ function renderBlocks(blocks: Block[]): ReactNode[] {
           </pre>
         );
       case "quote":
-        return <blockquote key={k}>{renderBlocks(b.blocks)}</blockquote>;
+        return <blockquote key={k}>{renderBlocks(b.blocks, ri)}</blockquote>;
       case "hr":
         return <hr key={k} />;
       case "list": {
         const cls = b.items.some((it) => it.task !== null) ? "tasks" : undefined;
-        const items = b.items.map(renderItem);
+        const items = b.items.map((it, i) => renderItem(it, i, ri));
         return b.ordered ? (
           <ol key={k} className={cls} start={b.start === 1 ? undefined : b.start}>
             {items}
@@ -582,12 +595,20 @@ function renderBlocks(blocks: Block[]): ReactNode[] {
   });
 }
 
-export function Markdown({ source, className }: { source: string; className?: string }) {
+export function Markdown({
+  source,
+  className,
+  renderImage,
+}: {
+  source: string;
+  className?: string;
+  renderImage?: RenderImage;
+}) {
   const cls = className ? `md ${className}` : "md";
   const src = typeof source === "string" ? source : String(source ?? "");
   let content: ReactNode;
   try {
-    content = renderBlocks(parseSource(src));
+    content = renderBlocks(parseSource(src), renderImage);
   } catch {
     return <div className={`${cls} md-plain`}>{src}</div>;
   }
@@ -598,7 +619,7 @@ export function Markdown({ source, className }: { source: string; className?: st
 
 function inlinePlain(nodes: Inline[]): string {
   return nodes
-    .map((n) => (n.t === "text" || n.t === "code" ? n.v : n.t === "br" ? " " : inlinePlain(n.c)))
+    .map((n) => (n.t === "text" || n.t === "code" ? n.v : n.t === "img" ? n.src : n.t === "br" ? " " : inlinePlain(n.c)))
     .join("");
 }
 

@@ -14,6 +14,8 @@ export interface Column {
   model?: string;
   /** Max agents running at once in this column; absent = 1. The global setting still caps the total. */
   maxParallel?: number;
+  /** Single grapheme shown instead of the type icon; absent = type icon. */
+  emoji?: string;
 }
 
 export type RunStatus = "success" | "error" | "cancelled" | "question";
@@ -29,12 +31,44 @@ export interface LastRun {
   questions?: string[];
   costUsd?: number;
   sessionId?: string;
+  /** Skill name applied in the session; needed so a second feedback in an inert column keeps the reference skill. */
+  skill?: string;
 }
 
 export interface HistoryEntry {
   at: string;
-  kind: "created" | "moved" | "run" | "edited";
+  kind: "created" | "moved" | "run" | "edited" | "queued" | "started";
   text: string;
+  /**
+   * Column the card arrived in (created, moved) or sits in (queued, started). Absent on old entries;
+   * its presence on a created/moved entry marks detailed time data.
+   */
+  columnId?: string;
+}
+
+/** What a card is doing during an interval: waiting in an inert column, queued, agent running, waiting for a human, or unknown (old data). */
+export type TimePart = "inert" | "queued" | "running" | "human" | "legacy";
+
+/** Open interval of a card: since `at`, it sits in a column in a given part. `part` null = not counted (Done, unknown column). */
+export interface TimeCursor {
+  at: string;
+  columnId?: string;
+  columnName: string;
+  part: TimePart | null;
+}
+
+/** Accumulated time of a card in one (column, part). */
+export interface TimeSlice {
+  columnId?: string;
+  columnName: string;
+  part: TimePart;
+  ms: number;
+}
+
+/** Closed totals plus the open interval. Bounded: one slice per column and part. */
+export interface TimeState {
+  totals: TimeSlice[];
+  cursor?: TimeCursor;
 }
 
 export interface CardTest {
@@ -57,11 +91,13 @@ export interface Card {
   enteredColumnAt: string;
   lastRun?: LastRun;
   /** User answer to the agent's question, waiting to be sent by resuming the session. */
-  /** "resume" asks the agent to finish an interrupted session instead of sending answers. */
-  pendingAnswer?: { text: string; sessionId: string; at: string; kind?: "resume" };
+  /** "resume" asks the agent to finish an interrupted session; "feedback" sends free feedback; absent = answer to questions. */
+  pendingAnswer?: { text: string; sessionId: string; at: string; kind?: "resume" | "feedback" };
   /** How a human tries the card's result, set by an agent (e.g. run the app from the card's worktree). */
   test?: CardTest;
   history: HistoryEntry[];
+  /** Time checkpoint of the history entries dropped by the history cap. */
+  timeBase?: TimeState;
 }
 
 /** Content of `nightshift.json`, the single committable file at the project root. */
@@ -103,6 +139,23 @@ export function normalizeColumnParallel(type: ColumnType, raw: unknown): number 
   return Math.min(n, MAX_PARALLEL);
 }
 
+/**
+ * Normalizes a raw column emoji: non-string, empty or blank => undefined; otherwise the first grapheme
+ * of the trimmed value. Does not check that the grapheme is an emoji.
+ */
+export function normalizeColumnEmoji(raw: unknown): string | undefined {
+  if (typeof raw !== "string") return undefined;
+  const s = raw.trim();
+  if (!s) return undefined;
+  const first = new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(s)[Symbol.iterator]().next();
+  return first.done ? undefined : first.value.segment;
+}
+
+/** The emoji to display for a column, or undefined to fall back on the type icon. */
+export function columnEmoji(col: Pick<Column, "emoji">): string | undefined {
+  return normalizeColumnEmoji(col.emoji);
+}
+
 export const DONE_COLUMN_ID = "col_done";
 export const DONE_COLUMN_NAME = "Done";
 
@@ -117,7 +170,7 @@ export function isDoneColumn(colOrId: Pick<Column, "id"> | string): boolean {
 
 /**
  * Returns columns with exactly one Done column, last. Pure and idempotent.
- * Extra unknown fields of the first existing Done column are kept; skill fields are dropped.
+ * Extra unknown fields of the first existing Done column are kept; skill fields are dropped, emoji is kept.
  */
 export function ensureDoneColumn(columns: Column[]): Column[] {
   const existing = columns.find(isDoneColumn);
@@ -154,10 +207,30 @@ export interface SkillInfo {
 /** Live (non-persisted) state of a card in the run queue. */
 export type LiveStatus = "queued" | "running";
 
+/** Whether the user may send free feedback to the card's last session. */
+export function canSendFeedback(card: Card, live?: LiveStatus): boolean {
+  return (
+    !!card.lastRun?.sessionId &&
+    !live &&
+    !card.pendingAnswer &&
+    !(card.lastRun.status === "question" && card.lastRun.columnId === card.columnId)
+  );
+}
+
 export interface LogLine {
   at: string;
   kind: "text" | "tool" | "info" | "error";
   text: string;
+}
+
+/** Live progress of a running card: a step out of a total, from an agent marker or its todo list. */
+export interface RunProgress {
+  step: number;
+  total: number;
+  label: string;
+  source: "marker" | "todo";
+  /** ISO timestamp of the last update. */
+  at: string;
 }
 
 export interface ProjectSnapshot {
@@ -170,6 +243,8 @@ export interface ProjectSnapshot {
   agentsDisabled?: boolean;
   /** Cards whose test command is running. */
   testing: string[];
+  /** Progress per card id; only for cards that are live "running". */
+  progress: Record<string, RunProgress>;
 }
 
 /** Why a card needs a human: it reached an inert column, asks questions, or its run failed. */

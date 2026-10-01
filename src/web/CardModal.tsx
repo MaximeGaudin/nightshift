@@ -1,10 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { cardRef, type Board, type Card, type LiveStatus, type LogLine } from "../shared/types.ts";
+import { canSendFeedback, cardRef, columnEmoji, type Board, type Card, type LiveStatus, type RunProgress as RunProgressData, type LogLine } from "../shared/types.ts";
+import { RunProgress } from "./RunProgress.tsx";
 import { api, useServerEvents } from "./api.ts";
+import { FeedbackForm } from "./FeedbackForm.tsx";
 import { StatusIcon } from "./icons.tsx";
 import { Markdown } from "./markdown.tsx";
-import { nextColumn } from "./nextColumn.ts";
+import { NextColumnButton } from "./NextColumnButton.tsx";
+import { renderCardImage } from "./Screenshot.tsx";
 import { TestPanel } from "./TestPanel.tsx";
+import { TimePanel } from "./TimePanel.tsx";
 import { ErrorBanner, Modal, timeAgo } from "./ui.tsx";
 
 export function CardModal({
@@ -12,6 +16,7 @@ export function CardModal({
   card,
   board,
   live,
+  progress,
   testing,
   onClose,
 }: {
@@ -19,6 +24,7 @@ export function CardModal({
   card: Card;
   board: Board;
   live?: LiveStatus;
+  progress?: RunProgressData;
   testing: boolean;
   onClose: () => void;
 }) {
@@ -26,7 +32,7 @@ export function CardModal({
   const [description, setDescription] = useState(card.description);
   const [log, setLog] = useState<LogLine[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<"log" | "history">("log");
+  const [tab, setTab] = useState<"log" | "history" | "time">("log");
   const [answers, setAnswers] = useState<string[]>([]);
   const logRef = useRef<HTMLDivElement>(null);
   // Description shows rendered markdown by default; an empty one opens straight in the editor.
@@ -38,8 +44,6 @@ export function CardModal({
   const [base, setBase] = useState({ title: card.title, description: card.description });
   const dirty = title !== base.title || description !== base.description;
   const column = board.columns.find((c) => c.id === card.columnId);
-  const next = nextColumn(board.columns, card.columnId);
-  const [validating, setValidating] = useState(false);
 
   useEffect(() => {
     if (dirty) return;
@@ -66,22 +70,16 @@ export function CardModal({
   });
   useEffect(() => {
     const el = logRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (el && tab !== "time") el.scrollTop = el.scrollHeight;
   }, [log.length, tab]);
+  // The time tab opens at the top, where the pie chart is.
+  useEffect(() => {
+    if (tab === "time" && logRef.current) logRef.current.scrollTop = 0;
+  }, [tab]);
 
   const guard = (p: Promise<unknown>) => p.catch((e) => setError(e.message));
-  const save = () =>
-    guard(api.updateCard(project, card.id, { title, description }).then(() => setBase({ title, description })));
-  // Saves pending edits, sends the card to the bottom of the next column, then closes the modal.
-  const validate = () => {
-    if (!next || validating) return;
-    setValidating(true);
-    (dirty ? api.updateCard(project, card.id, { title, description }).then(() => setBase({ title, description })) : Promise.resolve())
-      .then(() => api.moveCard(project, card.id, next.id))
-      .then(onClose)
-      .catch((e) => setError(e.message))
-      .finally(() => setValidating(false));
-  };
+  const saveOrThrow = () => api.updateCard(project, card.id, { title, description }).then(() => setBase({ title, description }));
+  const save = () => guard(saveOrThrow());
   const lr = card.lastRun;
 
   return (
@@ -89,7 +87,7 @@ export function CardModal({
       wide
       title={
         <span>
-          Fiche <CopyRef card={card} /> <span className="muted">· {column?.name}</span>
+          Fiche <CopyRef card={card} /> <span className="muted">· {column && columnEmoji(column) ? `${columnEmoji(column)} ` : ""}{column?.name}</span>
         </span>
       }
       onClose={() => {
@@ -120,14 +118,16 @@ export function CardModal({
           {column?.type === "skill" && live !== "running" && (
             <button onClick={() => guard(api.retry(project, card.id))}>{lr?.columnId === card.columnId ? "Relancer" : "Lancer"}</button>
           )}
+          <NextColumnButton
+            project={project}
+            card={card}
+            board={board}
+            beforeMove={() => (dirty ? saveOrThrow() : undefined)}
+            onError={setError}
+          />
           <button className="primary" disabled={!dirty} onClick={save}>
             Enregistrer
           </button>
-          {next && (
-            <button className="primary" title={`Envoyer vers ${next.name}`} disabled={validating} onClick={validate}>
-              Valider
-            </button>
-          )}
         </>
       }
     >
@@ -170,7 +170,7 @@ export function CardModal({
                 onDoubleClick={editDescription}
               >
                 {description.trim() ? (
-                  <Markdown source={description} />
+                  <Markdown source={description} renderImage={renderCardImage(project, card.id)} />
                 ) : (
                   <p className="muted">Aucune description. Double-cliquer pour en écrire une.</p>
                 )}
@@ -239,6 +239,9 @@ export function CardModal({
               </div>
             </div>
           )}
+          {canSendFeedback(card, live) && !(lr?.status === "question" && lr.columnId === card.columnId && !live) && (
+            <FeedbackForm project={project} cardId={card.id} onError={setError} />
+          )}
           <TestPanel project={project} card={card} running={testing} onError={setError} />
           <div className="tabs" role="tablist">
             <button role="tab" aria-selected={tab === "log"} onClick={() => setTab("log")}>
@@ -247,7 +250,11 @@ export function CardModal({
             <button role="tab" aria-selected={tab === "history"} onClick={() => setTab("history")}>
               Historique
             </button>
+            <button role="tab" aria-selected={tab === "time"} onClick={() => setTab("time")}>
+              Temps
+            </button>
           </div>
+          {tab === "log" && <RunProgress progress={progress} live={live} />}
           <div className="log" ref={logRef}>
             {tab === "log" ? (
               log.length ? (
@@ -260,6 +267,8 @@ export function CardModal({
               ) : (
                 <p className="muted">Aucun run pour cette fiche.</p>
               )
+            ) : tab === "time" ? (
+              <TimePanel card={card} board={board} />
             ) : (
               [...card.history].reverse().map((h, i) => (
                 <div key={i} className={`log-line ${h.kind}`}>

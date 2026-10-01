@@ -3,11 +3,11 @@ import { dirname, join, resolve } from "node:path";
 import { homedir } from "node:os";
 import type { ServerWebSocket } from "bun";
 import index from "../web/index.html";
-import { ensureDoneColumn, isDoneColumn, normalizeColumnParallel, type Column, type ColumnType, type ServerEvent } from "../shared/types.ts";
+import { ensureDoneColumn, isDoneColumn, normalizeColumnEmoji, normalizeColumnParallel, type Card, type Column, type ColumnType, type ServerEvent } from "../shared/types.ts";
 import { Orchestrator } from "./orchestrator.ts";
 import { getSettings, updateSettings } from "./settings.ts";
 import { COLUMN_KEYS, newId, unknownFields } from "./store.ts";
-import { resolveScreenshot } from "./screenshots.ts";
+import { removeScreenshots, resolveScreenshot } from "./screenshots.ts";
 import { createSkill, listSkills, readSkill, saveSkill } from "./skills.ts";
 
 export function startServer({ port, development, agents = true }: { port: number; development?: boolean; agents?: boolean }) {
@@ -88,6 +88,7 @@ export function startServer({ port, development, agents = true }: { port: number
               const userCols: Column[] = b.columns.map((c: any) => {
                 const type: ColumnType = c.type === "skill" ? "skill" : "inert";
                 const maxParallel = normalizeColumnParallel(type, c.maxParallel);
+                const emoji = normalizeColumnEmoji(c.emoji);
                 return {
                   ...unknownFields(c, COLUMN_KEYS),
                   id: typeof c.id === "string" && c.id ? c.id : newId("col"),
@@ -97,6 +98,7 @@ export function startServer({ port, development, agents = true }: { port: number
                   ...(c.instructions?.trim() ? { instructions: String(c.instructions).trim() } : {}),
                   ...(typeof c.model === "string" && c.model.trim() ? { model: c.model.trim() } : {}),
                   ...(maxParallel !== undefined ? { maxParallel } : {}),
+                  ...(emoji !== undefined ? { emoji } : {}),
                 };
               });
               if (userCols.filter((c) => !isDoneColumn(c)).length === 0) throw new Error("A board needs at least one column");
@@ -119,7 +121,7 @@ export function startServer({ port, development, agents = true }: { port: number
           if (!p.column(columnId)) throw new Error("Unknown column");
           const id = newId("card");
           const number = p.mutate((board) => {
-            const card = {
+            const card: Card = {
               id,
               number: board.nextCardNumber,
               title: String(b.title || "Untitled").trim(),
@@ -128,11 +130,12 @@ export function startServer({ port, development, agents = true }: { port: number
               createdAt: now,
               updatedAt: now,
               enteredColumnAt: now,
-              history: [] as any[],
+              history: [],
             };
             board.nextCardNumber += 1;
-            p.addHistory(card, "created", `Created in ${p.column(columnId)!.name}`);
+            p.addHistory(card, "created", `Created in ${p.column(columnId)!.name}`, columnId);
             board.cards.push(card);
+            p.addQueued(card, board);
             return card.number;
           });
           return { id, number };
@@ -155,6 +158,7 @@ export function startServer({ port, development, agents = true }: { port: number
           p.mutate((board) => {
             board.cards = board.cards.filter((c) => c.id !== req.params.id);
           });
+          removeScreenshots(req.params.id!);
         }),
       },
       "/api/cards/:id/move": {
@@ -169,11 +173,14 @@ export function startServer({ port, development, agents = true }: { port: number
       "/api/cards/:id/answer": {
         POST: h((b, url, req) => orch.answer(project(b, url), req.params.id!, Array.isArray(b.answers) ? b.answers.map(String) : [])),
       },
+      "/api/cards/:id/feedback": {
+        POST: h((b, url, req) => orch.feedback(project(b, url), req.params.id!, typeof b.text === "string" ? b.text : "")),
+      },
       "/api/cards/:id/screenshot": {
         GET: h((_b, url, req) => {
           const card = project({}, url).card(req.params.id!);
           if (!card) throw new Error("Unknown card");
-          const file = resolveScreenshot(card.description, url.searchParams.get("file") ?? "");
+          const file = resolveScreenshot(card.description, url.searchParams.get("file") ?? "", card.id);
           return new Response(Bun.file(file), { headers: { "content-type": "image/png" } });
         }),
       },

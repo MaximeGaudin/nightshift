@@ -1,7 +1,7 @@
 // Inline SVG icons (Linear-style). No dependency; every stroke/fill uses currentColor,
 // so color comes from CSS (.st-<status>, .col-<type>, or the parent's color).
 import type { ReactNode } from "react";
-import type { Column, LiveStatus, RunStatus } from "../shared/types.ts";
+import { columnEmoji, type Column, type LiveStatus, type RunStatus } from "../shared/types.ts";
 
 type Status = RunStatus | LiveStatus;
 
@@ -70,6 +70,19 @@ const BOLT = <path d="M7.8 1.5L3 8h3.6l-.6 4.5L11 6H7.3z" fill="currentColor" st
 /** Column kind: inert = empty circle, skill = bolt. */
 export function ColumnIcon({ type }: { type: Column["type"] }) {
   return <Svg className={`col-icon col-${type}`}>{type === "skill" ? BOLT : <circle cx="7" cy="7" r="5.5" />}</Svg>;
+}
+
+/** Column glyph: the custom emoji when set, else the type icon. Same 14px box in both cases. */
+export function ColumnGlyph({ col }: { col: Pick<Column, "type" | "emoji"> }) {
+  const emoji = columnEmoji(col);
+  if (emoji) {
+    return (
+      <span className="col-icon col-emoji" aria-hidden="true">
+        {emoji}
+      </span>
+    );
+  }
+  return <ColumnIcon type={col.type} />;
 }
 
 export type IconName = "moon" | "close" | "plus" | "bolt" | "folder" | "trash" | "play" | "stop" | "lock" | "arrowRight";
