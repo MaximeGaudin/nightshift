@@ -234,6 +234,7 @@ export function CardModal({
               </strong>
               <p className="hint small">Une réponse vide laisse l'agent décider.</p>
               {(lr.questions ?? []).map((q, i) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: questions have no id; the answers are positional (answers[i])
                 <div key={i} className="qa">
                   <div className="qa-q">
                     <span className="qa-num">{i + 1}.</span>
@@ -303,6 +304,7 @@ export function CardModal({
             {tab === "log" ? (
               log.length ? (
                 log.map((l, i) => (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: log lines have no id and the list only grows at its end
                   <div key={i} className={`log-line ${l.kind}`}>
                     <time>{new Date(l.at).toLocaleTimeString("fr-FR")}</time>
                     <span>{l.text}</span>
@@ -315,6 +317,7 @@ export function CardModal({
               <TimePanel card={card} board={board} />
             ) : (
               [...card.history].reverse().map((h, i) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: history entries have no id and the list is never reordered in place
                 <div key={i} className={`log-line ${h.kind}`}>
                   <time>{timeAgo(h.at)}</time>
                   <span>{h.text}</span>

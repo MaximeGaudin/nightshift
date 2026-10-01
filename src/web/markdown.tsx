@@ -486,32 +486,35 @@ function parseInline(s: string, depth = 0, inLink = false): Inline[] {
 export type RenderImage = (alt: string, dest: string) => ReactNode | null;
 
 function renderInline(nodes: Inline[], ri?: RenderImage): ReactNode[] {
-  return nodes.map((n, k) => {
-    switch (n.t) {
-      case "text":
-        return n.v;
-      case "br":
-        return <br key={k} />;
-      case "code":
-        return <code key={k}>{n.v}</code>;
-      case "strong":
-        return <strong key={k}>{renderInline(n.c, ri)}</strong>;
-      case "em":
-        return <em key={k}>{renderInline(n.c, ri)}</em>;
-      case "img": {
-        const node = ri ? ri(n.alt, n.dest) : null;
-        return node === null || node === undefined ? n.src : <Fragment key={k}>{node}</Fragment>;
-      }
-      case "link":
-        return (
-          <a key={k} href={n.href} target="_blank" rel="noreferrer">
-            {renderInline(n.c, ri)}
-          </a>
-        );
-      default:
-        return null;
+  // biome-ignore lint/suspicious/noArrayIndexKey: parsed nodes have no identity; the tree is rendered from scratch and never reordered
+  return nodes.map((n, k) => <Fragment key={k}>{renderInlineNode(n, ri)}</Fragment>);
+}
+
+function renderInlineNode(n: Inline, ri?: RenderImage): ReactNode {
+  switch (n.t) {
+    case "text":
+      return n.v;
+    case "br":
+      return <br />;
+    case "code":
+      return <code>{n.v}</code>;
+    case "strong":
+      return <strong>{renderInline(n.c, ri)}</strong>;
+    case "em":
+      return <em>{renderInline(n.c, ri)}</em>;
+    case "img": {
+      const node = ri ? ri(n.alt, n.dest) : null;
+      return node === null || node === undefined ? n.src : node;
     }
-  });
+    case "link":
+      return (
+        <a href={n.href} target="_blank" rel="noreferrer">
+          {renderInline(n.c, ri)}
+        </a>
+      );
+    default:
+      return null;
+  }
 }
 
 function renderItem(item: ListItem, k: number, ri?: RenderImage): ReactNode {
@@ -530,81 +533,85 @@ function renderItem(item: ListItem, k: number, ri?: RenderImage): ReactNode {
 }
 
 function renderBlocks(blocks: Block[], ri?: RenderImage): ReactNode[] {
+  // biome-ignore lint/suspicious/noArrayIndexKey: parsed blocks have no identity; the tree is rendered from scratch and never reordered
+  return blocks.map((b, k) => <Fragment key={k}>{renderBlock(b, ri)}</Fragment>);
+}
+
+function renderBlock(b: Block, ri?: RenderImage): ReactNode {
   const inline = (s: string) => renderInline(parseInline(s), ri);
-  return blocks.map((b, k) => {
-    switch (b.t) {
-      case "heading": {
-        const H = `h${b.level}` as "h1";
-        return <H key={k}>{inline(b.text)}</H>;
-      }
-      case "para": {
-        const nodes = parseInline(b.text);
-        // A rendered image is a block (<figure>), which is not allowed inside <p>.
-        const hasFigure = !!ri && nodes.some((n) => n.t === "img" && ri(n.alt, n.dest) != null);
-        const P = hasFigure ? "div" : "p";
-        return <P key={k}>{renderInline(nodes, ri)}</P>;
-      }
-      case "code":
-        return (
-          <pre key={k}>
-            <code>{b.text}</code>
-          </pre>
-        );
-      case "quote":
-        return <blockquote key={k}>{renderBlocks(b.blocks, ri)}</blockquote>;
-      case "hr":
-        return <hr key={k} />;
-      case "list": {
-        const cls = b.items.some((it) => it.task !== null) ? "tasks" : undefined;
-        const items = b.items.map((it, i) => renderItem(it, i, ri));
-        return b.ordered ? (
-          <ol key={k} className={cls} start={b.start === 1 ? undefined : b.start}>
-            {items}
-          </ol>
-        ) : (
-          <ul key={k} className={cls}>
-            {items}
-          </ul>
-        );
-      }
-      case "table": {
-        const style = (c: number): CSSProperties | undefined => {
-          const a = b.aligns[c];
-          return a ? { textAlign: a } : undefined;
-        };
-        return (
-          <div key={k} className="md-table">
-            <table>
-              <thead>
-                <tr>
-                  {b.head.map((cell, c) => (
-                    <th key={c} style={style(c)}>
-                      {inline(cell)}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              {b.rows.length > 0 && (
-                <tbody>
-                  {b.rows.map((row, r) => (
-                    <tr key={r}>
-                      {row.map((cell, c) => (
-                        <td key={c} style={style(c)}>
-                          {inline(cell)}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              )}
-            </table>
-          </div>
-        );
-      }
-      default:
-        return null;
+  switch (b.t) {
+    case "heading": {
+      const H = `h${b.level}` as "h1";
+      return <H>{inline(b.text)}</H>;
     }
-  });
+    case "para": {
+      const nodes = parseInline(b.text);
+      // A rendered image is a block (<figure>), which is not allowed inside <p>.
+      const hasFigure = !!ri && nodes.some((n) => n.t === "img" && ri(n.alt, n.dest) != null);
+      const P = hasFigure ? "div" : "p";
+      return <P>{renderInline(nodes, ri)}</P>;
+    }
+    case "code":
+      return (
+        <pre>
+          <code>{b.text}</code>
+        </pre>
+      );
+    case "quote":
+      return <blockquote>{renderBlocks(b.blocks, ri)}</blockquote>;
+    case "hr":
+      return <hr />;
+    case "list": {
+      const cls = b.items.some((it) => it.task !== null) ? "tasks" : undefined;
+      const items = b.items.map((it, i) => renderItem(it, i, ri));
+      return b.ordered ? (
+        <ol className={cls} start={b.start === 1 ? undefined : b.start}>
+          {items}
+        </ol>
+      ) : (
+        <ul className={cls}>{items}</ul>
+      );
+    }
+    case "table": {
+      const style = (c: number): CSSProperties | undefined => {
+        const a = b.aligns[c];
+        return a ? { textAlign: a } : undefined;
+      };
+      return (
+        <div className="md-table">
+          <table>
+            <thead>
+              <tr>
+                {b.head.map((cell, c) => (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: table cells are positional (column c), they have no identity
+                  <th key={c} style={style(c)}>
+                    {inline(cell)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            {b.rows.length > 0 && (
+              <tbody>
+                {b.rows.map((row, r) => (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: table rows are positional, they have no identity
+                  <tr key={r}>
+                    {row.map((cell, c) => (
+                      // biome-ignore lint/suspicious/noArrayIndexKey: table cells are positional (column c), they have no identity
+                      <td key={c} style={style(c)}>
+                        {inline(cell)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            )}
+          </table>
+        </div>
+      );
+    }
+    default:
+      return null;
+  }
 }
 
 export function Markdown({ source, className, renderImage }: { source: string; className?: string; renderImage?: RenderImage }) {

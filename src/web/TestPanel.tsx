@@ -127,6 +127,7 @@ export function TestPanel({
       {showOutput && lines.length > 0 && (
         <div className="log test-output" ref={outRef}>
           {lines.map((l, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: output lines have no id and the list only grows at its end
             <div key={i} className={`log-line ${l.kind}`}>
               <time>{new Date(l.at).toLocaleTimeString("fr-FR")}</time>
               <span>{l.text}</span>

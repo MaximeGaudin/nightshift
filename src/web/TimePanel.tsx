@@ -56,21 +56,23 @@ export function TimePanelView({ card, board, nowMs }: { card: Card; board: Board
     const idx = hueIndex(board, s);
     const label = PART_LABEL[s.part];
     const title = `${s.columnName}${label ? ` — ${label}` : ""} : ${formatDuration(s.ms)} (${formatPercent(s.ms, total)})`;
-    return { s, idx, label, title, fill: fillFor(s, idx) };
+    // One slice per column and part (see cardTimeSlices): that pair is the identity of the slice.
+    const key = `${s.columnId ?? `name:${s.columnName}`}:${s.part}`;
+    return { s, idx, label, title, key, fill: fillFor(s, idx) };
   });
   const patternIdxs = [...new Set(parts.filter((p) => p.s.part === "legacy").map((p) => p.idx))];
 
   let angle = -Math.PI / 2;
-  const shapes = parts.map((p, i) => {
+  const shapes = parts.map((p) => {
     const sweep = (p.s.ms / total) * 2 * Math.PI;
     const from = angle;
     angle += sweep;
     return p.s.ms >= total ? (
-      <circle key={i} cx={C} cy={C} r={R} fill={p.fill}>
+      <circle key={p.key} cx={C} cy={C} r={R} fill={p.fill}>
         <title>{p.title}</title>
       </circle>
     ) : (
-      <path key={i} d={arcPath(from, angle)} fill={p.fill}>
+      <path key={p.key} d={arcPath(from, angle)} fill={p.fill}>
         <title>{p.title}</title>
       </path>
     );
@@ -104,8 +106,8 @@ export function TimePanelView({ card, board, nowMs }: { card: Card; board: Board
         {shapes}
       </svg>
       <ul className="time-legend">
-        {parts.map((p, i) => (
-          <li key={i}>
+        {parts.map((p) => (
+          <li key={p.key}>
             <svg className="time-swatch" width="12" height="12" aria-hidden>
               <rect width="12" height="12" rx="2" fill={p.fill} />
             </svg>
