@@ -29,11 +29,14 @@ test("logo-sources-agree", () => {
   expect(component.length).toBeGreaterThan(0);
   expect(faviconPairs()).toEqual(component);
 
-  const readme = read("README.md").match(/<img src="(docs\/logo\/logo\.svg)"/);
-  expect(readme).not.toBeNull();
-  const src = readme?.[1] ?? "";
-  expect(existsSync(join(root, src))).toBe(true);
-  expect(pathPairs(read(src))).toEqual(component);
+  const logoFile = "docs/logo/logo.svg";
+  expect(existsSync(join(root, logoFile))).toBe(true);
+  expect(pathPairs(read(logoFile))).toEqual(component);
+
+  const banner = read("docs/assets/readme-banner.svg");
+  const group = banner.match(/<g\b[^>]*\bid="nightshift-logo"[^>]*>([\s\S]*?)<\/g>/);
+  expect(group).not.toBeNull();
+  expect(pathPairs(group?.[1] ?? "")).toEqual(component);
 });
 
 test("logo-moon-removed", () => {
