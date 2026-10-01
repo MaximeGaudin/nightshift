@@ -392,9 +392,13 @@ input.col-emoji-input {
   *,
   *::before,
   *::after {
+    /* biome-ignore lint/complexity/noImportantStyles: the reduced-motion reset must win over every animation and transition declared anywhere */
     animation-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: same reset */
     animation-iteration-count: 1 !important;
+    /* biome-ignore lint/complexity/noImportantStyles: same reset */
     transition-duration: 0.01ms !important;
+    /* biome-ignore lint/complexity/noImportantStyles: same reset */
     scroll-behavior: auto !important;
   }
   .st-icon.st-running {

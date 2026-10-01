@@ -51,9 +51,6 @@
   font-family: var(--font-mono);
   font-size: var(--fs-sm);
 }
-.picker form.row button {
-  flex: 0 0 auto;
-}
 
 /* Shared list look: one bordered surface, 32px rows. */
 .recent,
@@ -121,4 +118,9 @@
 .browser button {
   min-height: 28px;
   font-size: var(--fs-md);
+}
+
+/* After the list button rules: it is more specific than they are. */
+.picker form.row button {
+  flex: 0 0 auto;
 }

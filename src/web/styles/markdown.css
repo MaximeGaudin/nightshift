@@ -85,12 +85,6 @@
 .md li > ol {
   margin: calc(var(--sp-1) / 2) 0 0;
 }
-.md li > p,
-.md li > pre,
-.md li > blockquote,
-.md li > .md-table {
-  margin: var(--sp-2) 0;
-}
 .md li::marker {
   color: var(--muted);
 }
@@ -161,6 +155,13 @@
   max-width: 100%;
   overflow-x: auto;
 }
+/* After the base rules of pre, blockquote and .md-table: it is more specific than each of them. */
+.md li > p,
+.md li > pre,
+.md li > blockquote,
+.md li > .md-table {
+  margin: var(--sp-2) 0;
+}
 .md table {
   border-collapse: collapse;
   font-size: var(--fs-sm);
@@ -175,6 +176,24 @@
 .md th {
   font-weight: 600;
   background: var(--surface-2);
+}
+
+/* Fullscreen capture viewer (portal on body). */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sp-5);
+  background: rgba(0, 0, 0, 0.85);
+  cursor: zoom-out;
+}
+.lightbox img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
 }
 
 /* Card captures: full-width figure, caption, not-found box. */
@@ -215,22 +234,4 @@
   background: var(--surface-2);
   color: var(--muted);
   font-size: var(--fs-sm);
-}
-
-/* Fullscreen capture viewer (portal on body). */
-.lightbox {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--sp-5);
-  background: rgba(0, 0, 0, 0.85);
-  cursor: zoom-out;
-}
-.lightbox img {
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
 }
