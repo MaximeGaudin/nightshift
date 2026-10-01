@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { SkillInfo } from "../shared/types.ts";
 import { api } from "./api.ts";
+import { Icon } from "./icons.tsx";
 import { ErrorBanner, Modal } from "./ui.tsx";
 
 const TEMPLATE = `Tu reçois une fiche de kanban (titre + description).
@@ -74,7 +75,9 @@ export function SkillsModal({ project, onClose }: { project: string; onClose: ()
       }}
       footer={
         <>
-          <button onClick={() => pick(null, true)}>+ Nouveau skill (projet)</button>
+          <button onClick={() => pick(null, true)}>
+            <Icon name="plus" /> Nouveau skill (projet)
+          </button>
           <div className="spacer" />
           {(creating || selected) && (
             <button className="primary" disabled={creating ? !form.name.trim() : !dirty} onClick={save}>
@@ -93,7 +96,9 @@ export function SkillsModal({ project, onClose }: { project: string; onClose: ()
               <li key={s.name}>
                 <button className={s.name === selected && !creating ? "active" : ""} onClick={() => pick(s.name)}>
                   <span className="skill-name">
-                    {s.name} <span className={`scope ${s.scope}`}>{s.scope === "project" ? "projet" : "user"}</span>
+                    <Icon name="bolt" />
+                    <span className="truncate">{s.name}</span>
+                    <span className={`scope ${s.scope}`}>{s.scope === "project" ? "projet" : "user"}</span>
                   </span>
                   <span className="skill-desc">{s.description}</span>
                 </button>
