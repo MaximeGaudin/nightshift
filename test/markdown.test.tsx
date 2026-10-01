@@ -107,3 +107,24 @@ test("markdown-task-with-numbered-text", () => {
   expect(html).toContain("1. Wave 0");
   expect(html.match(/type="checkbox"/g)).toHaveLength(2);
 });
+
+test("markdown-image-text-fallback", () => {
+  const src = "Voir ![Board](/w/nightshift-screenshots/01.png) ici";
+  const html = renderToStaticMarkup(<Markdown source={src} />);
+  expect(html).toContain("![Board](/w/nightshift-screenshots/01.png)");
+  expect(html).not.toContain("<img");
+  expect(toPlainText(src)).toBe("Voir ![Board](/w/nightshift-screenshots/01.png) ici");
+  const nulled = renderToStaticMarkup(<Markdown source={src} renderImage={() => null} />);
+  expect(nulled).toBe(html);
+});
+
+test("markdown-image-render-hook", () => {
+  const src = "- ![A](/w/nightshift-screenshots/a.png) puis ![B](https://x/b.png)\n\n> ![A](/w/nightshift-screenshots/a.png)";
+  const html = renderToStaticMarkup(
+    <Markdown source={src} renderImage={(alt, dest) => (dest.startsWith("/") ? <b data-m={alt}>M</b> : null)} />,
+  );
+  expect(html).toContain('<b data-m="A">M</b>');
+  expect(html).not.toContain("![A]");
+  expect(html).toContain("![B](https://x/b.png)");
+  expect(html.match(/<b data-m/g)?.length).toBe(2);
+});
