@@ -1,26 +1,5 @@
 // Icons on lucide-react. Every stroke uses currentColor, so color comes from CSS (.st-<status>, .col-<type>, or the parent's color).
-import {
-  ArrowRight,
-  Ban,
-  ChevronsRight,
-  Circle,
-  CircleCheck,
-  CircleDashed,
-  CircleQuestionMark,
-  CircleX,
-  Folder,
-  LoaderCircle,
-  Lock,
-  type LucideIcon,
-  Moon,
-  Pause,
-  Play,
-  Plus,
-  Square,
-  Trash2,
-  X,
-  Zap,
-} from "lucide-react";
+import { Ban, Circle, CircleCheck, CircleDashed, CircleQuestionMark, CircleX, LoaderCircle, type LucideIcon, Zap } from "lucide-react";
 import { type Column, columnEmoji, type LiveStatus, type RunStatus } from "../shared/types.ts";
 
 type Status = RunStatus | LiveStatus;
@@ -57,27 +36,4 @@ export function ColumnGlyph({ col }: { col: Pick<Column, "type" | "emoji"> }) {
     );
   }
   return <ColumnIcon type={col.type} />;
-}
-
-export type IconName = "moon" | "close" | "plus" | "bolt" | "folder" | "trash" | "play" | "stop" | "lock" | "arrowRight" | "skip" | "pause";
-
-const ICONS: Record<IconName, LucideIcon> = {
-  moon: Moon,
-  close: X,
-  plus: Plus,
-  arrowRight: ArrowRight,
-  skip: ChevronsRight,
-  bolt: Zap,
-  folder: Folder,
-  trash: Trash2,
-  play: Play,
-  pause: Pause,
-  lock: Lock,
-  stop: Square,
-};
-
-/** Adapter over lucide for the legacy `<Icon name=… />` call sites; new code imports lucide-react directly. */
-export function Icon({ name, size = 14 }: { name: IconName; size?: number }) {
-  const Glyph = ICONS[name];
-  return <Glyph className={`icon icon-${name}`} size={size} strokeWidth={1.75} aria-hidden="true" focusable="false" />;
 }

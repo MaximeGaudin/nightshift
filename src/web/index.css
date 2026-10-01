@@ -1,17 +1,7 @@
-/*
- * Entry stylesheet: Tailwind v4 + shadcn/ui theme (Linear flavour).
- *
- * Cascade layers. `legacy` holds the hand-written styles.css until it is deleted: it sits above Tailwind's
- * preflight (`base`, so the old screens keep their look) and below `components` / `utilities` (so shadcn
- * components and Tailwind classes win over the old `button { ... }` style rules). Preflight is therefore kept.
- * When styles.css is removed, drop the `legacy` layer and its import.
- */
-@layer theme, base, legacy, components, utilities;
-
+/* Entry stylesheet: Tailwind v4 + shadcn/ui theme (Linear flavour). */
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "@fontsource-variable/inter";
-@import "./styles.css" layer(legacy);
 @import "./styles/markdown.css";
 
 /* Dark mode follows prefers-color-scheme only: no .dark class. */
@@ -29,11 +19,9 @@
   --primary-foreground: #ffffff;
   --secondary: #f4f5f7;
   --secondary-foreground: #1f2023;
-  /* --muted and --accent are also names of the legacy text color and indigo (styles.css, unlayered :root):
-     the shadcn values live under --ui-* and are mapped to the bg-muted / bg-accent utilities below. */
-  --ui-muted: #f4f5f7;
+  --muted: #f4f5f7;
   --muted-foreground: #6b6f76;
-  --ui-accent: #eceef1;
+  --accent: #eceef1;
   --accent-foreground: #1f2023;
   --destructive: #cf5050;
   --border: rgb(0 0 0 / 0.08);
@@ -60,9 +48,9 @@
     --primary-foreground: #ffffff;
     --secondary: #1c1d22;
     --secondary-foreground: #e4e5e9;
-    --ui-muted: #1c1d22;
+    --muted: #1c1d22;
     --muted-foreground: #8a8f98;
-    --ui-accent: #24252b;
+    --accent: #24252b;
     --accent-foreground: #e4e5e9;
     --destructive: #e5676b;
     --border: rgb(255 255 255 / 0.08);
@@ -92,9 +80,9 @@
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--ui-muted);
+  --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--ui-accent);
+  --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-border: var(--border);
