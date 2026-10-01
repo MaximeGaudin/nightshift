@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { openBrowser, parseArgs } from "../src/server/cli.ts";
+import { tempDir } from "./helpers.ts";
 
 test("cli-port-invalid: bad ports are refused", () => {
   expect(() => parseArgs(["--port", "abc"], {})).toThrow("Invalid port: abc");
@@ -16,6 +17,8 @@ test("cli-port-invalid: bad ports are refused", () => {
 
 test("cli-port-invalid: e2e exits 2 with message on stderr", async () => {
   const p = Bun.spawn(["bun", join(import.meta.dir, "../bin/nightshift.ts"), "--port", "abc", "--no-open", "--no-agents"], {
+    // Never inherit a missing NIGHTSHIFT_HOME: the child would read the real ~/.nightshift.
+    env: { ...process.env, NIGHTSHIFT_HOME: tempDir("ns-cli-home-") },
     stdout: "pipe",
     stderr: "pipe",
   });

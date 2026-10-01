@@ -75,3 +75,23 @@ test("settings-load-corrupt-keeps-backup", async () => {
 });
 
 afterAll(removeTempDirs);
+
+test("settings-read-only: a --no-agents instance never writes the settings file", async () => {
+  const original = `${JSON.stringify({ claudePath: "claude", maxParallel: 3, recentProjects: ["/real"] }, null, 2)}\n`;
+  const { updateSettings, getSettings, rememberProject, setSettingsReadOnly } = await load(original);
+  setSettingsReadOnly(true);
+  updateSettings({ maxParallel: 7 });
+  rememberProject("/tmp/nightshift-test-card_x");
+  expect(getSettings().maxParallel).toBe(7);
+  expect(getSettings().recentProjects).toEqual(["/real"]);
+  expect(readFileSync(join(home, "settings.json"), "utf8")).toBe(original);
+});
+
+test("settings-test-guard: under bun test, a missing NIGHTSHIFT_HOME is refused", () => {
+  const out = Bun.spawnSync(["bun", "-e", `await import(${JSON.stringify(join(import.meta.dir, "../src/server/settings.ts"))})`], {
+    env: { ...process.env, NIGHTSHIFT_HOME: "", NODE_ENV: "test" },
+    stderr: "pipe",
+  });
+  expect(out.exitCode).not.toBe(0);
+  expect(out.stderr.toString()).toContain("NIGHTSHIFT_HOME must be set");
+});

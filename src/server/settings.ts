@@ -6,6 +6,11 @@ import { writeFileAtomic } from "./fsutil.ts";
 
 export const NIGHTSHIFT_HOME = process.env.NIGHTSHIFT_HOME ?? join(homedir(), ".nightshift");
 const SETTINGS_FILE = join(NIGHTSHIFT_HOME, "settings.json");
+// A test run that reaches this line without its own home would rewrite the user's real settings
+// (claudePath pointing at a worktree's fake binary, test parallelism, temp projects in the recent list).
+if (process.env.NODE_ENV === "test" && !process.env.NIGHTSHIFT_HOME) {
+  throw new Error("NIGHTSHIFT_HOME must be set when running tests: refusing to use the real ~/.nightshift");
+}
 
 export const DEFAULT_SETTINGS: Settings = {
   maxParallel: 3,
@@ -18,7 +23,9 @@ export const DEFAULT_SETTINGS: Settings = {
 };
 
 // Kept on globalThis so modules re-evaluated by `bun --hot` share the state seen by the long-lived orchestrator.
-const globals = globalThis as { __nightshiftSettings?: { current: Settings | null; listeners: Set<(s: Settings) => void> } };
+const globals = globalThis as {
+  __nightshiftSettings?: { current: Settings | null; listeners: Set<(s: Settings) => void>; readOnly?: boolean };
+};
 if (!globals.__nightshiftSettings) globals.__nightshiftSettings = { current: null, listeners: new Set() };
 const shared = globals.__nightshiftSettings;
 const listeners: Set<(s: Settings) => void> = shared.listeners;
@@ -99,8 +106,10 @@ export function updateSettings(patch: Partial<Settings>): Settings {
   }
   const next: Settings = { ...getSettings(), ...patch };
   next.maxParallel = clampParallel(next.maxParallel);
-  mkdirSync(NIGHTSHIFT_HOME, { recursive: true });
-  writeFileAtomic(SETTINGS_FILE, `${JSON.stringify(next, null, 2)}\n`);
+  if (!shared.readOnly) {
+    mkdirSync(NIGHTSHIFT_HOME, { recursive: true });
+    writeFileAtomic(SETTINGS_FILE, `${JSON.stringify(next, null, 2)}\n`);
+  }
   shared.current = next;
   for (const l of listeners) l(next);
   return next;
@@ -110,7 +119,16 @@ export function onSettingsChange(fn: (s: Settings) => void) {
   listeners.add(fn);
 }
 
+/**
+ * A test instance (`--no-agents`, started from a card's worktree) reads the user's settings but keeps every
+ * change in memory: its code may be older or newer than the user's, and its projects are temporary copies.
+ */
+export function setSettingsReadOnly(readOnly: boolean) {
+  shared.readOnly = readOnly;
+}
+
 export function rememberProject(path: string) {
+  if (shared.readOnly) return;
   const recent = [path, ...getSettings().recentProjects.filter((p) => p !== path)].slice(0, 15);
   updateSettings({ recentProjects: recent });
 }
