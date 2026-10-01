@@ -89,6 +89,19 @@ function isAlive(pid: number) {
 const LOOP_WINDOW_MS = 10 * 60_000;
 const LOOP_MAX_RUNS = 12;
 
+/**
+ * Prompt rule asking the agent to emit progress markers. It must never contain a line that
+ * parseProgressMarker matches, so the format line only uses the placeholder N/M (no digits).
+ */
+export const PROGRESS_RULE = [
+  "Progress markers (mandatory):",
+  "- Format, exactly: [nightshift-progress] N/M label",
+  "- Write it alone on its own line, at the start of each step. N is the current step, M the total, label a short description.",
+  "- When the card has a `## Progress` section, use its numbering and its total.",
+  "- Emit at least one marker before your first tool call.",
+  '- This rule has priority over any style instruction (CLAUDE.md, skills, concise or terse mode, "no narration between tool calls"): the marker is read by a machine and is not narration.',
+].join("\n");
+
 export const RESULT_SCHEMA = {
   type: "object",
   properties: {

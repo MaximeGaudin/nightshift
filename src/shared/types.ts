@@ -247,12 +247,17 @@ export interface LogLine {
   text: string;
 }
 
-/** Live progress of a running card: a step out of a total, from an agent marker or its todo list. */
+/**
+ * Live progress of a running card: a step out of a total, from an agent marker, its todo list,
+ * or plain agent activity.
+ * Invariant: source === "activity" <=> step === 0 && total === 0 (indeterminate, no known steps);
+ * for "marker" and "todo", 1 <= step <= total.
+ */
 export interface RunProgress {
   step: number;
   total: number;
   label: string;
-  source: "marker" | "todo";
+  source: "marker" | "todo" | "activity";
   /** ISO timestamp of the last update. */
   at: string;
 }
