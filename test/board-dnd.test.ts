@@ -9,6 +9,7 @@ import {
   localColumnOf,
   moveLocal,
   resolveDrop,
+  sameLane,
   snapshotOrder,
   zoneAt,
 } from "../src/web/boardDnd.ts";
@@ -126,4 +127,11 @@ test("board-dnd-keyboard-zone-at-top-left", () => {
   expect(zoneAt({ x: 360, y: 10 }, zones)).toBe("column:col_done");
   expect(zoneAt({ x: 400, y: 500 }, zones)).toBe("column:col_done");
   expect(zoneAt({ x: 10, y: 10 }, zones)).toBeUndefined();
+});
+
+test("board-dnd-same-lane: a tilted overlay still counts as its own column, the next column does not", () => {
+  const card = { left: 19, width: 284 };
+  expect(sameLane({ left: 17.5, width: 287 }, card)).toBe(true);
+  expect(sameLane({ left: 321, width: 284 }, card)).toBe(false);
+  expect(sameLane({ left: 321, width: 40 }, card)).toBe(false);
 });

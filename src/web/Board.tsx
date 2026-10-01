@@ -42,6 +42,7 @@ import {
   localColumnOf,
   moveLocal,
   resolveDrop,
+  sameLane,
   snapshotOrder,
   zoneAt,
 } from "./boardDnd.ts";
@@ -90,10 +91,19 @@ const collide: CollisionDetection = (args) => {
   return [nearest];
 };
 
-/** Wide columns with cards are reached through their cards: hiding their sections stops an arrow press landing on the own column. */
+/** Wide columns with cards are reached through their cards: hiding their sections stops an arrow press landing on the own column.
+ * Left/Right also hide the cards of the column holding the dragged card: the tilted overlay starts a few pixels left of them. */
 const keyboardCoordinates: KeyboardCoordinateGetter = (event, args) => {
   const all = args.context.droppableContainers;
-  const keep = (c: { data: { current?: { type?: string } } } | undefined) => c !== undefined && !isColumnSection(c.data.current?.type);
+  const { active, droppableRects } = args.context;
+  const horizontal = event.code === "ArrowLeft" || event.code === "ArrowRight";
+  const activeRect = active ? droppableRects.get(active.id) : undefined;
+  const keep = (c: { id: UniqueIdentifier; data: { current?: { type?: string } } } | undefined) => {
+    if (c === undefined || isColumnSection(c.data.current?.type)) return false;
+    if (!horizontal || !activeRect || c.id === active?.id) return true;
+    const rect = droppableRects.get(c.id);
+    return !rect || !sameLane(rect, activeRect);
+  };
   const droppableContainers = {
     getEnabled: () => all.getEnabled().filter(keep),
     get: (id: UniqueIdentifier) => {

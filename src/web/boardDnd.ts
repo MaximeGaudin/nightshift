@@ -140,6 +140,12 @@ export function isColumnSection(type: string | undefined): boolean {
   return type === "column";
 }
 
+/** Whether two rects sit in the same board column: their horizontal overlap is more than half the narrower one. */
+export function sameLane(a: { left: number; width: number }, b: { left: number; width: number }): boolean {
+  const overlap = Math.min(a.left + a.width, b.left + b.width) - Math.max(a.left, b.left);
+  return overlap > Math.min(a.width, b.width) / 2;
+}
+
 /** First zone whose rect holds `point` (edges included): the keyboard target among tall card-less zones. */
 export function zoneAt<Id>(
   point: { x: number; y: number },
