@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import type { Subprocess } from "bun";
 import type { Board, Card, Column, LiveStatus, LogLine, ProjectSnapshot, RunStatus, ServerEvent } from "../shared/types.ts";
+import { cardRef } from "../shared/types.ts";
 import { getSettings, NIGHTSHIFT_HOME, onSettingsChange, rememberProject } from "./settings.ts";
 import { needsRun, Project } from "./store.ts";
 import { findSkill } from "./skills.ts";
@@ -68,7 +69,7 @@ A card has landed in the column "${column.name}". Your job is to process this ca
 
 Invoke the skill with the Skill tool (skill name: "${column.skill}")${skillPath ? `; its definition lives at ${skillPath}` : ""}. Follow its instructions, using the card below as your input.
 ${column.instructions ? `\nAdditional instructions for this column:\n${column.instructions}\n` : ""}
-<card id="${card.id}">
+<card id="${card.id}" ref="${cardRef(card)}">
 <title>${card.title}</title>
 <description>
 ${card.description}
