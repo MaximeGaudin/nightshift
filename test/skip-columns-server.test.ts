@@ -7,7 +7,7 @@ import { type ChildServer, must, removeTempDirs, startChildServer, tempDir, wait
 
 // The board of the spec: Backlog, Grill, Plan, Implement, Review, To Test (inert), Merge, Done.
 const ids = {
-  backlog: "col_fdc888c3ed",
+  backlog: "col_backlog",
   review: "col_0fc8f00a6b",
   toTest: "col_2e5738f5a3",
   merge: "col_f95bc1734d",

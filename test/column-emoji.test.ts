@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { type ChildServer, removeTempDirs, startChildServer, tempDir } from "./helpers.ts";
 
-const { doneColumnChanged, normalizeBoard, numberingChanged } = await import("../src/server/store.ts");
+const { systemColumnsChanged, normalizeBoard, numberingChanged } = await import("../src/server/store.ts");
 const { normalizeColumnEmoji } = await import("../src/shared/types.ts");
 const { ColumnGlyph } = await import("../src/web/icons.tsx");
 
@@ -37,16 +37,18 @@ test("emoji-load: normalizeBoard keeps first grapheme, drops empty and non-strin
 test("emoji-no-rewrite", () => {
   const plain = {
     columns: [
+      { id: "col_backlog", name: "Backlog", type: "inert" },
       { id: "a", name: "A", type: "skill", skill: "s", maxParallel: 2 },
       { id: "col_done", name: "Done", type: "inert" },
     ],
     cards: [],
     nextCardNumber: 1,
   };
-  expect(doneColumnChanged(plain, normalizeBoard(plain, "x"))).toBe(false);
+  expect(systemColumnsChanged(plain, normalizeBoard(plain, "x"))).toBe(false);
   expect(numberingChanged(plain, normalizeBoard(plain, "x"))).toBe(false);
   const withEmoji = {
     columns: [
+      { id: "col_backlog", name: "Backlog", type: "inert" },
       { id: "a", name: "A", type: "skill", skill: "s", model: "m", maxParallel: 2, emoji: "🚀" },
       { id: "col_done", name: "Done", type: "inert", emoji: "🏁" },
     ],
@@ -54,8 +56,8 @@ test("emoji-no-rewrite", () => {
     nextCardNumber: 1,
   };
   const n = normalizeBoard(withEmoji, "x");
-  expect(n.columns[1].emoji).toBe("🏁");
-  expect(doneColumnChanged(withEmoji, n)).toBe(false);
+  expect(n.columns[2].emoji).toBe("🏁");
+  expect(systemColumnsChanged(withEmoji, n)).toBe(false);
   expect(numberingChanged(withEmoji, n)).toBe(false);
 });
 

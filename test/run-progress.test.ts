@@ -75,7 +75,7 @@ if (!CHILD) {
       },
       "PUT",
     );
-    const { id } = await post("/api/cards", { project: dir, columnId: res.board.columns[0].id, title });
+    const { id } = await post("/api/cards", { project: dir, columnId: res.board.columns[1].id, title });
     return { dir, id };
   }
 
