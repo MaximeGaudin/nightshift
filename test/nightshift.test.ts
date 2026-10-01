@@ -61,7 +61,7 @@ test("normalizeBoard keeps a trimmed model and drops empty ones", () => {
 
 test("resolveModel priority", () => {
   const col = (model?: string): any => ({ id: "a", name: "A", type: "skill", skill: "s", ...(model ? { model } : {}) });
-  const settings = (model: string): any => ({ maxParallel: 1, claudePath: "claude", permissionMode: "auto", model, extraArgs: "", recentProjects: [] });
+  const settings = (model: string): any => ({ maxParallel: 1, claudePath: "claude", permissionMode: "auto", model, extraArgs: "", recentProjects: [], soundNotifications: true });
   expect(resolveModel(col("opus"), settings("sonnet"))).toBe("opus");
   expect(resolveModel(col(), settings(" sonnet "))).toBe("sonnet");
   expect(resolveModel(col(), settings(""))).toBeUndefined();
@@ -399,4 +399,21 @@ test("prompt: includes card ref", async () => {
   const card = { id: "card_abc", number: 32, title: "T", description: "D", columnId: "col", createdAt: "2026-01-01T00:00:00Z", updatedAt: "2026-01-01T00:00:00Z", enteredColumnAt: "2026-01-01T00:00:00Z", history: [] };
   const board = { version: 1 as const, name: "x", columns: [column], cards: [card], nextCardNumber: 33 };
   expect(buildPrompt(board, card, column, undefined)).toContain(`<card id="card_abc" ref="#32">`);
+});
+
+test("settings: soundNotifications defaults to true and persists", async () => {
+  const { getSettings } = await import("../src/server/settings.ts");
+  const file = join(home, "settings.json");
+  const old = { maxParallel: 2, claudePath: "claude", permissionMode: "auto", model: "", extraArgs: "", recentProjects: [] };
+  writeFileSync(file, JSON.stringify(old));
+  (globalThis as any).__nightshiftSettings.current = null;
+  expect(getSettings().soundNotifications).toBe(true);
+  writeFileSync(file, JSON.stringify({ ...old, soundNotifications: "true" }));
+  (globalThis as any).__nightshiftSettings.current = null;
+  expect(getSettings().soundNotifications).toBe(true);
+  updateSettings({ soundNotifications: false });
+  expect(JSON.parse(readFileSync(file, "utf8")).soundNotifications).toBe(false);
+  expect(readFileSync(file, "utf8")).toContain('"soundNotifications": false');
+  updateSettings({ soundNotifications: null as any });
+  expect(JSON.parse(readFileSync(file, "utf8")).soundNotifications).toBe(true);
 });
