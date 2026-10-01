@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync } from "node:fs";
+import { existsSync, mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import type { ProjectSnapshot } from "../src/shared/types.ts";
 import { type ChildServer, quiet, removeTempDirs, startChildServer } from "./helpers.ts";
