@@ -139,3 +139,14 @@ export function hoverPosition(
 export function isColumnSection(type: string | undefined): boolean {
   return type === "column";
 }
+
+/** First zone whose rect holds `point` (edges included): the keyboard target among tall card-less zones. */
+export function zoneAt<Id>(
+  point: { x: number; y: number },
+  zones: { id: Id; rect?: { left: number; top: number; width: number; height: number } | null }[],
+): Id | undefined {
+  return zones.find(
+    ({ rect }) =>
+      rect && point.x >= rect.left && point.x <= rect.left + rect.width && point.y >= rect.top && point.y <= rect.top + rect.height,
+  )?.id;
+}

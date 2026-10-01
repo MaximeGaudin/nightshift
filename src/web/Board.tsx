@@ -43,6 +43,7 @@ import {
   moveLocal,
   resolveDrop,
   snapshotOrder,
+  zoneAt,
 } from "./boardDnd.ts";
 import { CardTile } from "./CardTile.tsx";
 import { CompactColumnBand, compactColumnTitle, DROP_TARGET, isCompactColumn, STRIP_COLUMN, WIDE_COLUMN } from "./compactColumn.tsx";
@@ -62,7 +63,16 @@ const columnDropId = (columnId: string) => `column:${columnId}`;
 const collide: CollisionDetection = (args) => {
   const isCard = (c: { data: { current?: { type?: string } } }) => c.data.current?.type === "card";
   if (!args.pointerCoordinates) {
-    // Keyboard: nearest card, or a column that has no card to point at (compact, Done).
+    // Keyboard: the arrows put the dragged rect at the target's top-left. Compact strips and Done are tall, so their centre
+    // is far away: take the card-less zone holding that corner first, else the nearest card or zone.
+    const zones = args.droppableContainers.filter((c) => c.data.current?.type === "column-empty");
+    const corner = { x: args.collisionRect.left, y: args.collisionRect.top };
+    const hit = zoneAt(
+      corner,
+      zones.map((c) => ({ id: c.id, rect: args.droppableRects.get(c.id) })),
+    );
+    const zone = hit === undefined ? undefined : zones.find((c) => c.id === hit);
+    if (zone) return [{ id: zone.id, data: { droppableContainer: zone, value: 0 } }];
     const containers = args.droppableContainers.filter((c) => isCard(c) || c.data.current?.type === "column-empty");
     return closestCenter({ ...args, droppableContainers: containers });
   }

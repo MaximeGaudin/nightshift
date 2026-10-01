@@ -10,6 +10,7 @@ import {
   moveLocal,
   resolveDrop,
   snapshotOrder,
+  zoneAt,
 } from "../src/web/boardDnd.ts";
 
 const col = (id: string, type: Column["type"] = "inert"): Column => ({ id, name: id, type }) as Column;
@@ -110,4 +111,19 @@ test("board-dnd-keyboard-skips-column-sections", () => {
   expect(isColumnSection("card")).toBe(false);
   expect(isColumnSection("column-empty")).toBe(false);
   expect(isColumnSection(undefined)).toBe(false);
+});
+
+test("board-dnd-keyboard-zone-at-top-left", () => {
+  const strip = { left: 300, top: 10, width: 48, height: 800 };
+  const done = { left: 360, top: 10, width: 290, height: 800 };
+  const zones = [
+    { id: "column:Z", rect: strip },
+    { id: "column:col_done", rect: done },
+    { id: "column:gone", rect: null },
+  ];
+  // The rect sits at the strip's top-left: its centre (400px below) would lose against nearby cards.
+  expect(zoneAt({ x: 300, y: 10 }, zones)).toBe("column:Z");
+  expect(zoneAt({ x: 360, y: 10 }, zones)).toBe("column:col_done");
+  expect(zoneAt({ x: 400, y: 500 }, zones)).toBe("column:col_done");
+  expect(zoneAt({ x: 10, y: 10 }, zones)).toBeUndefined();
 });
