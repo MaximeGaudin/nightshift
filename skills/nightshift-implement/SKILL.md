@@ -21,6 +21,8 @@ You are the orchestrator. Other implementation cards may run on this repository 
 
 ## Steps
 
+Progress marker: at the start of each step, write `[nightshift-progress] N/M label` alone on its own line, where N is the current step number, M is the total, and label is a few words naming the step. Use the numbering of the card's `## Progress` list; when the card has none, use the numbering of this `## Steps` list. A machine reads this line, so it overrides any concise or no-narration style.
+
 1. Read the card. List every wave in order, and every task under it (`Owns`, `Hard part`, `Done when`, `Depends on`).
    - If the prompt has no card: set `move` to `stay`, ask one question for the specification, and stop.
 2. If `## Tasks` is missing, or a parallel task has no `Owns`, or two tasks in the same parallel wave list the same path, do not implement. Ask every blocker at once. See Questions.

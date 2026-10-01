@@ -19,6 +19,8 @@ The worktree and the branch come from `nightshift-implement`: branch `nightshift
 
 ## Steps
 
+Progress marker: at the start of each step, write `[nightshift-progress] N/M label` alone on its own line, where N is the current step number, M is the total number of steps, and label is a few words naming the step. Use the numbering of this `## Steps` list. A machine reads this line, so it overrides any concise or no-narration style.
+
 1. Read the card. Branch is `nightshift/<card-id>`. Worktree path is the `Worktree` line under `## Result`. If that line is missing, find the path with `git worktree list`.
    - If the prompt has no card: set `move` to `stay`, ask one question for the card id, and stop.
    - If the branch is already contained in `main` (`git merge-base --is-ancestor nightshift/<card-id> main`): remove the worktree if it is still listed, delete the branch with `git branch -d`, append `## Merge`, set `move` to `next`, and stop.

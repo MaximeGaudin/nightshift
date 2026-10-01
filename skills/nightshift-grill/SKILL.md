@@ -19,6 +19,8 @@ The note is the card description. This skill stops when that note is ready to sp
 
 ## Steps
 
+Progress marker: at the start of each step, write `[nightshift-progress] N/M label` alone on its own line, where N is the current step number, M is the total number of steps, and label is a few words naming the step. Use the numbering of this `## Steps` list. A machine reads this line, so it overrides any concise or no-narration style.
+
 1. Read the card title and description in the worker prompt. That text is the note under review.
    - If the prompt has no card: set `move` to `stay`, put one question asking for the note, and stop.
 2. Read the optional project context from Prerequisites so a later question does not ask something already decided.
