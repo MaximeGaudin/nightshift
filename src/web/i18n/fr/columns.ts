@@ -1,3 +1,42 @@
-import type { columns as encolumns } from "../en/columns.ts";
+import type { columns as enColumns } from "../en/columns.ts";
 
-export const columns: Record<keyof typeof encolumns, string> = {};
+export const columns: Record<keyof typeof enColumns, string> = {
+  "columns.emoji": "Emoji",
+  "columns.emojiHint": "Emoji optionnel — tapez ou collez-en un (macOS : Ctrl+Cmd+Espace). Vide = icône de type.",
+  "columns.reorder": "Réordonner la colonne {name}",
+  "columns.name": "Nom",
+  "columns.type": "Type",
+  "columns.typeInert": "Inerte",
+  "columns.typeSkill": "Skill",
+  "columns.skill": "Skill",
+  "columns.chooseSkill": "— choisir un skill —",
+  "columns.skillMissing": "{name} (introuvable)",
+  "columns.projectSkills": "Skills du projet",
+  "columns.userSkills": "Skills utilisateur",
+  "columns.parallel": "Agents en parallèle",
+  "columns.parallelHint": "Agents en parallèle dans cette colonne. Vide = 1. Le plafond global des réglages s'applique toujours.",
+  "columns.details": "Détails",
+  "columns.emptyBeforeDelete": "Videz la colonne avant de la supprimer",
+  "columns.model": "Modèle",
+  "columns.modelPlaceholder": "Réglage global",
+  "columns.modelHint": "Vide = modèle des réglages globaux.",
+  "columns.instructions": "Instructions",
+  "columns.instructionsPlaceholder": "Instructions additionnelles pour l'agent (optionnel)…",
+  "columns.systemColumn": "Colonne système",
+  "columns.title": "Colonnes du kanban",
+  "columns.description": "Ordonnez les colonnes, choisissez leur type et le skill exécuté.",
+  "columns.newName": "Nouvelle colonne",
+  "columns.add": "Colonne",
+  "columns.boardName": "Nom du kanban",
+  "columns.hintBefore": "Une colonne",
+  "columns.hintSkill": "skill",
+  "columns.hintAfter":
+    "exécute le skill choisi sur chaque fiche qui y arrive. Chaque colonne skill a sa propre limite d'agents en parallèle (1 par défaut), sous le plafond global des réglages. Le skill peut modifier la fiche puis l'envoyer à la colonne suivante. Le champ emoji (optionnel) remplace l'icône de type de la colonne.",
+  "columns.dnd.instructions":
+    "Pour réordonner une colonne, appuyez sur Espace, déplacez-la avec les flèches haut et bas, puis appuyez sur Espace pour la déposer ou sur Échap pour annuler.",
+  "columns.dnd.start": "Colonne {name} saisie",
+  "columns.dnd.over": "Colonne {name} au-dessus de {target}",
+  "columns.dnd.dropOn": "Colonne {name} déposée à la place de {target}",
+  "columns.dnd.drop": "Colonne {name} déposée",
+  "columns.dnd.cancel": "Déplacement de la colonne {name} annulé",
+};
