@@ -22,3 +22,19 @@ test("icon-button-tooltip: extra props reach the button", () => {
   expect(html).toContain("disabled");
   expect(html).toContain("x-test");
 });
+
+test("icon-button-tooltip: a disabled button sits in a focusable tooltip trigger", () => {
+  const html = renderToStaticMarkup(
+    <IconButton label="Videz la colonne avant de la supprimer" disabled>
+      <svg aria-hidden="true" />
+    </IconButton>,
+  );
+  expect(html).toMatch(/^<span[^>]*tabindex="0"[^>]*><button[^>]* disabled=""/);
+  expect(html).toContain('aria-label="Videz la colonne avant de la supprimer"');
+  const enabled = renderToStaticMarkup(
+    <IconButton label="Supprimer">
+      <svg aria-hidden="true" />
+    </IconButton>,
+  );
+  expect(enabled).toMatch(/^<button/);
+});
