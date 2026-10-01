@@ -179,6 +179,16 @@ export interface LogLine {
   text: string;
 }
 
+/** Live progress of a running card: a step out of a total, from an agent marker or its todo list. */
+export interface RunProgress {
+  step: number;
+  total: number;
+  label: string;
+  source: "marker" | "todo";
+  /** ISO timestamp of the last update. */
+  at: string;
+}
+
 export interface ProjectSnapshot {
   path: string;
   board: Board;
@@ -189,6 +199,8 @@ export interface ProjectSnapshot {
   agentsDisabled?: boolean;
   /** Cards whose test command is running. */
   testing: string[];
+  /** Progress per card id; only for cards that are live "running". */
+  progress: Record<string, RunProgress>;
 }
 
 /** Why a card needs a human: it reached an inert column, asks questions, or its run failed. */
