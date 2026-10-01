@@ -5,6 +5,8 @@
 
 /* One bordered list, rows split by hairlines. Hint/instructions indent = order (16px) + icon (14px) + 2 gaps. */
 .col-editor {
+  /* Inside the flex .modal-body: keep full height so the body scrolls instead of clipping the list. */
+  flex-shrink: 0;
   list-style: none; padding: 0; margin: 0;
   display: flex; flex-direction: column;
   border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
