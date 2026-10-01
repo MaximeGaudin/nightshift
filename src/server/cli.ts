@@ -31,3 +31,14 @@ export function parseArgs(argv: string[], env: Record<string, string | undefined
   }
   return opts;
 }
+
+/** Opens `url` in the default browser. Never throws: a missing opener (Linux without xdg-open) only prints a hint on stderr. */
+export function openBrowser(url: string, opener = process.platform === "darwin" ? "open" : "xdg-open"): boolean {
+  try {
+    Bun.spawn([opener, url], { stdout: "ignore", stderr: "ignore" });
+    return true;
+  } catch (e) {
+    console.error(`Could not open the browser (${e instanceof Error ? e.message : String(e)}). Open ${url} yourself.`);
+    return false;
+  }
+}

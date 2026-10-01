@@ -1,13 +1,13 @@
 #!/usr/bin/env bun
 import { resolve } from "node:path";
-import { type CliOptions, parseArgs, USAGE } from "../src/server/cli.ts";
+import { type CliOptions, openBrowser, parseArgs, USAGE } from "../src/server/cli.ts";
 import { startServer } from "../src/server/server.ts";
 
 let opts: CliOptions;
 try {
   opts = parseArgs(process.argv.slice(2), process.env);
-} catch (e: any) {
-  console.error(e.message);
+} catch (e) {
+  console.error(e instanceof Error ? e.message : String(e));
   process.exit(2);
 }
 if (opts.help) {
@@ -22,16 +22,24 @@ let url = `http://localhost:${server.port}/`;
 try {
   orch.open(project);
   url += `?project=${encodeURIComponent(project)}`;
-} catch (e: any) {
-  console.error(e.message);
+} catch (e) {
+  console.error(e instanceof Error ? e.message : String(e));
 }
 console.log(`Nightshift running at ${url}`);
 // NIGHTSHIFT_NO_OPEN lets an agent start the app for screenshots without popping a browser for the human.
-if (open && !process.env.NIGHTSHIFT_NO_OPEN)
-  Bun.spawn([process.platform === "darwin" ? "open" : "xdg-open", url], { stdout: "ignore", stderr: "ignore" });
+if (open && !process.env.NIGHTSHIFT_NO_OPEN) openBrowser(url);
 
-for (const sig of ["SIGINT", "SIGTERM"] as const) {
-  process.on(sig, () => {
-    orch.shutdown().finally(() => process.exit(0));
+// Agents and test commands must not outlive the CLI, whatever ends it.
+let stopping = false;
+const stop = (code: number) => {
+  if (stopping) return;
+  stopping = true;
+  orch.shutdown().finally(() => process.exit(code));
+};
+for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) process.on(sig, () => stop(0));
+for (const event of ["uncaughtException", "unhandledRejection"] as const) {
+  process.on(event, (e) => {
+    console.error(`${event}:`, e);
+    stop(1);
   });
 }
