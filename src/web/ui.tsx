@@ -24,7 +24,7 @@ export function Modal({
       <div className={`modal ${wide ? "wide" : ""}`} role="dialog" aria-modal="true">
         <header className="modal-head">
           <h2>{title}</h2>
-          <button className="icon-btn" onClick={onClose} aria-label="Fermer">
+          <button type="button" className="icon-btn" onClick={onClose} aria-label="Fermer">
             <Icon name="close" />
           </button>
         </header>
@@ -41,7 +41,7 @@ export function ErrorBanner({ error, onClose }: { error: string | null; onClose?
     <div className="error-banner" role="alert">
       <span>{error}</span>
       {onClose && (
-        <button className="icon-btn" onClick={onClose} aria-label="Fermer">
+        <button type="button" className="icon-btn" onClick={onClose} aria-label="Fermer">
           <Icon name="close" />
         </button>
       )}

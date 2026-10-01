@@ -55,6 +55,7 @@ export function NextColumnButton({
   if (!target) return null;
   return (
     <button
+      type="button"
       className="primary"
       disabled={busy}
       onClick={async () => {

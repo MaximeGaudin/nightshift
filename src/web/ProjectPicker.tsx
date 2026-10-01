@@ -47,7 +47,7 @@ export function ProjectPicker({
           <ul className="recent">
             {recent.map((p) => (
               <li key={p}>
-                <button className={p === current ? "active" : ""} onClick={() => onPick(p)}>
+                <button type="button" className={p === current ? "active" : ""} onClick={() => onPick(p)}>
                   <Icon name="folder" />
                   <span className="recent-text">
                     <strong className="truncate">{p.split("/").pop()}</strong>
@@ -86,7 +86,7 @@ export function ProjectPicker({
           <ul className="browser">
             {browse.parent && (
               <li>
-                <button onClick={() => go(browse.parent!)}>
+                <button type="button" onClick={() => go(browse.parent!)}>
                   <Icon name="folder" />
                   <span className="truncate">..</span>
                 </button>
@@ -94,7 +94,7 @@ export function ProjectPicker({
             )}
             {browse.dirs.map((d) => (
               <li key={d}>
-                <button onClick={() => go(`${browse.dir}/${d}`)}>
+                <button type="button" onClick={() => go(`${browse.dir}/${d}`)}>
                   <Icon name="folder" />
                   <span className="truncate">{d}</span>
                 </button>

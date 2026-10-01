@@ -35,7 +35,6 @@
         "useExhaustiveDependencies": "off"
       },
       "a11y": {
-        "useButtonType": "off",
         "noAutofocus": "off",
         "useKeyWithClickEvents": "off",
         "noStaticElementInteractions": "off",

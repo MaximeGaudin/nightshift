@@ -49,7 +49,7 @@ export function TestPanel({
 
   if (!card.test && !editing) {
     return (
-      <button className="test-add" onClick={() => setEditing(true)}>
+      <button type="button" className="test-add" onClick={() => setEditing(true)}>
         + Commande de test
       </button>
     );
@@ -92,13 +92,16 @@ export function TestPanel({
         <strong>Tester</strong>
         {running && <span className="spinner" aria-hidden />}
         <div className="spacer" />
-        <button className="icon-btn" onClick={() => setEditing(true)} disabled={running}>
+        <button type="button" className="icon-btn" onClick={() => setEditing(true)} disabled={running}>
           Modifier
         </button>
         {running ? (
-          <button onClick={() => guard(api.stopTest(project, card.id))}>Arrêter</button>
+          <button type="button" onClick={() => guard(api.stopTest(project, card.id))}>
+            Arrêter
+          </button>
         ) : (
           <button
+            type="button"
             className="primary"
             onClick={() => {
               setShowOutput(true);
@@ -116,7 +119,7 @@ export function TestPanel({
         </a>
       )}
       {lines.length > 0 && (
-        <button className="test-toggle" onClick={() => setShowOutput((s) => !s)}>
+        <button type="button" className="test-toggle" onClick={() => setShowOutput((s) => !s)}>
           {showOutput ? "Masquer la sortie" : "Afficher la sortie"}
         </button>
       )}

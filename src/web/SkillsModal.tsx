@@ -79,12 +79,12 @@ export function SkillsModal({ project, onClose }: { project: string; onClose: ()
       }}
       footer={
         <>
-          <button onClick={() => pick(null, true)}>
+          <button type="button" onClick={() => pick(null, true)}>
             <Icon name="plus" /> Nouveau skill (projet)
           </button>
           <div className="spacer" />
           {(creating || selected) && (
-            <button className="primary" disabled={creating ? !form.name.trim() : !dirty} onClick={save}>
+            <button type="button" className="primary" disabled={creating ? !form.name.trim() : !dirty} onClick={save}>
               {creating ? "Créer" : "Enregistrer"}
             </button>
           )}
@@ -98,7 +98,7 @@ export function SkillsModal({ project, onClose }: { project: string; onClose: ()
           <ul>
             {shown.map((s) => (
               <li key={s.name}>
-                <button className={s.name === selected && !creating ? "active" : ""} onClick={() => pick(s.name)}>
+                <button type="button" className={s.name === selected && !creating ? "active" : ""} onClick={() => pick(s.name)}>
                   <span className="skill-name">
                     <Icon name="bolt" />
                     <span className="truncate">{s.name}</span>

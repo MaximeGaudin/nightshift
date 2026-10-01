@@ -101,6 +101,7 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
       footer={
         <>
           <button
+            type="button"
             onClick={() =>
               setCols((cs) => [
                 ...cs.slice(0, -1),
@@ -112,8 +113,10 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
             <Icon name="plus" /> Colonne
           </button>
           <div className="spacer" />
-          <button onClick={onClose}>Annuler</button>
-          <button className="primary" disabled={saving} onClick={save}>
+          <button type="button" onClick={onClose}>
+            Annuler
+          </button>
+          <button type="button" className="primary" disabled={saving} onClick={save}>
             Enregistrer
           </button>
         </>
@@ -170,13 +173,20 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
                   </select>
                 )}
                 <div className="spacer" />
-                <button className="icon-btn" disabled={i === 0} onClick={() => move(i, -1)} aria-label="Monter">
+                <button type="button" className="icon-btn" disabled={i === 0} onClick={() => move(i, -1)} aria-label="Monter">
                   <Chevron up />
                 </button>
-                <button className="icon-btn" disabled={i >= cols.length - 2} onClick={() => move(i, 1)} aria-label="Descendre">
+                <button
+                  type="button"
+                  className="icon-btn"
+                  disabled={i >= cols.length - 2}
+                  onClick={() => move(i, 1)}
+                  aria-label="Descendre"
+                >
                   <Chevron />
                 </button>
                 <button
+                  type="button"
                   className="icon-btn danger"
                   disabled={!!c.id && count(c.id) > 0}
                   title={c.id && count(c.id) > 0 ? "Videz la colonne avant de la supprimer" : "Supprimer"}

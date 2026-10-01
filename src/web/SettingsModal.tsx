@@ -26,8 +26,10 @@ export function SettingsModal({ settings, onClose }: { settings: Settings; onClo
       footer={
         <>
           <div className="spacer" />
-          <button onClick={onClose}>Annuler</button>
-          <button className="primary" onClick={save}>
+          <button type="button" onClick={onClose}>
+            Annuler
+          </button>
+          <button type="button" className="primary" onClick={save}>
             Enregistrer
           </button>
         </>

@@ -108,7 +108,7 @@ export function App() {
           </span>
           <div className="brand-text">
             <h1>{snap.board.name}</h1>
-            <button className="path ghost" onClick={() => setModal("projects")} title="Changer de projet">
+            <button type="button" className="path ghost" onClick={() => setModal("projects")} title="Changer de projet">
               {snap.path}
             </button>
           </div>
@@ -124,13 +124,13 @@ export function App() {
           )}
         </div>
         <nav className="actions">
-          <button className="ghost" onClick={() => setModal("columns")}>
+          <button type="button" className="ghost" onClick={() => setModal("columns")}>
             Colonnes
           </button>
-          <button className="ghost" onClick={() => setModal("skills")}>
+          <button type="button" className="ghost" onClick={() => setModal("skills")}>
             Skills
           </button>
-          <button className="ghost" onClick={() => setModal("settings")}>
+          <button type="button" className="ghost" onClick={() => setModal("settings")}>
             Réglages
           </button>
         </nav>
@@ -370,7 +370,7 @@ function AddCard({
   };
   if (!open)
     return (
-      <button className="add-card ghost" onClick={() => setOpen(true)}>
+      <button type="button" className="add-card ghost" onClick={() => setOpen(true)}>
         <Icon name="plus" size={12} />
         Ajouter une fiche
       </button>
@@ -400,10 +400,12 @@ function AddCard({
         }}
       />
       <div className="row">
-        <button className="primary" onClick={submit}>
+        <button type="button" className="primary" onClick={submit}>
           Ajouter
         </button>
-        <button onClick={close}>Annuler</button>
+        <button type="button" onClick={close}>
+          Annuler
+        </button>
       </div>
     </div>
   );

@@ -122,6 +122,7 @@ export function CardModal({
       footer={
         <>
           <button
+            type="button"
             className="danger"
             onClick={() => {
               if (confirm("Supprimer cette fiche ?")) void deleteThenClose(api.deleteCard(project, card.id), onClose, setError);
@@ -130,13 +131,18 @@ export function CardModal({
             Supprimer
           </button>
           <div className="spacer" />
-          {live === "running" && <button onClick={() => guard(api.cancel(project, card.id))}>Arrêter l'agent</button>}
+          {live === "running" && (
+            <button type="button" onClick={() => guard(api.cancel(project, card.id))}>
+              Arrêter l'agent
+            </button>
+          )}
           {column?.type === "skill" &&
             live !== "running" &&
             lr?.sessionId &&
             lr.columnId === card.columnId &&
             (lr.status === "error" || lr.status === "cancelled") && (
               <button
+                type="button"
                 title="Reprend la même session Claude : l'agent vérifie où il en était et termine, sans tout recommencer."
                 onClick={() => guard(api.resumeSession(project, card.id))}
               >
@@ -144,7 +150,9 @@ export function CardModal({
               </button>
             )}
           {column?.type === "skill" && live !== "running" && (
-            <button onClick={() => guard(api.retry(project, card.id))}>{lr?.columnId === card.columnId ? "Relancer" : "Lancer"}</button>
+            <button type="button" onClick={() => guard(api.retry(project, card.id))}>
+              {lr?.columnId === card.columnId ? "Relancer" : "Lancer"}
+            </button>
           )}
           <NextColumnButton
             project={project}
@@ -153,7 +161,7 @@ export function CardModal({
             beforeMove={() => (dirty ? saveOrThrow() : undefined)}
             onError={setError}
           />
-          <button className="primary" disabled={!dirty} onClick={save}>
+          <button type="button" className="primary" disabled={!dirty} onClick={save}>
             Enregistrer
           </button>
         </>
@@ -172,10 +180,10 @@ export function CardModal({
                 Description
               </span>
               <div className="tabs" role="tablist" aria-labelledby="card-desc-label">
-                <button role="tab" aria-selected={descMode === "preview"} onClick={() => setDescMode("preview")}>
+                <button type="button" role="tab" aria-selected={descMode === "preview"} onClick={() => setDescMode("preview")}>
                   Aperçu
                 </button>
-                <button role="tab" aria-selected={descMode === "edit"} onClick={editDescription}>
+                <button type="button" role="tab" aria-selected={descMode === "edit"} onClick={editDescription}>
                   Modifier
                 </button>
               </div>
@@ -278,13 +286,13 @@ export function CardModal({
           )}
           <TestPanel project={project} card={card} running={testing} onError={setError} />
           <div className="tabs" role="tablist">
-            <button role="tab" aria-selected={tab === "log"} onClick={() => setTab("log")}>
+            <button type="button" role="tab" aria-selected={tab === "log"} onClick={() => setTab("log")}>
               Journal agent {live === "running" && <span className="spinner" aria-hidden />}
             </button>
-            <button role="tab" aria-selected={tab === "history"} onClick={() => setTab("history")}>
+            <button type="button" role="tab" aria-selected={tab === "history"} onClick={() => setTab("history")}>
               Historique
             </button>
-            <button role="tab" aria-selected={tab === "time"} onClick={() => setTab("time")}>
+            <button type="button" role="tab" aria-selected={tab === "time"} onClick={() => setTab("time")}>
               Temps
             </button>
           </div>
