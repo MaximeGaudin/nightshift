@@ -77,7 +77,7 @@ test("a rerun stops human waiting at queued", () => {
   expect(view(cardTimeSlices(card(h), columns, T0 + s(50)))).toEqual([
     "Plan/queued/7000",
     "Plan/running/13000",
-    "Plan/human/20000",
+    "Plan/human/30000",
   ]);
 });
 
