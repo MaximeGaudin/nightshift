@@ -79,6 +79,19 @@ export function startServer({ port, development, agents = true }: { port: number
       }
     };
 
+  /** Optional string field: undefined/null give undefined, any other non-string is a 400. */
+  const optString = (b: any, key: string): string | undefined => {
+    const v = b[key];
+    if (v == null) return undefined;
+    if (typeof v !== "string") throw new Error(`${key} must be a string`);
+    return v;
+  };
+  const reqString = (b: any, key: string): string => {
+    const v = optString(b, key);
+    if (v === undefined) throw new Error(`${key} is required`);
+    return v;
+  };
+
   const project = (body: any, url: URL) => {
     const raw = body.project ?? url.searchParams.get("project");
     if (typeof raw !== "string" || !raw) throw new Error("Missing project");
@@ -180,15 +193,17 @@ export function startServer({ port, development, agents = true }: { port: number
         POST: h((b, url) => {
           const p = project(b, url);
           const now = new Date().toISOString();
-          const columnId = b.columnId ?? p.board.columns[0]!.id;
+          const title = optString(b, "title");
+          const description = optString(b, "description");
+          const columnId = optString(b, "columnId") ?? p.board.columns[0]!.id;
           if (!p.column(columnId)) throw new Error("Unknown column");
           const id = newId("card");
           const number = p.mutate((board) => {
             const card: Card = {
               id,
               number: board.nextCardNumber,
-              title: String(b.title || "Untitled").trim(),
-              description: String(b.description ?? ""),
+              title: (title || "Untitled").trim(),
+              description: description ?? "",
               columnId,
               createdAt: now,
               updatedAt: now,
@@ -207,11 +222,13 @@ export function startServer({ port, development, agents = true }: { port: number
       "/api/cards/:id": {
         PATCH: h((b, url, req) => {
           const p = project(b, url);
+          const title = optString(b, "title");
+          const description = optString(b, "description");
           p.mutate(() => {
             const card = p.card(req.params.id!);
             if (!card) throw new Error("Unknown card");
-            if (typeof b.title === "string") card.title = b.title;
-            if (typeof b.description === "string") card.description = b.description;
+            if (title !== undefined) card.title = title;
+            if (description !== undefined) card.description = description;
             card.updatedAt = new Date().toISOString();
             p.addHistory(card, "edited", "Edited by user");
           });
@@ -227,7 +244,9 @@ export function startServer({ port, development, agents = true }: { port: number
       "/api/cards/:id/move": {
         POST: h((b, url, req) => {
           const p = project(b, url);
-          p.mutate((board) => p.moveCard(board, req.params.id!, String(b.columnId), b.index, "Moved by user"));
+          const columnId = reqString(b, "columnId");
+          if (b.index != null && !Number.isInteger(b.index)) throw new Error("index must be an integer");
+          p.mutate((board) => p.moveCard(board, req.params.id!, columnId, b.index ?? undefined, "Moved by user"));
         }),
       },
       "/api/cards/:id/retry": {
@@ -254,12 +273,11 @@ export function startServer({ port, development, agents = true }: { port: number
         GET: h((b, url, req) => orch.testLog(project(b, url), req.params.id!)),
         PUT: h((b, url, req) => {
           const p = project(b, url);
+          const command = (optString(b, "command") ?? "").trim();
+          const rawUrl = (optString(b, "url") ?? "").trim();
           p.mutate(() => {
             const card = p.card(req.params.id!);
             if (!card) throw new Error("Unknown card");
-            const command = String(b.command ?? "").trim();
-            if (b.url != null && typeof b.url !== "string") throw new Error("url must be a string");
-            const rawUrl = (b.url ?? "").trim();
             const testUrl = rawUrl ? safeHttpUrl(rawUrl) : "";
             if (testUrl === null) throw new Error("url must be an absolute http(s) URL");
             if (command) card.test = { command, ...(testUrl ? { url: testUrl } : {}) };

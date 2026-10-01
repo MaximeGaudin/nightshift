@@ -83,3 +83,35 @@ test("routes-validation board: no column, held cards, malformed or duplicate col
   expect((await dup.json()).error).toBe('Duplicate column id "same"');
   expect((await snapshot()).board.columns.map((c: { id: string }) => c.id)).toEqual(cols.map((c: { id: string }) => c.id));
 });
+
+test("routes-validation cards: wrongly typed fields are refused", async () => {
+  const before = (await snapshot()).board.cards.length;
+  for (const body of [{ title: {} }, { title: 5 }, { description: [] }, { columnId: 7 }]) {
+    const r = await srv.call("/api/cards", { body: { project: dir, ...body } });
+    expect(r.status).toBe(400);
+    expect((await r.json()).error).toMatch(/must be a string/);
+  }
+  const unknown = await srv.call("/api/cards", { body: { project: dir, columnId: "nope" } });
+  expect(unknown.status).toBe(400);
+  expect((await unknown.json()).error).toBe("Unknown column");
+  expect((await snapshot()).board.cards).toHaveLength(before);
+
+  const ok = await srv.call("/api/cards", { body: { project: dir, title: "typed" } });
+  const { id } = await ok.json();
+  const columns = (await snapshot()).board.columns;
+  for (const body of [{}, { columnId: 3 }, { columnId: columns[0].id, index: "1" }, { columnId: columns[0].id, index: 1.5 }]) {
+    const r = await srv.call(`/api/cards/${id}/move`, { body: { project: dir, ...body } });
+    expect(r.status).toBe(400);
+  }
+  const moved = await srv.call(`/api/cards/${id}/move`, { body: { project: dir, columnId: columns[0].id, index: 0 } });
+  expect(moved.status).toBe(200);
+  for (const body of [{ command: {} }, { command: "x", url: 4 }]) {
+    const r = await srv.call(`/api/cards/${id}/test`, { method: "PUT", body: { project: dir, ...body } });
+    expect(r.status).toBe(400);
+  }
+  const patch = await srv.call(`/api/cards/${id}`, { method: "PATCH", body: { project: dir, title: {} } });
+  expect(patch.status).toBe(400);
+  const card = (await snapshot()).board.cards.find((c: { id: string }) => c.id === id);
+  expect(card.title).toBe("typed");
+  expect(card.test).toBeUndefined();
+});
