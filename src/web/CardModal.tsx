@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { Board, Card, LiveStatus, LogLine } from "../shared/types.ts";
 import { api, useServerEvents } from "./api.ts";
+import { StatusIcon } from "./icons.tsx";
+import { Markdown } from "./markdown.tsx";
 import { ErrorBanner, Modal, timeAgo } from "./ui.tsx";
 
 export function CardModal({
@@ -23,6 +25,10 @@ export function CardModal({
   const [tab, setTab] = useState<"log" | "history">("log");
   const [answers, setAnswers] = useState<string[]>([]);
   const logRef = useRef<HTMLDivElement>(null);
+  // Description shows rendered markdown by default; an empty one opens straight in the editor.
+  const [descMode, setDescMode] = useState<"preview" | "edit">(card.description.trim() ? "preview" : "edit");
+  const descRef = useRef<HTMLTextAreaElement>(null);
+  const focusDesc = useRef(false);
   // Card content the form started from: edits are detected against it, not against the live card,
   // so agent updates are pulled into an untouched form instead of being mistaken for user edits.
   const [base, setBase] = useState({ title: card.title, description: card.description });
@@ -35,6 +41,16 @@ export function CardModal({
     setDescription(card.description);
     setBase({ title: card.title, description: card.description });
   }, [card.title, card.description]);
+
+  useEffect(() => {
+    if (descMode !== "edit" || !focusDesc.current) return;
+    focusDesc.current = false;
+    descRef.current?.focus();
+  }, [descMode]);
+  const editDescription = () => {
+    focusDesc.current = true;
+    setDescMode("edit");
+  };
 
   useEffect(() => void api.log(project, card.id).then(setLog).catch(() => {}), [card.id]);
   useServerEvents((e) => {
@@ -92,10 +108,45 @@ export function CardModal({
             Titre
             <input value={title} onChange={(e) => setTitle(e.target.value)} />
           </label>
-          <label className="grow">
-            Description (markdown)
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)} spellCheck />
-          </label>
+          <div className="card-desc">
+            <div className="card-desc-head">
+              <span id="card-desc-label" className="card-desc-label">
+                Description
+              </span>
+              <div className="tabs" role="tablist" aria-labelledby="card-desc-label">
+                <button role="tab" aria-selected={descMode === "preview"} onClick={() => setDescMode("preview")}>
+                  Aperçu
+                </button>
+                <button role="tab" aria-selected={descMode === "edit"} onClick={editDescription}>
+                  Modifier
+                </button>
+              </div>
+            </div>
+            {descMode === "edit" ? (
+              <textarea
+                ref={descRef}
+                className="card-desc-body"
+                aria-label="Description (markdown)"
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                spellCheck
+              />
+            ) : (
+              <div
+                className="card-desc-body card-desc-preview"
+                role="tabpanel"
+                tabIndex={0}
+                title="Double-cliquer pour modifier"
+                onDoubleClick={editDescription}
+              >
+                {description.trim() ? (
+                  <Markdown source={description} />
+                ) : (
+                  <p className="muted">Aucune description. Double-cliquer pour en écrire une.</p>
+                )}
+              </div>
+            )}
+          </div>
           {live === "running" && dirty && (
             <p className="hint warn">Un agent travaille sur cette fiche : son résultat écrasera vos modifications non enregistrées.</p>
           )}
@@ -109,16 +160,19 @@ export function CardModal({
                 if (answers.some((a) => a.trim())) guard(api.answer(project, card.id, answers)).then(() => setAnswers([]));
               }}
             >
-              <strong>
+              <strong className="question-head">
+                <StatusIcon status="question" />
                 L'agent a {lr.questions?.length ?? 0} question{(lr.questions?.length ?? 0) > 1 ? "s" : ""}
               </strong>
               <p className="hint small">Une réponse vide laisse l'agent décider.</p>
               {(lr.questions ?? []).map((q, i) => (
-                <label key={i} className="qa">
-                  <span>
-                    {i + 1}. {q}
-                  </span>
+                <div key={i} className="qa">
+                  <div className="qa-q">
+                    <span className="qa-num">{i + 1}.</span>
+                    <Markdown source={q} />
+                  </div>
                   <textarea
+                    aria-label={`Réponse à la question ${i + 1}`}
                     autoFocus={i === 0}
                     value={answers[i] ?? ""}
                     placeholder="Votre réponse… (⌘+Entrée pour tout envoyer)"
@@ -127,7 +181,7 @@ export function CardModal({
                       if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) e.currentTarget.form?.requestSubmit();
                     }}
                   />
-                </label>
+                </div>
               ))}
               <button className="primary" type="submit" disabled={!answers.some((a) => a?.trim())}>
                 Répondre et reprendre
@@ -136,10 +190,16 @@ export function CardModal({
           )}
           {lr && (lr.status !== "question" || live) && (
             <div className={`last-run st-${lr.status}`}>
-              <strong>Dernier run</strong> · {board.columns.find((c) => c.id === lr.columnId)?.name ?? "?"} · {timeAgo(lr.at)}
-              {lr.summary && <p>{lr.summary}</p>}
+              <div className="last-run-head">
+                <StatusIcon status={lr.status} />
+                <strong>Dernier run</strong>
+                <span className="muted">
+                  · {board.columns.find((c) => c.id === lr.columnId)?.name ?? "?"} · {timeAgo(lr.at)}
+                </span>
+              </div>
+              {lr.summary && <Markdown source={lr.summary} className="last-run-summary" />}
               {lr.error && <pre className="error-text">{lr.error}</pre>}
-              <div className="muted small">
+              <div className="last-run-meta muted small">
                 {lr.costUsd !== undefined && <>Coût : ${lr.costUsd.toFixed(3)} · </>}
                 {lr.sessionId && (
                   <span title="Reprendre la session dans un terminal">
