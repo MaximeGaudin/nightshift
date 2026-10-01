@@ -54,7 +54,8 @@
   padding: var(--sp-4) var(--sp-5); overflow-x: auto; align-items: flex-start;
 }
 .column {
-  flex: 0 0 290px; max-height: 100%; display: flex; flex-direction: column;
+  /* min-width: 0 keeps every column at 290px even when a long skill badge would widen it. */
+  flex: 0 0 290px; min-width: 0; max-height: 100%; display: flex; flex-direction: column;
   background: transparent; border-radius: var(--radius-lg); border: 1px solid transparent;
   transition: border-color var(--dur), background var(--dur);
 }
@@ -67,7 +68,7 @@
 .column-title h2 { font-size: var(--fs-md); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .count { color: var(--muted); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
 .badge {
-  margin-left: auto; min-width: 0;
+  margin-left: auto; min-width: 0; max-width: 50%; /* the column name keeps priority over a long skill name */
   font-family: var(--font-mono); font-size: var(--fs-xs); line-height: 1.6;
   padding: 0 var(--sp-2); border-radius: 99px; border: 1px solid var(--border);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
