@@ -91,6 +91,9 @@ export function startServer({ port, development }: { port: number; development?:
                 ...(c.type === "skill" && c.skill ? { skill: String(c.skill) } : {}),
                 ...(c.instructions?.trim() ? { instructions: String(c.instructions).trim() } : {}),
                 ...(typeof c.model === "string" && c.model.trim() ? { model: c.model.trim() } : {}),
+                ...(Number.isInteger(Number(c.maxParallel)) && Number(c.maxParallel) >= 1 && c.maxParallel !== ""
+                  ? { maxParallel: Number(c.maxParallel) }
+                  : {}),
               }));
               if (cols.length === 0) throw new Error("A board needs at least one column");
               const ids = new Set(cols.map((c) => c.id));
@@ -160,6 +163,26 @@ export function startServer({ port, development }: { port: number; development?:
       },
       "/api/cards/:id/answer": {
         POST: h((b, url, req) => orch.answer(project(b, url), req.params.id!, Array.isArray(b.answers) ? b.answers.map(String) : [])),
+      },
+      "/api/cards/:id/test": {
+        GET: h((b, url, req) => orch.testLog(project(b, url), req.params.id!)),
+        PUT: h((b, url, req) => {
+          const p = project(b, url);
+          p.mutate(() => {
+            const card = p.card(req.params.id!);
+            if (!card) throw new Error("Unknown card");
+            const command = String(b.command ?? "").trim();
+            const testUrl = String(b.url ?? "").trim();
+            if (command) card.test = { command, ...(testUrl ? { url: testUrl } : {}) };
+            else delete card.test;
+          });
+        }),
+      },
+      "/api/cards/:id/test/start": {
+        POST: h((b, url, req) => orch.startTest(project(b, url), req.params.id!)),
+      },
+      "/api/cards/:id/test/stop": {
+        POST: h((b, url, req) => ({ stopped: orch.stopTest(project(b, url), req.params.id!) })),
       },
       "/api/cards/:id/cancel": {
         POST: h((b, url, req) => ({ cancelled: orch.cancel(project(b, url), req.params.id!) })),

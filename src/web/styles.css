@@ -211,6 +211,15 @@ label > input, label > textarea, label > select { font-size: 14px; color: var(--
 .card.st-question { border-left-color: var(--warn); background: linear-gradient(var(--warn-soft), var(--warn-soft)) left / 4px 100% no-repeat, var(--surface); }
 .status.st-question { color: var(--warn); }
 
+.test-add { align-self: flex-start; border-style: dashed; color: var(--muted); }
+.test-panel { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 8px; background: var(--surface-2); flex-shrink: 0; }
+.test-panel label { font-size: 12px; }
+.test-panel textarea { min-height: 60px; }
+.test-command { margin: 0; padding: 6px 8px; border-radius: 6px; background: var(--surface); font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-all; }
+.test-panel a { color: var(--accent); font-size: 13px; }
+.test-toggle { align-self: flex-start; border: 0; background: none; padding: 0; color: var(--muted); font-size: 12px; }
+.test-output { max-height: 180px; flex: none; background: var(--surface); }
+
 /* Columns editor */
 .board-name { margin-bottom: 8px; }
 .col-editor { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }

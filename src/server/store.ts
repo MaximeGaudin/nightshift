@@ -73,6 +73,7 @@ export function normalizeBoard(raw: any, fallbackName: string): Board {
           ...(c.skill ? { skill: String(c.skill) } : {}),
           ...(c.instructions ? { instructions: String(c.instructions) } : {}),
           ...(typeof c.model === "string" && c.model.trim() ? { model: c.model.trim() } : {}),
+          ...(Number.isInteger(Number(c.maxParallel)) && Number(c.maxParallel) >= 1 ? { maxParallel: Number(c.maxParallel) } : {}),
         }))
     : [];
   if (columns.length === 0) columns.push(...defaultBoard(fallbackName).columns);
@@ -89,6 +90,9 @@ export function normalizeBoard(raw: any, fallbackName: string): Board {
     enteredColumnAt: c.enteredColumnAt ?? c.updatedAt ?? now(),
     ...(c.lastRun ? { lastRun: c.lastRun } : {}),
     ...(c.pendingAnswer ? { pendingAnswer: c.pendingAnswer } : {}),
+    ...(c.test && typeof c.test.command === "string" && c.test.command.trim()
+      ? { test: { command: c.test.command, ...(c.test.url ? { url: String(c.test.url) } : {}) } }
+      : {}),
     history: Array.isArray(c.history) ? c.history.slice(-50) : [],
   }));
   const nextCardNumber = assignNumbers(cards, rawCards.map((c) => c.number), raw?.nextCardNumber);

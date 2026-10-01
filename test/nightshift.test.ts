@@ -204,6 +204,42 @@ test("loop guard ignores runs before the last user action", async () => {
   expect((await get()).lastRun?.error).toBeUndefined();
 });
 
+test("column maxParallel caps agents in that column", async () => {
+  const p2 = mkdtempSync(join(tmpdir(), "ns-colmax-"));
+  await post("/api/projects/open", { path: p2 });
+  const res = await post(
+    "/api/board",
+    { project: p2, columns: [{ name: "Merge", type: "skill", skill: "enrich", maxParallel: 1 }, { name: "Done", type: "inert" }] },
+    "PUT",
+  );
+  expect(res.board.columns[0].maxParallel).toBe(1);
+  for (const t of ["cap1", "cap2", "cap3"]) await post("/api/cards", { project: p2, columnId: res.board.columns[0].id, title: t });
+  let maxRunning = 0;
+  await waitFor(async () => {
+    const s = await fetch(`${base}/api/project?project=${encodeURIComponent(p2)}`).then((r) => r.json());
+    maxRunning = Math.max(maxRunning, Object.values(s.live).filter((v) => v === "running").length);
+    return Object.keys(s.live).length === 0;
+  });
+  expect(maxRunning).toBe(1);
+});
+
+test("agent test command is stored on the card and can be started and stopped", async () => {
+  const p3 = mkdtempSync(join(tmpdir(), "ns-test-"));
+  await post("/api/projects/open", { path: p3 });
+  const res = await post("/api/board", { project: p3, columns: [{ name: "Impl", type: "skill", skill: "enrich" }, { name: "Testing", type: "inert" }] }, "PUT");
+  const { id } = await post("/api/cards", { project: p3, columnId: res.board.columns[0].id, title: "with-test" });
+  const snap = async () => fetch(`${base}/api/project?project=${encodeURIComponent(p3)}`).then((r) => r.json());
+  await waitFor(async () => !!(await snap()).board.cards[0].test);
+  expect((await snap()).board.cards[0].test).toEqual({ command: "echo hello-from-test; sleep 30", url: "http://localhost:9999" });
+  await post(`/api/cards/${id}/test/start`, { project: p3 });
+  expect((await snap()).testing).toEqual([id]);
+  const log = () => fetch(`${base}/api/cards/${id}/test?project=${encodeURIComponent(p3)}`).then((r) => r.json());
+  await waitFor(async () => (await log()).some((l: any) => l.text === "hello-from-test"));
+  await post(`/api/cards/${id}/test/stop`, { project: p3 });
+  await waitFor(async () => (await snap()).testing.length === 0);
+  expect((await log()).at(-1).text).toContain("Exited");
+});
+
 test("removing a column that still holds cards is refused", async () => {
   const snap = await post("/api/projects/open", { path: proj });
   const res = await post("/api/board", { project: proj, columns: [snap.board.columns[0]] }, "PUT");

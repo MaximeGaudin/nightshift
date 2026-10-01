@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { cardRef, type Board, type Card, type LiveStatus, type LogLine } from "../shared/types.ts";
 import { api, useServerEvents } from "./api.ts";
+import { TestPanel } from "./TestPanel.tsx";
 import { ErrorBanner, Modal, timeAgo } from "./ui.tsx";
 
 export function CardModal({
@@ -8,12 +9,14 @@ export function CardModal({
   card,
   board,
   live,
+  testing,
   onClose,
 }: {
   project: string;
   card: Card;
   board: Board;
   live?: LiveStatus;
+  testing: boolean;
   onClose: () => void;
 }) {
   const [title, setTitle] = useState(card.title);
@@ -149,6 +152,7 @@ export function CardModal({
               </div>
             </div>
           )}
+          <TestPanel project={project} card={card} running={testing} onError={setError} />
           <div className="tabs" role="tablist">
             <button role="tab" aria-selected={tab === "log"} onClick={() => setTab("log")}>
               Journal agent {live === "running" && <span className="spinner" aria-hidden />}
