@@ -100,7 +100,7 @@
 /* ---------- Cards ---------- */
 .card {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-  padding: calc(var(--sp-1) + var(--sp-2)) var(--sp-4); box-shadow: var(--shadow); cursor: pointer;
+  padding: calc(var(--sp-1) + var(--sp-2)) var(--sp-4); box-shadow: var(--shadow); cursor: pointer; position: relative;
   transition: border-color var(--dur), transform var(--dur), background var(--dur);
 }
 .card:hover { border-color: var(--border-strong); transform: translateY(-1px); }
@@ -160,7 +160,18 @@ button.add-card:hover:not(:disabled) { color: var(--text); }
 .column-badges .badge { margin-left: 0; max-width: none; }
 .column-badges .badge.skill { min-width: 0; flex-shrink: 1; }
 .badge.model { background: transparent; color: var(--muted); flex-shrink: 0; }
-.card .card-ref { font-size: var(--fs-xs); color: var(--muted); margin-bottom: 2px; font-variant-numeric: tabular-nums; }
+.card .card-ref { font-size: var(--fs-xs); color: var(--muted); margin-bottom: 2px; font-variant-numeric: tabular-nums; padding-right: 24px; }
+.card-next {
+  position: absolute; top: calc(var(--sp-1) + var(--sp-2) - 2px); right: var(--sp-2);
+  width: 20px; height: 20px; padding: 0; display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; border: 0; border-radius: var(--radius); color: var(--muted); cursor: pointer;
+  opacity: 0; transition: opacity var(--dur), color var(--dur);
+}
+.card-next:hover { color: var(--text); }
+.card:hover .card-next, .card:focus-within .card-next, .card-next:focus-visible { opacity: 1; }
+.card:hover .card-next:disabled, .card:focus-within .card-next:disabled { opacity: 0.4; cursor: default; }
+@media (hover: none) { .card-next { opacity: 1; } .card .card-next:disabled { opacity: 0.4; } }
+@media (prefers-reduced-motion: reduce) { .card-next { transition: none; } }
 .column-parallel {
   margin-left: auto; color: var(--muted); font-size: var(--fs-sm); font-variant-numeric: tabular-nums;
   padding: 1px 6px; border-radius: 99px; border: 1px solid var(--border);
