@@ -201,6 +201,7 @@ export function CardModal({
             board={board}
             beforeMove={() => (dirty ? saveOrThrow() : undefined)}
             onError={setError}
+            live={live}
           />
           <button type="button" className="primary" disabled={!dirty} onClick={save}>
             Enregistrer

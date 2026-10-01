@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { resolveNextColumn } from "../shared/skip.ts";
-import type { Board, Card, Column } from "../shared/types.ts";
+import { agentBlocker, type Board, type Card, type Column, type LiveStatus } from "../shared/types.ts";
 import { api } from "./api.ts";
 
 /** Colonne suivante si la colonne de la fiche est inerte, sinon undefined. */
@@ -37,27 +37,36 @@ export async function sendToNext({
   }
 }
 
+const BLOCKER_TITLES = {
+  working: "L'agent n'a pas fini : attendez la fin de son travail (ou arrêtez-le) avant d'envoyer la fiche plus loin.",
+  question: "L'agent attend une réponse : répondez-lui avant d'envoyer la fiche plus loin.",
+};
+
 export function NextColumnButton({
   project,
   card,
   board,
   beforeMove,
   onError,
+  live,
 }: {
   project: string;
   card: Card;
   board: Board;
   beforeMove: () => Promise<void> | void;
   onError: (message: string) => void;
+  live?: LiveStatus;
 }) {
   const [busy, setBusy] = useState(false);
   const target = nextInertTarget(board, card);
   if (!target) return null;
+  const blocker = agentBlocker(card, live);
   return (
     <button
       type="button"
       className="primary"
-      disabled={busy}
+      disabled={busy || blocker !== undefined}
+      title={blocker ? BLOCKER_TITLES[blocker] : undefined}
       onClick={async () => {
         setBusy(true);
         try {
