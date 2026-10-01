@@ -14,6 +14,8 @@ export interface Column {
   model?: string;
   /** Max agents running at once in this column; absent = 1. The global setting still caps the total. */
   maxParallel?: number;
+  /** Single grapheme shown instead of the type icon; absent = type icon. */
+  emoji?: string;
 }
 
 export type RunStatus = "success" | "error" | "cancelled" | "question";
@@ -103,6 +105,23 @@ export function normalizeColumnParallel(type: ColumnType, raw: unknown): number 
   return Math.min(n, MAX_PARALLEL);
 }
 
+/**
+ * Normalizes a raw column emoji: non-string, empty or blank => undefined; otherwise the first grapheme
+ * of the trimmed value. Does not check that the grapheme is an emoji.
+ */
+export function normalizeColumnEmoji(raw: unknown): string | undefined {
+  if (typeof raw !== "string") return undefined;
+  const s = raw.trim();
+  if (!s) return undefined;
+  const first = new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(s)[Symbol.iterator]().next();
+  return first.done ? undefined : first.value.segment;
+}
+
+/** The emoji to display for a column, or undefined to fall back on the type icon. */
+export function columnEmoji(col: Pick<Column, "emoji">): string | undefined {
+  return normalizeColumnEmoji(col.emoji);
+}
+
 export const DONE_COLUMN_ID = "col_done";
 export const DONE_COLUMN_NAME = "Done";
 
@@ -117,7 +136,7 @@ export function isDoneColumn(colOrId: Pick<Column, "id"> | string): boolean {
 
 /**
  * Returns columns with exactly one Done column, last. Pure and idempotent.
- * Extra unknown fields of the first existing Done column are kept; skill fields are dropped.
+ * Extra unknown fields of the first existing Done column are kept; skill fields are dropped, emoji is kept.
  */
 export function ensureDoneColumn(columns: Column[]): Column[] {
   const existing = columns.find(isDoneColumn);
