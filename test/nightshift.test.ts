@@ -157,6 +157,22 @@ test("a project locked by another live process runs no agents", async () => {
   expect(s.board.cards[0].lastRun).toBeUndefined();
 });
 
+test("loop guard ignores runs before the last user action", async () => {
+  const snap = await post("/api/projects/open", { path: proj });
+  const enrich = snap.board.columns[1];
+  const { id } = await post("/api/cards", { project: proj, columnId: enrich.id, title: "guarded" });
+  const get = async () => (await fetch(`${base}/api/project?project=${encodeURIComponent(proj)}`).then((r) => r.json())).board.cards.find((c: any) => c.id === id);
+  await waitFor(async () => (await get()).columnId !== enrich.id);
+  // Simulate a burst of stale runs, then move the card back by hand: it must run again.
+  srv.orch.get(proj).mutate(() => {
+    const card = srv.orch.get(proj).card(id)!;
+    for (let i = 0; i < 20; i++) srv.orch.get(proj).addHistory(card, "run", "Enrich: stale");
+  });
+  await post(`/api/cards/${id}/move`, { project: proj, columnId: enrich.id });
+  await waitFor(async () => (await get()).columnId !== enrich.id);
+  expect((await get()).lastRun?.error).toBeUndefined();
+});
+
 test("removing a column that still holds cards is refused", async () => {
   const snap = await post("/api/projects/open", { path: proj });
   const res = await post("/api/board", { project: proj, columns: [snap.board.columns[0]] }, "PUT");

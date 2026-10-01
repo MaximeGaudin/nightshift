@@ -307,6 +307,7 @@ export class Orchestrator {
       card.enteredColumnAt = new Date().toISOString();
       delete card.lastRun;
       delete card.pendingAnswer;
+      p.addHistory(card, "edited", "Retry requested by user");
     });
   }
 
@@ -327,9 +328,17 @@ export class Orchestrator {
     });
   }
 
+  /**
+   * Agent runs in the loop window since the user last touched the card (create, move, edit, answer, retry).
+   * Runs stopped by the guard itself are not counted, so a retry is never blocked by stale history.
+   */
   private recentRuns(card: Card) {
-    const since = new Date(Date.now() - LOOP_WINDOW_MS).toISOString();
-    return card.history.filter((h) => h.kind === "run" && h.at > since).length;
+    let since = new Date(Date.now() - LOOP_WINDOW_MS).toISOString();
+    for (const h of card.history) {
+      const byUser = h.kind === "created" || h.kind === "edited" || (h.kind === "moved" && !h.text.startsWith("Agent"));
+      if (byUser && h.at > since) since = h.at;
+    }
+    return card.history.filter((h) => h.kind === "run" && h.at >= since && !h.text.includes("(loop guard)")).length;
   }
 
   private start(p: Project, card: Card) {
@@ -361,7 +370,7 @@ export class Orchestrator {
   private async run(job: Job, card: Card, column: Column) {
     const p = job.project;
     if (this.recentRuns(card) >= LOOP_MAX_RUNS) {
-      return this.finish(job, "error", { error: `Stopped: more than ${LOOP_MAX_RUNS} runs in 10 minutes (loop guard).` });
+      return this.finish(job, "error", { error: `Stopped: ${LOOP_MAX_RUNS} agent runs in 10 minutes without user action (loop guard). Click retry to run again.` });
     }
     const skill = findSkill(p.path, column.skill!);
     if (!skill) {
