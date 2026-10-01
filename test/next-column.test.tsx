@@ -45,3 +45,22 @@ test("next-column-click-order", async () => {
   expect(calls).toEqual([]);
   expect(errors).toEqual(["boom"]);
 });
+
+test("next-column-busy-render", () => {
+  const props = { project: "p", board, beforeMove: async () => {}, onError: () => {} };
+  const working = renderToStaticMarkup(<NextColumnButton {...props} card={cardIn("x1")} live="running" />);
+  expect(working).toContain("Envoyer à Beta →");
+  expect(working).toContain("disabled");
+  expect(working).toContain("L&#x27;agent n&#x27;a pas fini");
+
+  const asking = { ...cardIn("x1"), lastRun: { status: "question", columnId: "x1" } } as Card;
+  const q = renderToStaticMarkup(<NextColumnButton {...props} card={asking} />);
+  expect(q).toContain("disabled");
+  expect(q).toContain("L&#x27;agent attend une réponse");
+
+  const done = { ...cardIn("x1"), lastRun: { status: "done", columnId: "x1" } } as Card;
+  const d = renderToStaticMarkup(<NextColumnButton {...props} card={done} />);
+  expect(d).toContain("Envoyer à Beta →");
+  expect(d).not.toContain("disabled");
+  expect(d).not.toContain("title");
+});
