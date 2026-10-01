@@ -3,7 +3,16 @@ import { MAX_PARALLEL, type Settings } from "../shared/types.ts";
 import { api } from "./api.ts";
 import { ErrorBanner, Modal } from "./ui.tsx";
 
-export function SettingsModal({ settings, onClose }: { settings: Settings; onClose: () => void }) {
+export function SettingsModal({
+  settings,
+  onClose,
+}: {
+  settings: Settings;
+  onClose: () => void;
+  /** Path of the open project and the action to open another one; unused until the recent-projects section lands. */
+  currentProject?: string;
+  onOpenProject?: (path: string) => void;
+}) {
   const [s, setS] = useState(settings);
   const [error, setError] = useState<string | null>(null);
   const save = () =>

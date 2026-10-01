@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Card, Column } from "../src/shared/types.ts";
-import { AddCard, skipOptions, submitAddCard } from "../src/web/App.tsx";
+import { AddCard, skipOptions, submitAddCard } from "../src/web/AddCard.tsx";
 import { api } from "../src/web/api.ts";
 import { CardTile } from "../src/web/CardTile.tsx";
 
