@@ -21,7 +21,7 @@ const { splitArgs, resolveModel } = await import("../src/server/orchestrator.ts"
 const { defaultBoard, needsRun, normalizeBoard, numberingChanged, Project } = await import("../src/server/store.ts");
 const { startServer } = await import("../src/server/server.ts");
 const { updateSettings } = await import("../src/server/settings.ts");
-const { columnMaxParallel, DONE_COLUMN_ID } = await import("../src/shared/types.ts");
+const { BACKLOG_COLUMN_ID, columnMaxParallel, DONE_COLUMN_ID } = await import("../src/shared/types.ts");
 
 test("parseFrontmatter handles folded descriptions", () => {
   const fm = parseFrontmatter("---\nname: x\ndescription: >\n  hello\n  world\n---\nbody");
@@ -65,9 +65,9 @@ test("normalizeBoard keeps a trimmed model and drops empty ones", () => {
     },
     "x",
   );
-  expect(b.columns[0].model).toBe("sonnet");
-  expect("model" in b.columns[1]).toBe(false);
+  expect(b.columns[1].model).toBe("sonnet");
   expect("model" in b.columns[2]).toBe(false);
+  expect("model" in b.columns[3]).toBe(false);
 });
 
 test("resolveModel priority", () => {
@@ -190,7 +190,7 @@ test("a project locked by another live process runs no agents", async () => {
   const snap = await post("/api/projects/open", { path: locked });
   expect(snap.lockedBy).toBe(process.ppid);
   const res = await post("/api/board", { project: locked, columns: [{ name: "Enrich", type: "skill", skill: "enrich" }] }, "PUT");
-  await post("/api/cards", { project: locked, columnId: res.board.columns[0].id, title: "x" });
+  await post("/api/cards", { project: locked, columnId: res.board.columns[1].id, title: "x" });
   await quiet(400); // no agent may start in a project locked by another process
   const s = await fetch(`${base}/api/project?project=${encodeURIComponent(locked)}`).then((r) => r.json());
   expect(Object.values(s.live)).not.toContain("running");
@@ -233,8 +233,8 @@ test("column maxParallel caps agents in that column", async () => {
     },
     "PUT",
   );
-  expect(res.board.columns[0].maxParallel).toBe(1);
-  for (const t of ["cap1", "cap2", "cap3"]) await post("/api/cards", { project: p2, columnId: res.board.columns[0].id, title: t });
+  expect(res.board.columns[1].maxParallel).toBe(1);
+  for (const t of ["cap1", "cap2", "cap3"]) await post("/api/cards", { project: p2, columnId: res.board.columns[1].id, title: t });
   let maxRunning = 0;
   await waitFor(async () => {
     const s = await fetch(`${base}/api/project?project=${encodeURIComponent(p2)}`).then((r) => r.json());
@@ -263,13 +263,13 @@ test("column maxParallel > 1 runs several cards", async () => {
     },
     "PUT",
   );
-  expect(res.board.columns[0].maxParallel).toBe(2);
-  for (const t of ["par1", "par2", "par3", "par4"]) await post("/api/cards", { project: p, columnId: res.board.columns[0].id, title: t });
+  expect(res.board.columns[1].maxParallel).toBe(2);
+  for (const t of ["par1", "par2", "par3", "par4"]) await post("/api/cards", { project: p, columnId: res.board.columns[1].id, title: t });
   let maxRunning = 0;
   await waitFor(async () => {
     const s = await liveRunning(p);
     maxRunning = Math.max(maxRunning, s.running);
-    return s.idle && s.board.cards.every((c: Card) => c.columnId === res.board.columns[1].id);
+    return s.idle && s.board.cards.every((c: Card) => c.columnId === res.board.columns[2].id);
   });
   expect(maxRunning).toBe(2);
 });
@@ -289,7 +289,7 @@ test("global cap cuts below the sum of column limits", async () => {
     },
     "PUT",
   );
-  const [a, b, done] = res.board.columns;
+  const [, a, b, done] = res.board.columns;
   for (const t of ["a1", "a2", "a3"]) await post("/api/cards", { project: p, columnId: a.id, title: t });
   for (const t of ["b1", "b2", "b3"]) await post("/api/cards", { project: p, columnId: b.id, title: t });
   let maxRunning = 0;
@@ -314,14 +314,14 @@ test("column maxParallel normalization", async () => {
     { name: "Inert", type: "inert", maxParallel: 3 },
   ];
   const check = (columns: Column[]) => {
-    expect(columns[0].maxParallel).toBe(32);
-    for (const c of columns.slice(1)) expect("maxParallel" in c).toBe(false);
+    expect(columns[1].maxParallel).toBe(32);
+    for (const c of columns.slice(2)) expect("maxParallel" in c).toBe(false);
   };
   const res = await post("/api/board", { project: p, columns: cols }, "PUT");
   check(res.board.columns);
   check(normalizeBoard({ columns: cols.map((c, i) => ({ id: `c${i}`, ...c })), cards: [] }, "x").columns);
   expect(
-    normalizeBoard({ columns: [{ id: "s", name: "S", type: "skill", skill: "s", maxParallel: "5" }], cards: [] }, "x").columns[0]
+    normalizeBoard({ columns: [{ id: "s", name: "S", type: "skill", skill: "s", maxParallel: "5" }], cards: [] }, "x").columns[1]
       .maxParallel,
   ).toBe(5);
 });
@@ -345,7 +345,7 @@ test("agent test command is stored on the card and can be started and stopped", 
     },
     "PUT",
   );
-  const { id } = await post("/api/cards", { project: p3, columnId: res.board.columns[0].id, title: "with-test" });
+  const { id } = await post("/api/cards", { project: p3, columnId: res.board.columns[1].id, title: "with-test" });
   const snap = async () => fetch(`${base}/api/project?project=${encodeURIComponent(p3)}`).then((r) => r.json());
   await waitFor(async () => !!(await snap()).board.cards[0].test);
   expect((await snap()).board.cards[0].test).toEqual({ command: "echo hello-from-test; sleep 30", url: "http://localhost:9999" });
@@ -372,8 +372,8 @@ test("column maxParallel caps agents in that column", async () => {
     },
     "PUT",
   );
-  expect(res.board.columns[0].maxParallel).toBe(1);
-  for (const t of ["cap1", "cap2", "cap3"]) await post("/api/cards", { project: p2, columnId: res.board.columns[0].id, title: t });
+  expect(res.board.columns[1].maxParallel).toBe(1);
+  for (const t of ["cap1", "cap2", "cap3"]) await post("/api/cards", { project: p2, columnId: res.board.columns[1].id, title: t });
   let maxRunning = 0;
   await waitFor(async () => {
     const s = await fetch(`${base}/api/project?project=${encodeURIComponent(p2)}`).then((r) => r.json());
@@ -397,7 +397,7 @@ test("agent test command is stored on the card and can be started and stopped", 
     },
     "PUT",
   );
-  const { id } = await post("/api/cards", { project: p3, columnId: res.board.columns[0].id, title: "with-test" });
+  const { id } = await post("/api/cards", { project: p3, columnId: res.board.columns[1].id, title: "with-test" });
   const snap = async () => fetch(`${base}/api/project?project=${encodeURIComponent(p3)}`).then((r) => r.json());
   await waitFor(async () => !!(await snap()).board.cards[0].test);
   expect((await snap()).board.cards[0].test).toEqual({ command: "echo hello-from-test; sleep 30", url: "http://localhost:9999" });
@@ -470,7 +470,7 @@ test("an agent that stops without its result is resumed once to collect it", asy
     },
     "PUT",
   );
-  const [s, d] = res.board.columns;
+  const [, s, d] = res.board.columns;
   for (const title of ["no-output", "die"]) await post("/api/cards", { project: dir, columnId: s.id, title });
   const get = async () => (await fetch(`${base}/api/project?project=${encodeURIComponent(dir)}`).then((r) => r.json())).board.cards;
   await waitFor(async () => (await get()).every((c: Card) => c.columnId === d.id));
@@ -498,7 +498,7 @@ test("prompt goes through stdin, never argv", async () => {
       },
       "PUT",
     );
-    await post("/api/cards", { project: dir, columnId: res.board.columns[0].id, title: "argv-check" });
+    await post("/api/cards", { project: dir, columnId: res.board.columns[1].id, title: "argv-check" });
     await waitFor(async () => existsSync(argsLog) && readFileSync(argsLog, "utf8").includes("argv-check"));
   } finally {
     if (previous === undefined) delete process.env.FAKE_ARGS_LOG;
@@ -531,10 +531,20 @@ const getProject = (path: string) => fetch(`${base}/api/project?project=${encode
 test("PUT /api/board keeps model on an inert column", async () => {
   const dir = tempDir("ns-model-inert-");
   await post("/api/projects/open", { path: dir });
-  const res = await post("/api/board", { project: dir, columns: [{ name: "Inbox", type: "inert", model: "opus" }] }, "PUT");
-  expect(res.board.columns[0].model).toBe("opus");
+  const res = await post(
+    "/api/board",
+    {
+      project: dir,
+      columns: [
+        { name: "Inbox", type: "inert" },
+        { name: "Hold", type: "inert", model: "opus" },
+      ],
+    },
+    "PUT",
+  );
+  expect(res.board.columns[1].model).toBe("opus");
   const file = JSON.parse(readFileSync(join(dir, "nightshift.json"), "utf8"));
-  expect(file.columns[0].model).toBe("opus");
+  expect(file.columns[1].model).toBe("opus");
 });
 
 test("run passes the column model to claude", async () => {
@@ -554,7 +564,7 @@ test("run passes the column model to claude", async () => {
       },
       "PUT",
     );
-    const [fast, plain, done] = res.board.columns;
+    const [, fast, plain, done] = res.board.columns;
     const { id } = await post("/api/cards", { project: dir, columnId: fast.id, title: "m1" });
     await waitFor(async () => (await getProject(dir)).board.cards.find((c: Card) => c.id === id)?.columnId === done.id);
     const entries = argsEntries();
@@ -586,11 +596,11 @@ test("resume uses the column model at resume time", async () => {
     },
     "PUT",
   );
-  const [ask, done] = res.board.columns;
+  const [backlog, ask, done] = res.board.columns;
   const { id } = await post("/api/cards", { project: dir, columnId: ask.id, title: "ask" });
   await waitFor(async () => (await getProject(dir)).board.cards.find((c: Card) => c.id === id)?.lastRun?.status === "question");
   const before = argsEntries().length;
-  await post("/api/board", { project: dir, columns: [{ ...ask, model: "haiku" }, done] }, "PUT");
+  await post("/api/board", { project: dir, columns: [backlog, { ...ask, model: "haiku" }, done] }, "PUT");
   await post(`/api/cards/${id}/answer`, { project: dir, answers: ["blue", "big"] });
   await waitFor(async () => (await getProject(dir)).board.cards.find((c: Card) => c.id === id)?.columnId === done.id);
   const resumed = argsEntries()
@@ -799,7 +809,15 @@ async function attentionBoard(columns: object[]) {
   const card = async (id: string) => (await getProject(dir)).board.cards.find((c: Card) => c.id === id);
   const idle = async (id: string) => !(await getProject(dir)).live[id];
   const forCard = (id: string) => events.filter((e) => e.cardId === id);
-  return { dir, cols: res.board.columns as Column[], events, stop, card, idle, forCard };
+  return {
+    dir, // Without the Backlog the server puts first: the tests address the columns they sent.
+    cols: (res.board.columns as Column[]).slice(1),
+    events,
+    stop,
+    card,
+    idle,
+    forCard,
+  };
 }
 
 test("attention: run ending in an inert column emits inert", async () => {
@@ -978,12 +996,12 @@ test("defaultBoard emojis match nightshift.json and survive normalization", () =
 });
 
 test("defaultBoard ids are fresh", () => {
-  const ids = (b: ReturnType<typeof defaultBoard>) => b.columns.slice(0, -1).map((c) => c.id);
+  const ids = (b: ReturnType<typeof defaultBoard>) => b.columns.slice(1, -1).map((c) => c.id);
   const a = ids(defaultBoard("x"));
   const b = ids(defaultBoard("x"));
-  expect(a.length).toBe(7);
-  expect(new Set(a).size).toBe(7);
-  expect(new Set(b).size).toBe(7);
+  expect(a.length).toBe(6);
+  expect(new Set(a).size).toBe(6);
+  expect(new Set(b).size).toBe(6);
   for (const id of [...a, ...b]) {
     expect(id.startsWith("col_")).toBe(true);
     expect(id).not.toBe(DONE_COLUMN_ID);
@@ -1013,6 +1031,7 @@ test("existing custom columns are untouched", async () => {
     version: 1,
     name: "c",
     columns: [
+      { id: BACKLOG_COLUMN_ID, name: "Backlog", type: "inert" },
       { id: "a", name: "A", type: "inert" },
       { id: DONE_COLUMN_ID, name: "Done", type: "inert" },
     ],
@@ -1027,7 +1046,7 @@ test("existing custom columns are untouched", async () => {
   p.close();
   expect(readFileSync(file, "utf8")).toBe(text);
   expect(statSync(file).mtimeMs).toBe(mtime);
-  expect(p.board.columns.map((c) => c.name)).toEqual(["A", "Done"]);
+  expect(p.board.columns.map((c) => c.name)).toEqual(["Backlog", "A", "Done"]);
 });
 
 test("file without columns gets the pipeline", () => {
@@ -1039,15 +1058,15 @@ test("done column: normalizeBoard keeps a user column named Done and puts col_do
   const b = normalizeBoard(
     {
       columns: [
-        { id: "u", name: "Done", type: "inert" },
+        { id: "u", name: "Done", type: "skill", skill: "s" },
         { id: "w", name: "W", type: "inert" },
       ],
       cards: [],
     },
     "x",
   );
-  expect(b.columns.map((c) => c.id)).toEqual(["u", "w", DONE_COLUMN_ID]);
-  expect(b.columns[0].name).toBe("Done");
+  expect(b.columns.map((c) => c.id)).toEqual([BACKLOG_COLUMN_ID, "u", "w", DONE_COLUMN_ID]);
+  expect(b.columns[1].name).toBe("Done");
 });
 
 test("done column: load writes col_done back once, then leaves the file alone", async () => {
@@ -1059,7 +1078,7 @@ test("done column: load writes col_done back once, then leaves the file alone", 
   );
   new Project(dir).close();
   const onDisk = JSON.parse(readFileSync(file, "utf8"));
-  expect(onDisk.columns.map((c: Column) => c.id)).toEqual(["a", DONE_COLUMN_ID]);
+  expect(onDisk.columns.map((c: Column) => c.id)).toEqual([BACKLOG_COLUMN_ID, DONE_COLUMN_ID]);
   utimesSync(file, PAST, PAST);
   const before = { text: readFileSync(file, "utf8"), mtime: statSync(file).mtimeMs };
   new Project(dir).close();
@@ -1164,7 +1183,7 @@ test("feedback in inert column resumes the session and applies move", async () =
     expect(card.description).toContain("<feedback>\nfix FAKE_MOVE=stay\n</feedback>");
     expect(card.description).toContain(`(id: ${b.toTest.id}, inert)`);
     expect(card.description).toContain("Board columns, in order:");
-    expect(card.description).toContain(`1. Work (id: ${b.work.id}, skill: enrich)`);
+    expect(card.description).toContain(`2. Work (id: ${b.work.id}, skill: enrich)`);
     expect(card.description).toContain('the skill "enrich"');
     expect(card.history.some((h: HistoryEntry) => h.text === "Feedback sent to agent")).toBe(true);
     const log = await fetch(`${base}/api/cards/${id}/log?project=${encodeURIComponent(b.dir)}`).then((r) => r.json());

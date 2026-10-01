@@ -1,13 +1,16 @@
-import { readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import type { Server, ServerWebSocket } from "bun";
 import { normalizeSkipColumnIds, skippedColumns } from "../shared/skip.ts";
 import {
+  BACKLOG_COLUMN_ID,
+  BACKLOG_COLUMN_NAME,
   type Card,
   type Column,
   type ColumnType,
-  ensureDoneColumn,
+  cardRef,
+  ensureSystemColumns,
   isDoneColumn,
   normalizeColumnEmoji,
   normalizeColumnParallel,
@@ -20,7 +23,7 @@ import { Orchestrator } from "./orchestrator.ts";
 import { removeScreenshots, resolveScreenshot } from "./screenshots.ts";
 import { getSettings, updateSettings } from "./settings.ts";
 import { createSkill, listSkills, readSkill, saveSkill } from "./skills.ts";
-import { COLUMN_KEYS, isRaw, newId, type Raw, unknownFields } from "./store.ts";
+import { BOARD_FILE, COLUMN_KEYS, isRaw, newId, type Project, type Raw, remapColumnId, unknownFields } from "./store.ts";
 
 export function startServer({ port, development, agents = true }: { port: number; development?: boolean; agents?: boolean }) {
   // `bun --hot` re-runs this module on every change. Reuse the orchestrator from the previous run:
@@ -115,6 +118,41 @@ export function startServer({ port, development, agents = true }: { port: number
     return orch.get(path);
   };
 
+  /** Creates a card in a column (history entry, queueing) and returns it. */
+  const createCard = (
+    p: Project,
+    {
+      title,
+      description,
+      columnId,
+      skipInput,
+      historyText,
+    }: { title?: string; description?: string; columnId?: string; skipInput?: string[]; historyText?: string },
+  ): Card => {
+    const now = new Date().toISOString();
+    if (!columnId || !p.column(columnId)) throw new Error("Unknown column");
+    const skipColumnIds = normalizeSkipColumnIds(p.board.columns, skipInput);
+    return p.mutate((board) => {
+      const card: Card = {
+        id: newId("card"),
+        number: board.nextCardNumber,
+        title: (title || "Untitled").trim(),
+        description: description ?? "",
+        columnId,
+        ...(skipColumnIds ? { skipColumnIds } : {}),
+        createdAt: now,
+        updatedAt: now,
+        enteredColumnAt: now,
+        history: [],
+      };
+      board.nextCardNumber += 1;
+      p.addHistory(card, "created", historyText ?? `Created in ${p.column(columnId)?.name}`, columnId);
+      board.cards.push(card);
+      p.addQueued(card, board);
+      return card;
+    });
+  };
+
   const server: Server<undefined> = Bun.serve({
     port,
     hostname: "127.0.0.1",
@@ -202,7 +240,8 @@ export function startServer({ port, development, agents = true }: { port: number
                 seen.add(c.id);
               }
               if (userCols.filter((c) => !isDoneColumn(c)).length === 0) throw new Error("A board needs at least one column");
-              const cols = ensureDoneColumn(userCols);
+              const { columns: cols, renamedFrom } = ensureSystemColumns(userCols);
+              if (renamedFrom !== undefined) for (const card of board.cards) remapColumnId(card, renamedFrom, BACKLOG_COLUMN_ID);
               const ids = new Set(cols.map((c) => c.id));
               const orphan = board.cards.find((c) => !ids.has(c.columnId));
               if (orphan) throw new Error(`Column still holds cards (e.g. "${orphan.title}"): move them first`);
@@ -221,34 +260,41 @@ export function startServer({ port, development, agents = true }: { port: number
       "/api/cards": {
         POST: h((b, url) => {
           const p = project(b, url);
-          const now = new Date().toISOString();
-          const title = optString(b, "title");
-          const description = optString(b, "description");
-          const columnId = optString(b, "columnId") ?? p.board.columns[0]?.id;
-          const skipInput = optSkipIds(b);
-          if (!p.column(columnId)) throw new Error("Unknown column");
-          const skipColumnIds = normalizeSkipColumnIds(p.board.columns, skipInput);
-          const id = newId("card");
-          const number = p.mutate((board) => {
-            const card: Card = {
-              id,
-              number: board.nextCardNumber,
-              title: (title || "Untitled").trim(),
-              description: description ?? "",
-              columnId,
-              ...(skipColumnIds ? { skipColumnIds } : {}),
-              createdAt: now,
-              updatedAt: now,
-              enteredColumnAt: now,
-              history: [],
-            };
-            board.nextCardNumber += 1;
-            p.addHistory(card, "created", `Created in ${p.column(columnId)?.name}`, columnId);
-            board.cards.push(card);
-            p.addQueued(card, board);
-            return card.number;
+          const card = createCard(p, {
+            title: optString(b, "title"),
+            description: optString(b, "description"),
+            columnId: optString(b, "columnId") ?? p.board.columns[0]?.id,
+            skipInput: optSkipIds(b),
           });
-          return { id, number };
+          return { id: card.id, number: card.number };
+        }),
+      },
+      "/api/backlog": {
+        POST: h((b) => {
+          const raw = b.project;
+          if (typeof raw !== "string" || !raw) throw new Error("project is required");
+          if (!isAbsolute(raw)) throw new Error("project must be an absolute path");
+          const title = reqString(b, "title").trim();
+          if (!title) throw new Error("title must not be empty");
+          const description = optString(b, "description") ?? "";
+          const skipInput = optSkipIds(b);
+          const source = optString(b, "source")?.trim() ?? "";
+          if (source.length > 100) throw new Error("source must be at most 100 characters");
+          const path = resolve(raw);
+          let p: Project;
+          if (opened.has(path)) p = orch.get(path);
+          else if (existsSync(join(path, BOARD_FILE))) {
+            p = orch.open(path);
+            opened.add(p.path);
+          } else throw new HttpError(404, "Unknown project");
+          const card = createCard(p, {
+            title,
+            description,
+            columnId: BACKLOG_COLUMN_ID,
+            skipInput,
+            historyText: source ? `Created in ${BACKLOG_COLUMN_NAME} by ${source}` : `Created in ${BACKLOG_COLUMN_NAME}`,
+          });
+          return json({ id: card.id, number: card.number, ref: cardRef(card) }, 201);
         }),
       },
       "/api/cards/:id": {

@@ -4,12 +4,14 @@ import { needsRun } from "../shared/needs-run.ts";
 import { normalizeSkipColumnIds, resolveNextColumn } from "../shared/skip.ts";
 import { replayHistory } from "../shared/timeline.ts";
 import {
+  BACKLOG_COLUMN_ID,
   type Board,
+  backlogColumn,
   type Card,
   type Column,
   type ColumnType,
   doneColumn,
-  ensureDoneColumn,
+  ensureSystemColumns,
   type HistoryEntry,
   type LastRun,
   normalizeColumnEmoji,
@@ -30,7 +32,6 @@ const now = () => new Date().toISOString();
 
 // Key order matches normalizeBoard's output so a fresh board is not rewritten on reopen.
 const DEFAULT_COLUMNS: Omit<Column, "id">[] = [
-  { name: "Backlog", type: "inert" },
   { name: "Grill", type: "skill", skill: "nightshift-grill", model: "opus", maxParallel: 3, emoji: "🔥" },
   { name: "Plan", type: "skill", skill: "nightshift-plan", model: "opus", maxParallel: 3, emoji: "🗺️" },
   { name: "Implement", type: "skill", skill: "nightshift-implement", model: "sonnet", maxParallel: 3, emoji: "🧑‍💻" },
@@ -43,7 +44,7 @@ export function defaultBoard(name: string): Board {
   return {
     version: 1,
     name,
-    columns: [...DEFAULT_COLUMNS.map((c) => ({ id: newId("col"), ...c })), doneColumn()],
+    columns: [backlogColumn(), ...DEFAULT_COLUMNS.map((c) => ({ id: newId("col"), ...c })), doneColumn()],
     cards: [],
     nextCardNumber: 1,
   };
@@ -94,8 +95,8 @@ export function numberingChanged(raw: unknown, board: Board): boolean {
   return board.cards.some((c) => rawById.get(c.id)?.number !== c.number);
 }
 
-/** True when normalization had to repair the raw columns (missing, duplicated or misplaced Done column). */
-export function doneColumnChanged(raw: unknown, board: Board): boolean {
+/** True when normalization had to repair the raw columns (missing, duplicated or misplaced Backlog or Done column). */
+export function systemColumnsChanged(raw: unknown, board: Board): boolean {
   const rawCols: unknown[] = isRaw(raw) && Array.isArray(raw.columns) ? raw.columns : [];
   return JSON.stringify(rawCols) !== JSON.stringify(board.columns);
 }
@@ -153,6 +154,26 @@ function normalizeTimeBase(raw: unknown): TimeState | undefined {
   };
 }
 
+/**
+ * Rewrites, in place, every place a card stores a column id equal to `from`.
+ * Works on a typed card or on a raw one read from disk (hence the loose shape).
+ */
+export function remapColumnId(card: object, from: string, to: string): void {
+  const c = card as Raw;
+  const fix = (o: unknown) => {
+    if (isRaw(o) && o.columnId === from) o.columnId = to;
+  };
+  fix(c);
+  if (Array.isArray(c.skipColumnIds)) c.skipColumnIds = c.skipColumnIds.map((id) => (id === from ? to : id));
+  if (Array.isArray(c.history)) for (const h of c.history) fix(h);
+  fix(c.lastRun);
+  fix(c.pendingAnswer);
+  if (isRaw(c.timeBase)) {
+    fix(c.timeBase.cursor);
+    if (Array.isArray(c.timeBase.totals)) for (const t of c.timeBase.totals) fix(t);
+  }
+}
+
 /** Normalizes a parsed board so the rest of the code can trust its shape. */
 export function normalizeBoard(raw: unknown, fallbackName: string): Board {
   const r: Raw = isRaw(raw) ? raw : {};
@@ -177,9 +198,19 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
         })
     : [];
   if (columns.length === 0) columns.push(...defaultBoard(fallbackName).columns);
-  columns.splice(0, columns.length, ...ensureDoneColumn(columns));
+  const ensured = ensureSystemColumns(columns);
+  columns.splice(0, columns.length, ...ensured.columns);
   const colIds = new Set(columns.map((c) => c.id));
-  const rawCards = Array.isArray(r.cards) ? r.cards.filter((c): c is Raw & { id: string } => isRaw(c) && typeof c.id === "string") : [];
+  let rawCards = Array.isArray(r.cards) ? r.cards.filter((c): c is Raw & { id: string } => isRaw(c) && typeof c.id === "string") : [];
+  const { renamedFrom } = ensured;
+  if (renamedFrom !== undefined) {
+    // The old first column became the Backlog: its cards follow, before any validity check on their column.
+    rawCards = rawCards.map((c) => {
+      const copy = structuredClone(c);
+      remapColumnId(copy, renamedFrom, BACKLOG_COLUMN_ID);
+      return copy;
+    });
+  }
   const cards: Card[] = rawCards.map((c) => {
     const rawHistory: HistoryEntry[] = Array.isArray(c.history) ? c.history : [];
     let timeBase = normalizeTimeBase(c.timeBase);
@@ -256,7 +287,7 @@ export class Project {
     }
     this.unreadableOnDisk = false;
     this.board = normalizeBoard(raw, basename(this.path));
-    if (numberingChanged(raw, this.board) || doneColumnChanged(raw, this.board)) this.write();
+    if (numberingChanged(raw, this.board) || systemColumnsChanged(raw, this.board)) this.write();
   }
 
   private write() {

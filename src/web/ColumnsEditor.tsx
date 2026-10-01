@@ -3,7 +3,16 @@ import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalList
 import { CSS } from "@dnd-kit/utilities";
 import { ChevronDown, GripVertical, Lock, Plus, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { type Column, ensureDoneColumn, isDoneColumn, MAX_PARALLEL, type ProjectSnapshot, type SkillInfo } from "../shared/types.ts";
+import {
+  type Column,
+  ensureSystemColumns,
+  isBacklogColumn,
+  isDoneColumn,
+  isSystemColumn,
+  MAX_PARALLEL,
+  type ProjectSnapshot,
+  type SkillInfo,
+} from "../shared/types.ts";
 import { api } from "./api.ts";
 import { type KeyedColumn, reorderColumns } from "./columnOrder.ts";
 import { AppDialog } from "./components/app-dialog.tsx";
@@ -199,7 +208,7 @@ function SortableColumnRow({ col, skills, skillsLoading, cardCount, reducedMotio
   );
 }
 
-function LockedDoneRow({ col, onPatch }: { col: Draft; onPatch: (p: Partial<Column>) => void }) {
+function LockedSystemRow({ col, name, onPatch }: { col: Draft; name: string; onPatch: (p: Partial<Column>) => void }) {
   const { t } = useT();
   return (
     <li className="locked rounded-md border bg-secondary">
@@ -208,7 +217,7 @@ function LockedDoneRow({ col, onPatch }: { col: Draft; onPatch: (p: Partial<Colu
           <Lock className="size-3.5" aria-hidden="true" />
         </span>
         <EmojiInput value={col.emoji} onChange={(v) => onPatch({ emoji: v })} />
-        <span className="locked-name flex-1 text-[13px] font-medium">Done</span>
+        <span className="locked-name flex-1 text-[13px] font-medium">{name}</span>
         <span className="locked-label text-xs text-muted-foreground">{t("columns.systemColumn")}</span>
       </div>
     </li>
@@ -218,7 +227,7 @@ function LockedDoneRow({ col, onPatch }: { col: Draft; onPatch: (p: Partial<Colu
 export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClose: () => void }) {
   const { t } = useT();
   const [name, setName] = useState(snap.board.name);
-  const [cols, setCols] = useState<Draft[]>(() => ensureDoneColumn(snap.board.columns).map((c) => ({ ...c, key: c.id })));
+  const [cols, setCols] = useState<Draft[]>(() => ensureSystemColumns(snap.board.columns).columns.map((c) => ({ ...c, key: c.id })));
   const [skills, setSkills] = useState<SkillInfo[]>([]);
   const [skillsLoading, setSkillsLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -265,7 +274,8 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
     }
   };
 
-  const sortable = cols.filter((c) => !isDoneColumn(c));
+  const sortable = cols.filter((c) => !isSystemColumn(c));
+  const backlog = cols.find(isBacklogColumn);
   const done = cols.find(isDoneColumn);
 
   return (
@@ -338,6 +348,7 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
         >
           <SortableContext items={sortable.map((c) => c.key)} strategy={verticalListSortingStrategy}>
             <ol className="col-editor grid gap-1.5">
+              {backlog && <LockedSystemRow col={backlog} name="Backlog" onPatch={(p) => patch(backlog.key, p)} />}
               {sortable.map((c) => (
                 <SortableColumnRow
                   key={c.key}
@@ -350,7 +361,7 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
                   onRemove={() => setCols((cs) => cs.filter((x) => x.key !== c.key))}
                 />
               ))}
-              {done && <LockedDoneRow col={done} onPatch={(p) => patch(done.key, p)} />}
+              {done && <LockedSystemRow col={done} name="Done" onPatch={(p) => patch(done.key, p)} />}
             </ol>
           </SortableContext>
         </DndContext>

@@ -10,6 +10,8 @@ test("store-invalid-json: invalid file at open names the file", () => {
   expect(() => new Project(dir)).toThrow(join(dir, "nightshift.json"));
 });
 
+const WAIT_MS = 4000;
+
 test("store-invalid-json: invalid external edit is retried, then backed up before the next write", async () => {
   const dir = tempDir("ns-inv-");
   const file = join(dir, "nightshift.json");
@@ -24,11 +26,19 @@ test("store-invalid-json: invalid external edit is retried, then backed up befor
     utimesSync(file, new Date(tick), new Date(tick));
   };
   // fs.watch arms asynchronously and may miss an edit made right after open: re-apply the edit until it is noticed.
-  const editUntil = (content: string, done: () => boolean) =>
-    waitFor(() => {
-      if (!done()) edit(content);
+  // Re-applies are spaced beyond the watcher's 50 ms debounce: under inotify every write fires an event, so rewriting
+  // every poll would restart the debounce timer forever and reloadIfChanged() would never run.
+  const REAPPLY_MS = 150;
+  const editUntil = (content: string, done: () => boolean) => {
+    let lastEdit = 0;
+    return waitFor(() => {
+      if (!done() && Date.now() - lastEdit >= REAPPLY_MS) {
+        edit(content);
+        lastEdit = Date.now();
+      }
       return done();
-    });
+    }, WAIT_MS);
+  };
   const failures = () => err.mock.calls.filter((c) => String(c[0]).includes("nightshift.json invalide")).length;
   try {
     await editUntil("<<<<<<< HEAD\n{}\n=======\n", () => failures() >= 1);
@@ -46,6 +56,6 @@ test("store-invalid-json: invalid external edit is retried, then backed up befor
     err.mockRestore();
     p.close();
   }
-});
+}, 15000);
 
 afterAll(removeTempDirs);

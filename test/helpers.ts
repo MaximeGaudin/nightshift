@@ -124,7 +124,7 @@ export async function addAgentCard(srv: ChildServer, title: string) {
       },
     })
     .then((r) => r.json());
-  const { id } = await srv.call("/api/cards", { body: { project: dir, columnId: board.board.columns[0].id, title } }).then((r) => r.json());
+  const { id } = await srv.call("/api/cards", { body: { project: dir, columnId: board.board.columns[1].id, title } }).then((r) => r.json());
   const card = async () => {
     const snap = await srv.call(`/api/project?project=${encodeURIComponent(dir)}`).then((r) => r.json());
     return snap.board.cards.find((c: { id: string }) => c.id === id);
