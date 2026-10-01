@@ -72,7 +72,7 @@ export function ColumnIcon({ type }: { type: Column["type"] }) {
   return <Svg className={`col-icon col-${type}`}>{type === "skill" ? BOLT : <circle cx="7" cy="7" r="5.5" />}</Svg>;
 }
 
-export type IconName = "moon" | "close" | "plus" | "bolt" | "folder" | "trash" | "play" | "stop";
+export type IconName = "moon" | "close" | "plus" | "bolt" | "folder" | "trash" | "play" | "stop" | "lock";
 
 const ICONS: Record<IconName, ReactNode> = {
   moon: <path d="M11.8 8.6A5 5 0 0 1 5.4 2.2a5 5 0 1 0 6.4 6.4z" fill="currentColor" />,
@@ -82,6 +82,7 @@ const ICONS: Record<IconName, ReactNode> = {
   folder: <path d="M1.75 4a1 1 0 0 1 1-1h2.6l1.3 1.4h4.6a1 1 0 0 1 1 1v5.1a1 1 0 0 1-1 1h-8.5a1 1 0 0 1-1-1z" />,
   trash: <path d="M2.5 3.8h9M5.5 3.8V2.5h3v1.3M3.7 3.8l.6 7.7h5.4l.6-7.7M5.8 6v3.5M8.2 6v3.5" />,
   play: <path d="M4.5 2.8v8.4L11 7z" fill="currentColor" />,
+  lock: <path d="M3.8 6.2h6.4v5.3H3.8zM5 6.2V4.5a2 2 0 0 1 4 0v1.7" />,
   stop: <rect x="3.5" y="3.5" width="7" height="7" rx="1" fill="currentColor" />,
 };
 
