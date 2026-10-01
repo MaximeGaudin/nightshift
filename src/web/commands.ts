@@ -77,7 +77,14 @@ export function buildCommands({ snap, recentProjects }: CommandContext): Palette
     ["skills", "Skills", ["compétences", "agents"]],
     ["settings", "Réglages", ["paramètres", "préférences", "options"]],
   ] as const) {
-    out.push({ id: `open:${modal}`, group: "Navigation", label, value: `Ouvrir ${label}`, keywords, action: { type: "openModal", modal } });
+    out.push({
+      id: `open:${modal}`,
+      group: "Navigation",
+      label,
+      value: `Ouvrir ${label}`,
+      keywords: [...keywords],
+      action: { type: "openModal", modal },
+    });
   }
 
   for (const path of recentProjects) {
