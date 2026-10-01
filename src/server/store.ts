@@ -1,5 +1,6 @@
 import { copyFileSync, existsSync, type FSWatcher, readFileSync, statSync, watch } from "node:fs";
 import { basename, join } from "node:path";
+import { normalizeSkipColumnIds, resolveNextColumn } from "../shared/skip.ts";
 import { replayHistory } from "../shared/timeline.ts";
 import {
   type Board,
@@ -111,6 +112,7 @@ const CARD_KEYS = [
   "lastRun",
   "pendingAnswer",
   "test",
+  "skipColumnIds",
   "history",
   "timeBase",
 ];
@@ -182,6 +184,7 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
     let timeBase = normalizeTimeBase(c.timeBase);
     // Entries cut by the cap are folded into the checkpoint first, so their time is not lost.
     if (rawHistory.length > 50) timeBase = replayHistory(timeBase, rawHistory.slice(0, -50), asString(c.createdAt) ?? now());
+    const skipColumnIds = normalizeSkipColumnIds(columns, c.skipColumnIds);
     return {
       ...unknownFields(c, CARD_KEYS),
       id: c.id,
@@ -198,6 +201,7 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
       ...(isRaw(c.test) && typeof c.test.command === "string" && c.test.command.trim()
         ? { test: { command: c.test.command, ...(c.test.url ? { url: String(c.test.url) } : {}) } }
         : {}),
+      ...(skipColumnIds ? { skipColumnIds } : {}),
       history: rawHistory.slice(-50),
       ...(timeBase ? { timeBase } : {}),
     };
@@ -340,9 +344,9 @@ export class Project {
     return this.board.columns.find((c) => c.id === id);
   }
 
-  nextColumn(id: string): Column | undefined {
-    const i = this.board.columns.findIndex((c) => c.id === id);
-    return i >= 0 ? this.board.columns[i + 1] : undefined;
+  /** Column "next" sends the card to: the first after its own that it does not skip. */
+  nextColumnFor(card: Card): Column | undefined {
+    return resolveNextColumn(this.board.columns, card);
   }
 
   addHistory(card: Card, kind: HistoryEntry["kind"], text: string, columnId?: string) {

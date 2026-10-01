@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { resolveNextColumn } from "../shared/skip.ts";
 import { type Card, type Column, columnMaxParallel, DONE_COLUMN_ID, isDoneColumn, type ProjectSnapshot } from "../shared/types.ts";
 import { api, useServerEvents, useSettings } from "./api.ts";
 import { CardModal } from "./CardModal.tsx";
@@ -8,7 +9,6 @@ import { CompactColumnBand, compactColumnTitle, isCompactColumn } from "./compac
 import { DoneColumn } from "./DoneColumn.tsx";
 import { readDoneCollapsed, writeDoneCollapsed } from "./doneColumn.ts";
 import { ColumnGlyph, Icon } from "./icons.tsx";
-import { nextColumn } from "./nextColumn.ts";
 import { ProjectPicker } from "./ProjectPicker.tsx";
 import { SettingsModal } from "./SettingsModal.tsx";
 import { SkillsModal } from "./SkillsModal.tsx";
@@ -227,7 +227,7 @@ function Board({ snap, onOpen, guard }: { snap: ProjectSnapshot; onOpen: (id: st
     );
   };
   const tile = (card: Card) => {
-    const next = nextColumn(snap.board.columns, card.columnId);
+    const next = resolveNextColumn(snap.board.columns, card);
     return (
       <CardTile
         project={snap.path}

@@ -1102,8 +1102,8 @@ test("done column: nextColumn from col_done is undefined", () => {
   const dir = tempDir("ns-donenext-");
   const p = new Project(dir);
   p.close();
-  expect(p.nextColumn(DONE_COLUMN_ID)).toBeUndefined();
-  expect(p.nextColumn(must(p.board.columns.at(-2)).id)?.id).toBe(DONE_COLUMN_ID);
+  expect(p.nextColumnFor({ columnId: DONE_COLUMN_ID } as Card)).toBeUndefined();
+  expect(p.nextColumnFor({ columnId: must(p.board.columns.at(-2)).id } as Card)?.id).toBe(DONE_COLUMN_ID);
 });
 
 // ---- user feedback ----------------------------------------------------------

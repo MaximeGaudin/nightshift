@@ -870,7 +870,7 @@ export class Orchestrator {
       this.log(p, job.cardId, "info", `Done: ${out.summary ?? ""}`);
       const move = String(out.move ?? "stay").trim();
       let target: Column | undefined;
-      if (move === "next") target = p.nextColumn(job.columnId);
+      if (move === "next") target = p.nextColumnFor(card);
       else if (move !== "stay") target = board.columns.find((c) => c.id === move || c.name === move);
       if (target && target.id !== card.columnId) {
         p.moveCard(board, card.id, target.id, undefined, "Agent");

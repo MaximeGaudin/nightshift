@@ -95,6 +95,8 @@ export interface Card {
   pendingAnswer?: { text: string; sessionId: string; at: string; kind?: "resume" | "feedback" };
   /** How a human tries the card's result, set by an agent (e.g. run the app from the card's worktree). */
   test?: CardTest;
+  /** Ids of the columns "next" jumps over for this card. Canonical form: see `normalizeSkipColumnIds`. Absent = none. */
+  skipColumnIds?: string[];
   history: HistoryEntry[];
   /** Time checkpoint of the history entries dropped by the history cap. */
   timeBase?: TimeState;
