@@ -3,7 +3,7 @@ import { dirname, join, resolve } from "node:path";
 import { homedir } from "node:os";
 import type { ServerWebSocket } from "bun";
 import index from "../web/index.html";
-import { ensureDoneColumn, isDoneColumn, normalizeColumnParallel, type Column, type ColumnType, type ServerEvent } from "../shared/types.ts";
+import { ensureDoneColumn, isDoneColumn, normalizeColumnEmoji, normalizeColumnParallel, type Column, type ColumnType, type ServerEvent } from "../shared/types.ts";
 import { Orchestrator } from "./orchestrator.ts";
 import { getSettings, updateSettings } from "./settings.ts";
 import { COLUMN_KEYS, newId, unknownFields } from "./store.ts";
@@ -88,6 +88,7 @@ export function startServer({ port, development, agents = true }: { port: number
               const userCols: Column[] = b.columns.map((c: any) => {
                 const type: ColumnType = c.type === "skill" ? "skill" : "inert";
                 const maxParallel = normalizeColumnParallel(type, c.maxParallel);
+                const emoji = normalizeColumnEmoji(c.emoji);
                 return {
                   ...unknownFields(c, COLUMN_KEYS),
                   id: typeof c.id === "string" && c.id ? c.id : newId("col"),
@@ -97,6 +98,7 @@ export function startServer({ port, development, agents = true }: { port: number
                   ...(c.instructions?.trim() ? { instructions: String(c.instructions).trim() } : {}),
                   ...(typeof c.model === "string" && c.model.trim() ? { model: c.model.trim() } : {}),
                   ...(maxParallel !== undefined ? { maxParallel } : {}),
+                  ...(emoji !== undefined ? { emoji } : {}),
                 };
               });
               if (userCols.filter((c) => !isDoneColumn(c)).length === 0) throw new Error("A board needs at least one column");
