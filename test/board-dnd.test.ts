@@ -60,3 +60,16 @@ test("board-dnd-local-order-merges-snapshots", () => {
   expect(grouped.Y?.map((c) => c.id)).toEqual(["D", "E", "A"]);
   expect(cardsByColumn(columns, cards, null).X?.map((c) => c.id)).toEqual(["A", "B", "C"]);
 });
+
+test("board-dnd-stale-local-cards-follow-snapshot", () => {
+  // A is dragged; meanwhile a snapshot moves D (another card) from Y to Z.
+  const local = moveLocal(snapshotOrder(columns, cards), "A", "Y", "E");
+  const fresh = cards.map((c) => (c.id === "D" ? mk("D", "Z") : c));
+  const grouped = cardsByColumn(columns, fresh, local, "A");
+  expect(grouped.Y?.map((c) => c.id)).toEqual(["A", "E"]);
+  expect(grouped.Z?.map((c) => c.id)).toEqual(["D"]);
+  expect(resolveDrop(columns, localCards(columns, fresh, local, "A"), "A", onCard("E"), { columnId: "X", index: 0 })).toEqual({
+    columnId: "Y",
+    index: 1,
+  });
+});

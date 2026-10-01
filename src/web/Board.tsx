@@ -107,6 +107,12 @@ export function Board({
   const [overColumn, setOverColumn] = useState<string | null>(null);
   // Card order shown while dragging (and until the move is saved): snapshots keep updating data, never the order.
   const [local, setLocal] = useState<LocalOrder | null>(null);
+  // Card whose column comes from `local` (the dragged one, then the dropped one until the move is saved).
+  const [moving, setMoving] = useState<string | null>(null);
+  const clearLocal = () => {
+    setLocal(null);
+    setMoving(null);
+  };
   const origin = useRef<{ columnId: string; index: number } | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [sending, setSending] = useState<Set<string>>(() => new Set());
@@ -124,7 +130,7 @@ export function Board({
   const columns = snap.board.columns;
   const cards = snap.board.cards;
   const serverCards = useMemo(() => cardsByColumn(columns, cards, null), [columns, cards]);
-  const shownCards = useMemo(() => cardsByColumn(columns, cards, local), [columns, cards, local]);
+  const shownCards = useMemo(() => cardsByColumn(columns, cards, local, moving), [columns, cards, local, moving]);
   const compactIds = useMemo(
     () =>
       new Set(
@@ -161,6 +167,7 @@ export function Board({
     if (!card) return;
     origin.current = { columnId: card.columnId, index: serverCards[card.columnId]?.findIndex((c) => c.id === id) ?? 0 };
     setActiveId(id);
+    setMoving(id);
     setLocal(snapshotOrder(columns, cards));
   };
 
@@ -196,23 +203,23 @@ export function Board({
     finish();
     const target = over ? describe(over) : null;
     if (!target || !local || !start) {
-      setLocal(null);
+      clearLocal();
       return;
     }
-    const drop = resolveDrop(columns, localCards(columns, cards, local), id, target, start);
+    const drop = resolveDrop(columns, localCards(columns, cards, local, id), id, target, start);
     if (!drop) {
-      setLocal(null);
+      clearLocal();
       return;
     }
     api
       .moveCard(snap.path, id, drop.columnId, drop.index)
       .catch((e) => notifyError(e instanceof Error ? e.message : String(e)))
-      .finally(() => setLocal(null));
+      .finally(clearLocal);
   };
 
   const onDragCancel = () => {
     finish();
-    setLocal(null);
+    clearLocal();
   };
 
   const position = (over: { id: string | number; data: { current?: { type?: string; columnId?: string } } } | null) => {

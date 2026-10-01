@@ -59,8 +59,12 @@ export function snapshotOrder(columns: Column[], cards: Card[]): LocalOrder {
   return Object.fromEntries(columns.map((col) => [col.id, cards.filter((c) => c.columnId === col.id).map((c) => c.id)]));
 }
 
-/** Cards of each column: the server order, or `local` when set. Fresh snapshot data wins; unknown cards are appended, gone ones dropped. */
-export function cardsByColumn(columns: Column[], cards: Card[], local: LocalOrder | null): Record<string, Card[]> {
+/**
+ * Cards of each column: the server order, or `local` when set. Fresh snapshot data wins; unknown cards are appended, gone ones dropped.
+ * With `movingId`, only that card keeps its local column: any other card a snapshot moved elsewhere leaves the local list and
+ * joins its new column at the end.
+ */
+export function cardsByColumn(columns: Column[], cards: Card[], local: LocalOrder | null, movingId?: string | null): Record<string, Card[]> {
   const server = Object.fromEntries(columns.map((col) => [col.id, cards.filter((c) => c.columnId === col.id)]));
   if (!local) return server;
   const byId = new Map(cards.map((c) => [c.id, c]));
@@ -70,7 +74,8 @@ export function cardsByColumn(columns: Column[], cards: Card[], local: LocalOrde
     out[col.id] = [];
     for (const id of local[col.id] ?? []) {
       const card = byId.get(id);
-      if (card && !placed.has(id)) {
+      const stale = movingId != null && id !== movingId && card?.columnId !== col.id;
+      if (card && !stale && !placed.has(id)) {
         out[col.id]?.push(card);
         placed.add(id);
       }
@@ -81,8 +86,8 @@ export function cardsByColumn(columns: Column[], cards: Card[], local: LocalOrde
 }
 
 /** Flat card list with the column of every card taken from the local order (input of `resolveDrop` while dragging). */
-export function localCards(columns: Column[], cards: Card[], local: LocalOrder): Card[] {
-  const grouped = cardsByColumn(columns, cards, local);
+export function localCards(columns: Column[], cards: Card[], local: LocalOrder, movingId?: string | null): Card[] {
+  const grouped = cardsByColumn(columns, cards, local, movingId);
   return columns.flatMap((col) => (grouped[col.id] ?? []).map((c) => (c.columnId === col.id ? c : { ...c, columnId: col.id })));
 }
 
