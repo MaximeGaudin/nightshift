@@ -527,8 +527,13 @@ function renderBlocks(blocks: Block[], ri?: RenderImage): ReactNode[] {
         const H = `h${b.level}` as "h1";
         return <H key={k}>{inline(b.text)}</H>;
       }
-      case "para":
-        return <p key={k}>{inline(b.text)}</p>;
+      case "para": {
+        const nodes = parseInline(b.text);
+        // A rendered image is a block (<figure>), which is not allowed inside <p>.
+        const hasFigure = !!ri && nodes.some((n) => n.t === "img" && ri(n.alt, n.dest) != null);
+        const P = hasFigure ? "div" : "p";
+        return <P key={k}>{renderInline(nodes, ri)}</P>;
+      }
       case "code":
         return (
           <pre key={k}>
