@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { isCardScreenshot, screenshotUrl } from "../shared/screenshots.ts";
+import { t, useT } from "./i18n/index.ts";
 
 /** Escape closes the lightbox only: stop it before the card dialog's Escape listener (Radix, on the document) sees it. */
 export function handleLightboxKey(
@@ -39,13 +40,14 @@ export function Lightbox({ src, alt, onClose }: { src: string; alt: string; onCl
 }
 
 export function CardScreenshot({ project, cardId, alt, file }: { project: string; cardId: string; alt: string; file: string }) {
+  const { t } = useT();
   const [failed, setFailed] = useState(false);
   const [open, setOpen] = useState(false);
   const src = screenshotUrl(project, cardId, file);
   return (
     <figure className="md-figure">
       {failed ? (
-        <div className="md-figure-missing">Capture introuvable — {alt}</div>
+        <div className="md-figure-missing">{t("board.screenshot.missing", { alt })}</div>
       ) : (
         <button type="button" className="md-figure-open" onClick={() => setOpen(true)}>
           <img src={src} alt={alt} onError={() => setFailed(true)} />
@@ -60,5 +62,7 @@ export function CardScreenshot({ project, cardId, alt, file }: { project: string
 /** renderImage for Markdown: card captures become figures, any other image stays text. */
 export function renderCardImage(project: string, cardId: string) {
   return (alt: string, dest: string): ReactNode | null =>
-    isCardScreenshot(dest, cardId) ? <CardScreenshot project={project} cardId={cardId} alt={alt || "Capture"} file={dest} /> : null;
+    isCardScreenshot(dest, cardId) ? (
+      <CardScreenshot project={project} cardId={cardId} alt={alt || t("board.screenshot.default")} file={dest} />
+    ) : null;
 }

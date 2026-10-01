@@ -3,6 +3,7 @@ import type { ReactNode, Ref } from "react";
 import type { Card } from "../shared/types.ts";
 import { DROP_TARGET, STRIP_COLUMN, WIDE_COLUMN } from "./compactColumn.tsx";
 import { sortDoneCards } from "./doneColumn.ts";
+import { useT } from "./i18n/index.ts";
 import { cn } from "./lib/utils.ts";
 
 export interface DoneColumnProps {
@@ -17,6 +18,7 @@ export interface DoneColumnProps {
 }
 
 export function DoneColumn({ cards, dropActive, dropRef, collapsed, onToggle, renderCard }: DoneColumnProps) {
+  const { t } = useT();
   if (collapsed) {
     return (
       // biome-ignore lint/a11y/useSemanticElements: the whole strip is both the toggle and a drop target; a native button cannot host the drop zone ref and the counter layout
@@ -29,7 +31,7 @@ export function DoneColumn({ cards, dropActive, dropRef, collapsed, onToggle, re
         )}
         role="button"
         aria-expanded="false"
-        aria-label={`Done, ${cards.length} fiches. Déplier`}
+        aria-label={t("board.done.collapsedAria", { count: cards.length })}
         tabIndex={0}
         onClick={onToggle}
         onKeyDown={(e) => {

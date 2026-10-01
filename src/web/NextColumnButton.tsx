@@ -3,8 +3,9 @@ import { resolveNextColumn } from "../shared/skip.ts";
 import { agentBlocker, type Board, type Card, type Column, type LiveStatus } from "../shared/types.ts";
 import { api } from "./api.ts";
 import { Button } from "./components/ui/button.tsx";
+import { t, useT } from "./i18n/index.ts";
 
-/** Colonne suivante si la colonne de la fiche est inerte, sinon undefined. */
+/** Next column when the card column is inert, otherwise undefined. */
 export function nextInertTarget(board: Board, card: Card): Column | undefined {
   if (board.columns.find((c) => c.id === card.columnId)?.type !== "inert") return undefined;
   return resolveNextColumn(board.columns, card);
@@ -38,10 +39,8 @@ export async function sendToNext({
   }
 }
 
-const BLOCKER_TITLES = {
-  working: "L'agent n'a pas fini : attendez la fin de son travail (ou arrêtez-le) avant d'envoyer la fiche plus loin.",
-  question: "L'agent attend une réponse : répondez-lui avant d'envoyer la fiche plus loin.",
-};
+const blockerTitle = (blocker: "working" | "question"): string =>
+  blocker === "working" ? t("board.next.blockedWorking") : t("board.next.blockedQuestion");
 
 export function NextColumnButton({
   project,
@@ -58,6 +57,7 @@ export function NextColumnButton({
   onError: (message: string) => void;
   live?: LiveStatus;
 }) {
+  const { t } = useT();
   const [busy, setBusy] = useState(false);
   const target = nextInertTarget(board, card);
   if (!target) return null;
@@ -66,7 +66,7 @@ export function NextColumnButton({
     <Button
       type="button"
       disabled={busy || blocker !== undefined}
-      title={blocker ? BLOCKER_TITLES[blocker] : undefined}
+      title={blocker ? blockerTitle(blocker) : undefined}
       onClick={async () => {
         setBusy(true);
         try {
@@ -76,7 +76,7 @@ export function NextColumnButton({
         }
       }}
     >
-      Envoyer à {target.name} →
+      {t("board.next.sendTo", { name: target.name })}
     </Button>
   );
 }

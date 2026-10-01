@@ -1,5 +1,6 @@
 import { type Column, columnEmoji } from "../shared/types.ts";
 import { Button } from "./components/ui/button.tsx";
+import { useT } from "./i18n/index.ts";
 import { cn } from "./lib/utils.ts";
 
 export interface SkipColumnsPickerProps {
@@ -26,6 +27,7 @@ export function toggleInertColumns(columns: Column[], value: string[]): string[]
 
 /** Collapsed list of checkboxes: the columns a card jumps over when it goes to the next column. */
 export function SkipColumnsPicker({ columns, value, onChange }: SkipColumnsPickerProps) {
+  const { t } = useT();
   if (columns.length === 0) return null;
   const checked = columns.filter((c) => value.includes(c.id)).length;
   const inert = columns.filter((c) => c.type === "inert");
@@ -40,7 +42,8 @@ export function SkipColumnsPicker({ columns, value, onChange }: SkipColumnsPicke
     <div className="skip-picker flex items-start gap-1.5 text-xs text-muted-foreground">
       <details className="min-w-0 flex-1">
         <summary className="cursor-pointer leading-6 select-none hover:text-foreground">
-          Sauter des colonnes{checked > 0 ? ` (${checked})` : ""}
+          {t("board.skip.summary")}
+          {checked > 0 ? ` (${checked})` : ""}
         </summary>
         <div className="skip-picker-list flex flex-wrap gap-1 pt-1.5">
           {columns.map((c) => {
@@ -68,10 +71,10 @@ export function SkipColumnsPicker({ columns, value, onChange }: SkipColumnsPicke
           size="sm"
           className={cn("skip-picker-inert shrink-0 text-muted-foreground", inertOn && "border-primary text-foreground")}
           aria-pressed={inertOn}
-          title={`Sauter les colonnes inertes : ${inert.map((c) => c.name).join(", ")}`}
+          title={t("board.skip.inertTitle", { names: inert.map((c) => c.name).join(", ") })}
           onClick={() => onChange(toggleInertColumns(columns, value))}
         >
-          Sauter les inertes
+          {t("board.skip.inert")}
         </Button>
       )}
     </div>
