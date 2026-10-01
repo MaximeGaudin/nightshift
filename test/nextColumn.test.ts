@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { nextColumn } from "../src/web/nextColumn.ts";
 import type { Column } from "../src/shared/types.ts";
+import { nextColumn } from "../src/web/nextColumn.ts";
 
 const cols: Column[] = [
   { id: "backlog", name: "Backlog", type: "inert" },

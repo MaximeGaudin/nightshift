@@ -93,7 +93,7 @@ test("markdown-malformed", () => {
   expect(render("a ** b")).toContain("a ** b");
   expect(render("|")).toContain("|");
   expect(render("")).toBe('<div class="md"></div>');
-  expect(render("> ".repeat(500) + "deep")).toContain("deep");
+  expect(render(`${"> ".repeat(500)}deep`)).toContain("deep");
 });
 
 test("markdown-plain-text", () => {

@@ -1,4 +1,4 @@
-import { columnEmoji, columnMaxParallel, type Column } from "../shared/types.ts";
+import { type Column, columnEmoji, columnMaxParallel } from "../shared/types.ts";
 import { ColumnGlyph, Icon } from "./icons.tsx";
 
 /** A column collapses into a thin band when it is empty and not manually expanded. */

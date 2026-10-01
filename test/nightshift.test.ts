@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -152,12 +152,12 @@ test("pipeline: skill column without maxParallel runs one card at a time, respec
     expect(byTitle[t].columnId).toBe(done.id);
     expect(byTitle[t].description).toBe("done by fake");
   }
-  expect(byTitle["fail"].columnId).toBe(enrich.id);
-  expect(byTitle["fail"].lastRun.status).toBe("error");
+  expect(byTitle.fail.columnId).toBe(enrich.id);
+  expect(byTitle.fail.lastRun.status).toBe("error");
 
   // Retry re-queues the failed card.
-  await post(`/api/cards/${byTitle["fail"].id}/retry`, { project: proj });
-  const log = await fetch(`${base}/api/cards/${byTitle["fail"].id}/log?project=${encodeURIComponent(proj)}`).then((r) => r.json());
+  await post(`/api/cards/${byTitle.fail.id}/retry`, { project: proj });
+  const log = await fetch(`${base}/api/cards/${byTitle.fail.id}/log?project=${encodeURIComponent(proj)}`).then((r) => r.json());
   expect(Array.isArray(log)).toBe(true);
 });
 
@@ -1004,7 +1004,7 @@ test("existing custom columns are untouched", async () => {
     cards: [],
     nextCardNumber: 1,
   };
-  writeFileSync(file, JSON.stringify(board, null, 2) + "\n");
+  writeFileSync(file, `${JSON.stringify(board, null, 2)}\n`);
   const text = readFileSync(file, "utf8");
   const mtime = statSync(file).mtimeMs;
   await Bun.sleep(20);

@@ -112,7 +112,7 @@ export interface Board {
 
 /** Quick human ref of a card, e.g. `#32`. */
 export function cardRef(card: Pick<Card, "number">): string {
-  return "#" + card.number;
+  return `#${card.number}`;
 }
 
 /** Parallel agents in a skill column when `maxParallel` is absent. */

@@ -1,18 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { columnMaxParallel, isDoneColumn, DONE_COLUMN_ID, type Card, type Column, type ProjectSnapshot } from "../shared/types.ts";
+import { type Card, type Column, columnMaxParallel, DONE_COLUMN_ID, isDoneColumn, type ProjectSnapshot } from "../shared/types.ts";
 import { api, useServerEvents, useSettings } from "./api.ts";
-import { CardTile } from "./CardTile.tsx";
-import { nextColumn } from "./nextColumn.ts";
 import { CardModal } from "./CardModal.tsx";
+import { CardTile } from "./CardTile.tsx";
+import { ColumnsEditor } from "./ColumnsEditor.tsx";
 import { CompactColumnBand, compactColumnTitle, isCompactColumn } from "./compactColumn.tsx";
 import { DoneColumn } from "./DoneColumn.tsx";
 import { readDoneCollapsed, writeDoneCollapsed } from "./doneColumn.ts";
-import { ColumnsEditor } from "./ColumnsEditor.tsx";
+import { ColumnGlyph, Icon } from "./icons.tsx";
+import { nextColumn } from "./nextColumn.ts";
 import { ProjectPicker } from "./ProjectPicker.tsx";
 import { SettingsModal } from "./SettingsModal.tsx";
 import { SkillsModal } from "./SkillsModal.tsx";
-import { ColumnGlyph, Icon } from "./icons.tsx";
-import { toPlainText } from "./markdown.tsx";
 import { installAudioUnlock, notifyAttention } from "./sound.ts";
 import { ErrorBanner } from "./ui.tsx";
 

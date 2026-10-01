@@ -1,16 +1,16 @@
-import { existsSync, readFileSync, renameSync, statSync, watch, writeFileSync, type FSWatcher } from "node:fs";
+import { existsSync, type FSWatcher, readFileSync, renameSync, statSync, watch, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import { replayHistory } from "../shared/timeline.ts";
 import {
-  doneColumn,
-  ensureDoneColumn,
-  normalizeColumnEmoji,
-  normalizeColumnParallel,
   type Board,
   type Card,
   type Column,
   type ColumnType,
+  doneColumn,
+  ensureDoneColumn,
   type HistoryEntry,
+  normalizeColumnEmoji,
+  normalizeColumnParallel,
   type TimeState,
 } from "../shared/types.ts";
 
@@ -229,8 +229,8 @@ export class Project {
   }
 
   private write() {
-    const tmp = this.file + ".tmp";
-    writeFileSync(tmp, JSON.stringify(this.board, null, 2) + "\n");
+    const tmp = `${this.file}.tmp`;
+    writeFileSync(tmp, `${JSON.stringify(this.board, null, 2)}\n`);
     renameSync(tmp, this.file);
     try {
       this.lastWrittenMtime = statSync(this.file).mtimeMs;

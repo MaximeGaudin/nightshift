@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
+import type { Card } from "../src/shared/types.ts";
 import { Markdown } from "../src/web/markdown.tsx";
 import { handleLightboxKey, renderCardImage } from "../src/web/Screenshot.tsx";
 import { TestPanel } from "../src/web/TestPanel.tsx";
-import type { Card } from "../src/shared/types.ts";
 
 const shot = "/work/nightshift-screenshots/card_a-1.png";
 

@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { RunProgress } from "../src/web/RunProgress.tsx";
 import type { RunProgress as P } from "../src/shared/types.ts";
+import { RunProgress } from "../src/web/RunProgress.tsx";
 
 const p: P = { step: 3, total: 7, label: "Tests", source: "agent", at: 0 } as P;
 

@@ -3,7 +3,7 @@
 // the source is rendered as escaped text, never injected. Malformed syntax falls
 // back to text and the renderer never throws.
 
-import { Fragment, type CSSProperties, type ReactNode } from "react";
+import { type CSSProperties, Fragment, type ReactNode } from "react";
 
 // ---------- AST ----------
 
@@ -76,7 +76,7 @@ function splitRow(line: string): string[] {
 
 function isTableStart(lines: string[], i: number): boolean {
   const next = lines[i + 1];
-  return lines[i]!.includes("|") && next !== undefined && next.includes("-") && DELIM.test(next);
+  return lines[i]!.includes("|") && next?.includes("-") && DELIM.test(next);
 }
 
 function parseBlocks(lines: string[], depth: number): Block[] {

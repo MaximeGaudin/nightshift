@@ -1,8 +1,8 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { type ChildProcess, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Subprocess } from "bun";
-import { spawn, type ChildProcess } from "node:child_process";
 import type {
   AttentionKind,
   Board,
@@ -17,11 +17,11 @@ import type {
   Settings,
 } from "../shared/types.ts";
 import { canSendFeedback, cardRef, columnMaxParallel, isDoneColumn } from "../shared/types.ts";
+import { parseProgressMarker, progressFromTodos } from "./progress.ts";
 import { persistScreenshots } from "./screenshots.ts";
 import { getSettings, NIGHTSHIFT_HOME, onSettingsChange, rememberProject } from "./settings.ts";
-import { needsRun, Project } from "./store.ts";
 import { findSkill } from "./skills.ts";
-import { parseProgressMarker, progressFromTodos } from "./progress.ts";
+import { needsRun, Project } from "./store.ts";
 
 interface Job {
   key: string;
@@ -354,7 +354,7 @@ export class Orchestrator {
     if (arr.length > MAX_LOG_LINES) arr.splice(0, arr.length - MAX_LOG_LINES);
     this.logs.set(k, arr);
     try {
-      appendFileSync(this.logFile(p, cardId), JSON.stringify(line) + "\n");
+      appendFileSync(this.logFile(p, cardId), `${JSON.stringify(line)}\n`);
     } catch {}
     this.broadcast({ type: "log", project: p.path, cardId, line });
   }

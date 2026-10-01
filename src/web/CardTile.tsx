@@ -1,4 +1,4 @@
-import { cardRef, type Card, type LiveStatus, type RunProgress as RunProgressData } from "../shared/types.ts";
+import { type Card, cardRef, type LiveStatus, type RunProgress as RunProgressData } from "../shared/types.ts";
 import { CardThumbnail } from "./CardThumbnail.tsx";
 import { Icon, StatusIcon } from "./icons.tsx";
 import { toPlainText } from "./markdown.tsx";

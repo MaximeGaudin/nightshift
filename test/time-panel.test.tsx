@@ -1,6 +1,6 @@
 import { expect, spyOn, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { DONE_COLUMN_ID, type Board, type Card, type Column } from "../src/shared/types.ts";
+import { type Board, type Card, type Column, DONE_COLUMN_ID } from "../src/shared/types.ts";
 import { startTicker, TimePanelView } from "../src/web/TimePanel.tsx";
 
 const T0 = Date.parse("2026-01-01T00:00:00Z");

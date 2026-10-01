@@ -2,7 +2,7 @@ import type { Card } from "../shared/types.ts";
 
 type DoneStorage = Pick<Storage, "getItem" | "setItem">;
 
-export const doneCollapsedKey = (projectPath: string): string => "nightshift:doneCollapsed:" + projectPath;
+export const doneCollapsedKey = (projectPath: string): string => `nightshift:doneCollapsed:${projectPath}`;
 
 /** Collapsed unless the user explicitly expanded it ("0"). Unreadable storage counts as collapsed. */
 export function readDoneCollapsed(storage: DoneStorage, projectPath: string): boolean {

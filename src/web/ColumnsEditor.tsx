@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { MAX_PARALLEL, ensureDoneColumn, isDoneColumn, type Column, type ProjectSnapshot, type SkillInfo } from "../shared/types.ts";
+import { type Column, ensureDoneColumn, isDoneColumn, MAX_PARALLEL, type ProjectSnapshot, type SkillInfo } from "../shared/types.ts";
 import { api } from "./api.ts";
 import { ColumnGlyph, Icon } from "./icons.tsx";
 import { ErrorBanner, Modal } from "./ui.tsx";

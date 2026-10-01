@@ -1,20 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  type Board,
+  type Card,
   canSendFeedback,
   cardRef,
   columnEmoji,
-  type Board,
-  type Card,
   type LiveStatus,
-  type RunProgress as RunProgressData,
   type LogLine,
+  type RunProgress as RunProgressData,
 } from "../shared/types.ts";
-import { RunProgress } from "./RunProgress.tsx";
 import { api, useServerEvents } from "./api.ts";
 import { FeedbackForm } from "./FeedbackForm.tsx";
 import { StatusIcon } from "./icons.tsx";
 import { Markdown } from "./markdown.tsx";
 import { NextColumnButton } from "./NextColumnButton.tsx";
+import { RunProgress } from "./RunProgress.tsx";
 import { renderCardImage } from "./Screenshot.tsx";
 import { TestPanel } from "./TestPanel.tsx";
 import { TimePanel } from "./TimePanel.tsx";

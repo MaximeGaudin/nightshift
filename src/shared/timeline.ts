@@ -16,7 +16,7 @@ export type { TimeCursor, TimePart, TimeSlice, TimeState };
 const PART_ORDER: TimePart[] = ["inert", "queued", "running", "human", "legacy"];
 
 function sliceKey(columnId: string | undefined, columnName: string, part: TimePart): string {
-  return (columnId !== undefined ? "id:" + columnId : "name:" + columnName) + "\0" + part;
+  return `${columnId !== undefined ? `id:${columnId}` : `name:${columnName}`}\0${part}`;
 }
 
 function intervalMs(from: string, to: string): number {
@@ -114,7 +114,7 @@ export function cardTimeSlices(card: Card, columns: Column[], nowMs: number): Ti
   for (const s of raw) {
     let col = s.columnId !== undefined ? byId.get(s.columnId) : byName.get(s.columnName);
     let id = col?.id;
-    let name = col?.name ?? s.columnName;
+    const name = col?.name ?? s.columnName;
     let part = s.part;
     if (col) {
       if (col.id === DONE_COLUMN_ID) continue;
@@ -122,10 +122,10 @@ export function cardTimeSlices(card: Card, columns: Column[], nowMs: number): Ti
     } else {
       id = s.columnId;
       col = undefined;
-      const dk = id !== undefined ? "id:" + id : "name:" + name;
+      const dk = id !== undefined ? `id:${id}` : `name:${name}`;
       if (!deletedOrder.includes(dk)) deletedOrder.push(dk);
     }
-    const key = (col ? "board:" + col.id : "del:" + (id !== undefined ? "id:" + id : "name:" + name)) + "\0" + part;
+    const key = `${col ? `board:${col.id}` : `del:${id !== undefined ? `id:${id}` : `name:${name}`}`}\0${part}`;
     const existing = merged.get(key);
     if (existing) {
       existing.ms += s.ms;
@@ -136,12 +136,12 @@ export function cardTimeSlices(card: Card, columns: Column[], nowMs: number): Ti
   const out: TimeSlice[] = [];
   const pick = (prefix: string) => {
     for (const part of PART_ORDER) {
-      const s = merged.get(prefix + "\0" + part);
+      const s = merged.get(`${prefix}\0${part}`);
       if (s && s.ms > 0) out.push(s);
     }
   };
-  for (const c of columns) pick("board:" + c.id);
-  for (const dk of deletedOrder) pick("del:" + dk);
+  for (const c of columns) pick(`board:${c.id}`);
+  for (const dk of deletedOrder) pick(`del:${dk}`);
   return out;
 }
 

@@ -1,7 +1,7 @@
 // Inline SVG icons (Linear-style). No dependency; every stroke/fill uses currentColor,
 // so color comes from CSS (.st-<status>, .col-<type>, or the parent's color).
 import type { ReactNode } from "react";
-import { columnEmoji, type Column, type LiveStatus, type RunStatus } from "../shared/types.ts";
+import { type Column, columnEmoji, type LiveStatus, type RunStatus } from "../shared/types.ts";
 
 type Status = RunStatus | LiveStatus;
 

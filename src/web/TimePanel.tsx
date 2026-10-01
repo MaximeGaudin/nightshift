@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import type { Board, Card } from "../shared/types.ts";
 import { cardTimeSlices, formatDuration, formatPercent, type TimePart, type TimeSlice } from "../shared/timeline.ts";
+import type { Board, Card } from "../shared/types.ts";
 
 const HUES = [210, 25, 145, 280, 50, 340, 175, 100];
 const PART_LABEL: Record<TimePart, string> = {
@@ -55,7 +55,7 @@ export function TimePanelView({ card, board, nowMs }: { card: Card; board: Board
   const parts = slices.map((s) => {
     const idx = hueIndex(board, s);
     const label = PART_LABEL[s.part];
-    const title = `${s.columnName}${label ? " — " + label : ""} : ${formatDuration(s.ms)} (${formatPercent(s.ms, total)})`;
+    const title = `${s.columnName}${label ? ` — ${label}` : ""} : ${formatDuration(s.ms)} (${formatPercent(s.ms, total)})`;
     return { s, idx, label, title, fill: fillFor(s, idx) };
   });
   const patternIdxs = [...new Set(parts.filter((p) => p.s.part === "legacy").map((p) => p.idx))];

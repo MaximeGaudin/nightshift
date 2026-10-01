@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { CardTile } from "../src/web/CardTile.tsx";
 import type { Card } from "../src/shared/types.ts";
+import { CardTile } from "../src/web/CardTile.tsx";
 
 const card = { id: "card_1", title: "Hello", description: "", columnId: "backlog" } as unknown as Card;
 const base = { project: "/p", card, dragging: false, onOpen: () => {}, onDragStart: () => {}, onDragEnd: () => {} };

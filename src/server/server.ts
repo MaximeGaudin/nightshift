@@ -1,23 +1,23 @@
 import { readdirSync, statSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
 import { homedir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import type { ServerWebSocket } from "bun";
-import index from "../web/index.html";
 import {
+  type Card,
+  type Column,
+  type ColumnType,
   ensureDoneColumn,
   isDoneColumn,
   normalizeColumnEmoji,
   normalizeColumnParallel,
-  type Card,
-  type Column,
-  type ColumnType,
   type ServerEvent,
 } from "../shared/types.ts";
+import index from "../web/index.html";
 import { Orchestrator } from "./orchestrator.ts";
-import { getSettings, updateSettings } from "./settings.ts";
-import { COLUMN_KEYS, newId, unknownFields } from "./store.ts";
 import { removeScreenshots, resolveScreenshot } from "./screenshots.ts";
+import { getSettings, updateSettings } from "./settings.ts";
 import { createSkill, listSkills, readSkill, saveSkill } from "./skills.ts";
+import { COLUMN_KEYS, newId, unknownFields } from "./store.ts";
 
 export function startServer({ port, development, agents = true }: { port: number; development?: boolean; agents?: boolean }) {
   // `bun --hot` re-runs this module on every change. Reuse the orchestrator from the previous run:

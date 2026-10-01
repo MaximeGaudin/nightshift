@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync, renameSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { PERMISSION_MODES, type Settings } from "../shared/types.ts";
@@ -44,8 +44,8 @@ export function updateSettings(patch: Partial<Settings>): Settings {
   next.maxParallel = Math.max(1, Math.min(32, Math.floor(Number(next.maxParallel) || 1)));
   shared.current = next;
   mkdirSync(NIGHTSHIFT_HOME, { recursive: true });
-  const tmp = SETTINGS_FILE + ".tmp";
-  writeFileSync(tmp, JSON.stringify(next, null, 2) + "\n");
+  const tmp = `${SETTINGS_FILE}.tmp`;
+  writeFileSync(tmp, `${JSON.stringify(next, null, 2)}\n`);
   renameSync(tmp, SETTINGS_FILE);
   for (const l of listeners) l(next);
   return next;

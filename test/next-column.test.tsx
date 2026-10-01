@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { NextColumnButton, nextInertTarget, sendToNext } from "../src/web/NextColumnButton.tsx";
 import type { Board, Card, Column } from "../src/shared/types.ts";
+import { NextColumnButton, nextInertTarget, sendToNext } from "../src/web/NextColumnButton.tsx";
 
 const columns: Column[] = [
   { id: "x1", name: "Alpha", type: "inert" },

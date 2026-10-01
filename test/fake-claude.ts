@@ -8,6 +8,7 @@
 // or FAKE_SLOW (sleeps ~5 s first).
 // FAKE_ARGS_LOG, when set, receives one JSON line per run: { title, resumed, model }.
 import { appendFileSync } from "node:fs";
+
 // Nightshift sends the prompt on stdin (never argv).
 const prompt = await new Response(Bun.stdin.stream()).text();
 const title = prompt.match(/<title>([\s\S]*?)<\/title>/)?.[1] ?? "";
@@ -17,12 +18,12 @@ const modelAt = process.argv.indexOf("--model");
 if (process.env.FAKE_ARGS_LOG) {
   appendFileSync(
     process.env.FAKE_ARGS_LOG,
-    JSON.stringify({
+    `${JSON.stringify({
       title,
       resumed,
       model: modelAt >= 0 ? process.argv[modelAt + 1] : null,
       argvHasCard: process.argv.some((a) => a.includes("<card")),
-    }) + "\n",
+    })}\n`,
   );
 }
 const emit = (o: unknown) => console.log(JSON.stringify(o));

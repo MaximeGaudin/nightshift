@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { CompactColumnBand, compactColumnTitle, isCompactColumn } from "../src/web/compactColumn.tsx";
 import type { Column } from "../src/shared/types.ts";
+import { CompactColumnBand, compactColumnTitle, isCompactColumn } from "../src/web/compactColumn.tsx";
 
 test("compact-rule", () => {
   expect(isCompactColumn(0, false)).toBe(true);
