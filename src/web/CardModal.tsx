@@ -3,6 +3,7 @@ import { cardRef, type Board, type Card, type LiveStatus, type LogLine } from ".
 import { api, useServerEvents } from "./api.ts";
 import { StatusIcon } from "./icons.tsx";
 import { Markdown } from "./markdown.tsx";
+import { nextColumn } from "./nextColumn.ts";
 import { TestPanel } from "./TestPanel.tsx";
 import { ErrorBanner, Modal, timeAgo } from "./ui.tsx";
 
@@ -37,6 +38,8 @@ export function CardModal({
   const [base, setBase] = useState({ title: card.title, description: card.description });
   const dirty = title !== base.title || description !== base.description;
   const column = board.columns.find((c) => c.id === card.columnId);
+  const next = nextColumn(board.columns, card.columnId);
+  const [validating, setValidating] = useState(false);
 
   useEffect(() => {
     if (dirty) return;
@@ -69,6 +72,16 @@ export function CardModal({
   const guard = (p: Promise<unknown>) => p.catch((e) => setError(e.message));
   const save = () =>
     guard(api.updateCard(project, card.id, { title, description }).then(() => setBase({ title, description })));
+  // Saves pending edits, sends the card to the bottom of the next column, then closes the modal.
+  const validate = () => {
+    if (!next || validating) return;
+    setValidating(true);
+    (dirty ? api.updateCard(project, card.id, { title, description }).then(() => setBase({ title, description })) : Promise.resolve())
+      .then(() => api.moveCard(project, card.id, next.id))
+      .then(onClose)
+      .catch((e) => setError(e.message))
+      .finally(() => setValidating(false));
+  };
   const lr = card.lastRun;
 
   return (
@@ -110,6 +123,11 @@ export function CardModal({
           <button className="primary" disabled={!dirty} onClick={save}>
             Enregistrer
           </button>
+          {next && (
+            <button className="primary" title={`Envoyer vers ${next.name}`} disabled={validating} onClick={validate}>
+              Valider
+            </button>
+          )}
         </>
       }
     >
