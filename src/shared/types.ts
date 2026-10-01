@@ -1,5 +1,7 @@
 // Types shared by the server and the web client.
 
+import type { SequenceState } from "./sequence.ts";
+
 export type ColumnType = "inert" | "skill";
 
 export interface Column {
@@ -247,6 +249,8 @@ export interface ProjectSnapshot {
   testing: string[];
   /** Progress per card id; only for cards that are live "running". */
   progress: Record<string, RunProgress>;
+  /** Sequential mode: cards of the first column are fed one at a time into the second. */
+  sequence: SequenceState;
 }
 
 /** Why a card needs a human: it reached an inert column, asks questions, or its run failed. */

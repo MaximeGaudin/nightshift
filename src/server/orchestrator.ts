@@ -349,6 +349,7 @@ export class Orchestrator {
       live,
       testing,
       progress,
+      sequence: { status: "stopped" },
       ...(lockedBy ? { lockedBy } : {}),
       ...(this.agents ? {} : { agentsDisabled: true }),
     };
