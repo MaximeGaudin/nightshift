@@ -31,6 +31,8 @@ export interface LastRun {
   questions?: string[];
   costUsd?: number;
   sessionId?: string;
+  /** Skill name applied in the session; needed so a second feedback in an inert column keeps the reference skill. */
+  skill?: string;
 }
 
 export interface HistoryEntry {
@@ -59,8 +61,8 @@ export interface Card {
   enteredColumnAt: string;
   lastRun?: LastRun;
   /** User answer to the agent's question, waiting to be sent by resuming the session. */
-  /** "resume" asks the agent to finish an interrupted session instead of sending answers. */
-  pendingAnswer?: { text: string; sessionId: string; at: string; kind?: "resume" };
+  /** "resume" asks the agent to finish an interrupted session; "feedback" sends free feedback; absent = answer to questions. */
+  pendingAnswer?: { text: string; sessionId: string; at: string; kind?: "resume" | "feedback" };
   /** How a human tries the card's result, set by an agent (e.g. run the app from the card's worktree). */
   test?: CardTest;
   history: HistoryEntry[];
@@ -172,6 +174,16 @@ export interface SkillInfo {
 
 /** Live (non-persisted) state of a card in the run queue. */
 export type LiveStatus = "queued" | "running";
+
+/** Whether the user may send free feedback to the card's last session. */
+export function canSendFeedback(card: Card, live?: LiveStatus): boolean {
+  return (
+    !!card.lastRun?.sessionId &&
+    !live &&
+    !card.pendingAnswer &&
+    !(card.lastRun.status === "question" && card.lastRun.columnId === card.columnId)
+  );
+}
 
 export interface LogLine {
   at: string;
