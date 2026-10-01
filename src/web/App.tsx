@@ -20,6 +20,7 @@ import { Logo } from "./Logo.tsx";
 import { NewCardDialog } from "./NewCardDialog.tsx";
 import { notifyError } from "./notify.ts";
 import { ProjectPicker } from "./ProjectPicker.tsx";
+import { QuickRunToasts, showQuickRunResult } from "./QuickRunToasts.tsx";
 import { SettingsModal } from "./SettingsModal.tsx";
 import { ShortcutsHelp } from "./ShortcutsHelp.tsx";
 import { SkillsModal } from "./SkillsModal.tsx";
@@ -126,6 +127,7 @@ export function App() {
 
   useServerEvents((e) => {
     if (e.type === "board" && snap && e.project === snap.path) setSnap(e.snapshot);
+    if (e.type === "quickrun" && snap && e.project === snap.path) showQuickRunResult(e.result);
   });
 
   const boardName = snap?.board.name;
@@ -279,8 +281,9 @@ export function App() {
           onError={notifyError}
         />
       )}
+      <QuickRunToasts project={snap.path} runs={snap.quickRuns} />
       {modal === "columns" && <ColumnsEditor snap={snap} onClose={() => setModal(null)} />}
-      {modal === "skills" && <SkillsModal project={snap.path} onClose={() => setModal(null)} />}
+      {modal === "skills" && <SkillsModal project={snap.path} favorites={snap.board.favoriteSkills ?? []} onClose={() => setModal(null)} />}
       {modal === "settings" && settings && (
         <SettingsModal
           settings={settings}

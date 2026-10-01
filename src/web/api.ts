@@ -53,6 +53,11 @@ export const api = {
   saveSkill: (project: string, name: string, content: string) => call("PUT", "/api/skill", { project, name, content }),
   createSkill: (project: string, name: string, description: string, body: string) =>
     call<SkillInfo>("POST", "/api/skills", { project, name, description, body }),
+  toggleFavoriteSkill: (project: string, name: string, favorite: boolean) =>
+    call<ProjectSnapshot>("PUT", "/api/favorite-skills", { project, name, favorite }),
+  startQuickRun: (project: string, skill: string, instruction: string) =>
+    call<{ id: string }>("POST", "/api/quick-runs", { project, skill, instruction }),
+  cancelQuickRun: (project: string, id: string) => call<{ ok: boolean }>("POST", `/api/quick-runs/${id}/cancel`, { project }),
 };
 
 type Listener = (e: ServerEvent) => void;

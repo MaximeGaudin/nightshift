@@ -14,7 +14,15 @@ import { notifyError } from "./notify.ts";
 
 const norm = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 
-export function SkillsModal({ project, onClose }: { project: string; onClose: () => void }) {
+export function SkillsModal({
+  project,
+  onClose,
+}: {
+  project: string;
+  /** Names of the favorite skills; shown by the favorite toggle. */
+  favorites: string[];
+  onClose: () => void;
+}) {
   const { t } = useT();
   const [skills, setSkills] = useState<SkillInfo[] | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
