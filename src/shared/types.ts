@@ -12,6 +12,8 @@ export interface Column {
   instructions?: string;
   /** Modèle Claude (alias ou ID) pour les runs de cette colonne ; absent = réglage global. */
   model?: string;
+  /** Max agents running at once in this column; absent = 1. The global setting still caps the total. */
+  maxParallel?: number;
 }
 
 export type RunStatus = "success" | "error" | "cancelled" | "question";
@@ -35,6 +37,13 @@ export interface HistoryEntry {
   text: string;
 }
 
+export interface CardTest {
+  /** Shell command, run with `sh -c` from the project folder. */
+  command: string;
+  /** Where to look once it runs, e.g. http://localhost:4546. */
+  url?: string;
+}
+
 export interface Card {
   id: string;
   /** Short human ref (`#32`): positive integer, unique per board, never changes, never reused. */
@@ -49,6 +58,8 @@ export interface Card {
   lastRun?: LastRun;
   /** User answer to the agent's question, waiting to be sent by resuming the session. */
   pendingAnswer?: { text: string; sessionId: string; at: string };
+  /** How a human tries the card's result, set by an agent (e.g. run the app from the card's worktree). */
+  test?: CardTest;
   history: HistoryEntry[];
 }
 
@@ -65,6 +76,30 @@ export interface Board {
 /** Quick human ref of a card, e.g. `#32`. */
 export function cardRef(card: Pick<Card, "number">): string {
   return "#" + card.number;
+}
+
+/** Parallel agents in a skill column when `maxParallel` is absent. */
+export const DEFAULT_COLUMN_PARALLEL = 1;
+/** Upper bound for any parallel limit (column or global). */
+export const MAX_PARALLEL = 32;
+
+/** Max agents running at once in a column. Never reads the global settings. */
+export function columnMaxParallel(col: Pick<Column, "maxParallel">): number {
+  return col.maxParallel ?? DEFAULT_COLUMN_PARALLEL;
+}
+
+/**
+ * Normalizes a raw `maxParallel` value for a column of the given type.
+ * Returns undefined (field absent) for inert columns and for empty, non-numeric, non-integer or < 1 values;
+ * clamps integers above MAX_PARALLEL. Never produces a default value.
+ */
+export function normalizeColumnParallel(type: ColumnType, raw: unknown): number | undefined {
+  if (type !== "skill") return undefined;
+  if (typeof raw !== "number" && typeof raw !== "string") return undefined;
+  if (typeof raw === "string" && !raw.trim()) return undefined;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1) return undefined;
+  return Math.min(n, MAX_PARALLEL);
 }
 
 /** Values accepted by `claude --permission-mode`. */
@@ -104,6 +139,10 @@ export interface ProjectSnapshot {
   live: Record<string, LiveStatus>;
   /** Pid of another Nightshift process that runs this project's agents; this one does not. */
   lockedBy?: number;
+  /** Started with `--no-agents`: this instance never runs agents. */
+  agentsDisabled?: boolean;
+  /** Cards whose test command is running. */
+  testing: string[];
 }
 
 /** Why a card needs a human: it reached an inert column, asks questions, or its run failed. */
@@ -115,5 +154,6 @@ export const ATTENTION_PRIORITY: Record<AttentionKind, number> = { inert: 1, que
 export type ServerEvent =
   | { type: "board"; project: string; snapshot: ProjectSnapshot }
   | { type: "log"; project: string; cardId: string; line: LogLine }
+  | { type: "testlog"; project: string; cardId: string; line: LogLine }
   | { type: "settings"; settings: Settings }
   | { type: "attention"; project: string; cardId: string; kind: AttentionKind };

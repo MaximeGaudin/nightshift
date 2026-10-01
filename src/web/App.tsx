@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
-import { cardRef, type Card, type Column, type LiveStatus, type ProjectSnapshot } from "../shared/types.ts";
+import { cardRef, columnMaxParallel, type Card, type Column, type LiveStatus, type ProjectSnapshot } from "../shared/types.ts";
 import { api, useServerEvents, useSettings } from "./api.ts";
 import { CardModal } from "./CardModal.tsx";
 import { ColumnsEditor } from "./ColumnsEditor.tsx";
 import { ProjectPicker } from "./ProjectPicker.tsx";
 import { SettingsModal } from "./SettingsModal.tsx";
 import { SkillsModal } from "./SkillsModal.tsx";
+import { ColumnIcon, Icon, StatusIcon } from "./icons.tsx";
+import { toPlainText } from "./markdown.tsx";
 import { installAudioUnlock, notifyAttention } from "./sound.ts";
 import { ErrorBanner } from "./ui.tsx";
 
@@ -92,12 +94,12 @@ export function App() {
     <div className="app">
       <header className="topbar">
         <div className="brand">
-          <span className="moon" aria-hidden>
-            ☾
+          <span className="moon">
+            <Icon name="moon" size={18} />
           </span>
-          <div>
+          <div className="brand-text">
             <h1>{snap.board.name}</h1>
-            <button className="path" onClick={() => setModal("projects")} title="Changer de projet">
+            <button className="path ghost" onClick={() => setModal("projects")} title="Changer de projet">
               {snap.path}
             </button>
           </div>
@@ -113,12 +115,23 @@ export function App() {
           )}
         </div>
         <nav className="actions">
-          <button onClick={() => setModal("columns")}>Colonnes</button>
-          <button onClick={() => setModal("skills")}>Skills</button>
-          <button onClick={() => setModal("settings")}>Réglages</button>
+          <button className="ghost" onClick={() => setModal("columns")}>
+            Colonnes
+          </button>
+          <button className="ghost" onClick={() => setModal("skills")}>
+            Skills
+          </button>
+          <button className="ghost" onClick={() => setModal("settings")}>
+            Réglages
+          </button>
         </nav>
       </header>
       <ErrorBanner error={error} onClose={() => setError(null)} />
+      {snap.agentsDisabled && (
+        <div className="lock-banner" role="status">
+          Instance de test (--no-agents) : aucun agent ne sera lancé depuis cette fenêtre.
+        </div>
+      )}
       {snap.lockedBy && (
         <div className="lock-banner" role="status">
           Un autre processus Nightshift (pid {snap.lockedBy}) exécute déjà les agents de ce projet. Cette fenêtre affiche et
@@ -127,7 +140,7 @@ export function App() {
       )}
       <Board snap={snap} onOpen={setOpenCard} guard={guard} />
 
-      {card && <CardModal project={snap.path} card={card} board={snap.board} live={snap.live[card.id]} onClose={() => setOpenCard(null)} />}
+      {card && <CardModal project={snap.path} card={card} board={snap.board} live={snap.live[card.id]} testing={snap.testing?.includes(card.id) ?? false} onClose={() => setOpenCard(null)} />}
       {modal === "columns" && <ColumnsEditor snap={snap} onClose={() => setModal(null)} />}
       {modal === "skills" && <SkillsModal project={snap.path} onClose={() => setModal(null)} />}
       {modal === "settings" && settings && <SettingsModal settings={settings} onClose={() => setModal(null)} />}
@@ -200,13 +213,19 @@ function Board({
           >
             <header className="column-head">
               <div className="column-title">
+                <ColumnIcon type={col.type} />
                 <h2>{col.name}</h2>
                 <span className="count">{cards.length}</span>
+                {col.type === "skill" && (
+                  <span className="column-parallel" title="agents actifs / limite de la colonne">
+                    {cards.filter((c) => snap.live[c.id] === "running").length} / {columnMaxParallel(col)}
+                  </span>
+                )}
               </div>
               {col.type === "skill" ? (
                 <div className="column-badges">
                   <span className="badge skill" title={col.instructions || undefined}>
-                    ⚡ {col.skill || "aucun skill"}
+                    {col.skill || "aucun skill"}
                   </span>
                   {col.model && (
                     <span className="badge model" title={`Modèle : ${col.model}`}>
@@ -262,6 +281,7 @@ function CardTile({
 }) {
   const lr = card.lastRun?.columnId === card.columnId ? card.lastRun : undefined;
   const status = live ?? lr?.status;
+  const excerpt = card.description ? toPlainText(card.description).slice(0, 160) : "";
   const label: Record<string, string> = {
     running: "En cours",
     queued: "En attente",
@@ -287,12 +307,12 @@ function CardTile({
     >
       <div className="card-ref">{cardRef(card)}</div>
       <h3>{card.title}</h3>
-      {card.description && <p className="excerpt">{card.description.slice(0, 160)}</p>}
+      {excerpt && <p className="excerpt">{excerpt}</p>}
       {status && (
         <div className={`status st-${status}`}>
-          {status === "running" && <span className="spinner" aria-hidden />}
-          {label[status]}
-          {status === "success" && lr?.summary && <span className="muted"> · {lr.summary.slice(0, 80)}</span>}
+          <StatusIcon status={status} />
+          <span className="status-label">{label[status]}</span>
+          {status === "success" && lr?.summary && <span className="muted"> · {toPlainText(lr.summary).slice(0, 80)}</span>}
           {status === "question" && lr?.questions && (
             <span className="muted"> · {lr.questions.length} question{lr.questions.length > 1 ? "s" : ""}</span>
           )}
@@ -307,8 +327,9 @@ function AddCard({ onAdd }: { onAdd: (title: string) => void }) {
   const [title, setTitle] = useState("");
   if (!open)
     return (
-      <button className="add-card" onClick={() => setOpen(true)}>
-        + Ajouter une fiche
+      <button className="add-card ghost" onClick={() => setOpen(true)}>
+        <Icon name="plus" size={12} />
+        Ajouter une fiche
       </button>
     );
   const submit = () => {

@@ -30,6 +30,11 @@ export const api = {
     call("POST", `/api/cards/${id}/move`, { project, columnId, index }),
   retry: (project: string, id: string) => call("POST", `/api/cards/${id}/retry`, { project }),
   answer: (project: string, id: string, answers: string[]) => call("POST", `/api/cards/${id}/answer`, { project, answers }),
+  testLog: (project: string, id: string) => call<LogLine[]>("GET", `/api/cards/${id}/test?${q(project)}`),
+  setTest: (project: string, id: string, command: string, url: string) =>
+    call("PUT", `/api/cards/${id}/test`, { project, command, url }),
+  startTest: (project: string, id: string) => call("POST", `/api/cards/${id}/test/start`, { project }),
+  stopTest: (project: string, id: string) => call("POST", `/api/cards/${id}/test/stop`, { project }),
   cancel: (project: string, id: string) => call("POST", `/api/cards/${id}/cancel`, { project }),
   log: (project: string, id: string) => call<LogLine[]>("GET", `/api/cards/${id}/log?${q(project)}`),
   skills: (project: string) => call<SkillInfo[]>("GET", `/api/skills?${q(project)}`),

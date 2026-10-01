@@ -2,8 +2,9 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileS
 import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import type { Subprocess } from "bun";
+import { spawn, type ChildProcess } from "node:child_process";
 import type { AttentionKind, Board, Card, Column, LiveStatus, LogLine, ProjectSnapshot, RunStatus, ServerEvent, Settings } from "../shared/types.ts";
-import { cardRef } from "../shared/types.ts";
+import { cardRef, columnMaxParallel } from "../shared/types.ts";
 import { getSettings, NIGHTSHIFT_HOME, onSettingsChange, rememberProject } from "./settings.ts";
 import { needsRun, Project } from "./store.ts";
 import { findSkill } from "./skills.ts";
@@ -47,6 +48,14 @@ export const RESULT_SCHEMA = {
       description: 'Where the card goes next: "next" (following column), "stay" (keep it here), or an explicit column id.',
     },
     summary: { type: "string", description: "One or two sentences describing what you did." },
+    test: {
+      type: "object",
+      description:
+        "Optional: how a human can try your result. command is a shell command run with sh -c from the project folder; url is where to look once it runs. Omit to keep the card's current test.",
+      properties: { command: { type: "string" }, url: { type: "string" } },
+      required: ["command"],
+      additionalProperties: false,
+    },
     questions: {
       type: "array",
       items: { type: "string" },
@@ -88,7 +97,8 @@ Rules:
   - title / description: the updated card content (you may enrich the description with your results, links to files you created, etc.).
   - move: "next" to send the card to ${next ? `"${next.name}"` : "(there is no next column, so this behaves like stay)"}, "stay" to keep it in "${column.name}", or a column id.
   - summary: a short summary of what you did.
-  - questions: only when you need the user's input (see above).`;
+  - questions: only when you need the user's input (see above).
+  - test: optional, a command (and url) a human can run to try what you produced; the card shows a "Tester" button that runs it.`;
 }
 
 /** Splits a shell-like argument string, honouring single and double quotes. */
@@ -120,8 +130,14 @@ export class Orchestrator {
   /** Projects whose agents are run by another live Nightshift process: path -> its pid. */
   private lockedBy = new Map<string, number>();
   private lockTimer: ReturnType<typeof setInterval>;
+  private tests = new Map<string, { project: Project; cardId: string; proc: ChildProcess; lines: LogLine[] }>();
+  private lastTestLines = new Map<string, LogLine[]>();
 
-  constructor() {
+  /** False for a test instance (`--no-agents`): it shows and edits boards but never runs agents nor takes locks. */
+  readonly agents: boolean;
+
+  constructor({ agents = true }: { agents?: boolean } = {}) {
+    this.agents = agents;
     onSettingsChange((settings) => {
       this.broadcast({ type: "settings", settings });
       this.scheduleTick();
@@ -178,7 +194,7 @@ export class Orchestrator {
     if (p) return p;
     if (!existsSync(path)) throw new Error(`Folder not found: ${path}`);
     p = new Project(path);
-    this.acquireLock(p);
+    if (this.agents) this.acquireLock(p);
     this.projects.set(path, p);
     p.onChange(() => {
       this.cancelStaleJobs(p!);
@@ -202,7 +218,8 @@ export class Orchestrator {
       else if (needsRun(p.board, card)) live[card.id] = "queued";
     }
     const lockedBy = this.lockedBy.get(p.path);
-    return { path: p.path, board: p.board, live, ...(lockedBy ? { lockedBy } : {}) };
+    const testing = [...this.tests.values()].filter((t) => t.project === p).map((t) => t.cardId);
+    return { path: p.path, board: p.board, live, testing, ...(lockedBy ? { lockedBy } : {}), ...(this.agents ? {} : { agentsDisabled: true }) };
   }
 
   private key(p: Project, cardId: string) {
@@ -256,6 +273,7 @@ export class Orchestrator {
   }
 
   private tick() {
+    if (!this.agents) return;
     const max = getSettings().maxParallel;
     if (this.jobs.size >= max) return;
     const candidates: { p: Project; card: Card }[] = [];
@@ -268,11 +286,22 @@ export class Orchestrator {
     candidates.sort((a, b) => a.card.enteredColumnAt.localeCompare(b.card.enteredColumnAt));
     let started = false;
     for (const { p, card } of candidates) {
+      // Global cap over all projects: nothing else can start.
       if (this.jobs.size >= max) break;
+      // Full column: this card waits, cards of other columns can still start.
+      const column = p.column(card.columnId);
+      if (!column) continue;
+      if (this.runningIn(p, card.columnId) >= columnMaxParallel(column)) continue;
       this.start(p, card);
       started = true;
     }
     if (started) for (const p of this.projects.values()) this.broadcast({ type: "board", project: p.path, snapshot: this.snapshot(p) });
+  }
+
+  private runningIn(p: Project, columnId: string) {
+    let n = 0;
+    for (const job of this.jobs.values()) if (job.project === p && job.columnId === columnId) n++;
+    return n;
   }
 
   private cancelStaleJobs(p: Project) {
@@ -516,6 +545,9 @@ export class Orchestrator {
       if ((status !== "success" && status !== "question") || !out) return;
       if (typeof out.title === "string" && out.title.trim()) card.title = out.title.trim();
       if (typeof out.description === "string") card.description = out.description;
+      if (out.test && typeof out.test.command === "string" && out.test.command.trim()) {
+        card.test = { command: out.test.command.trim(), ...(out.test.url?.trim() ? { url: out.test.url.trim() } : {}) };
+      }
       card.updatedAt = now;
       if (status === "question") {
         out.questions.forEach((q: string, i: number) => this.log(p, job.cardId, "info", `Question ${i + 1}: ${q}`));
@@ -535,8 +567,72 @@ export class Orchestrator {
     if (attention) this.broadcast({ type: "attention", project: p.path, cardId: job.cardId, kind: attention });
   }
 
+  // ---- test commands -------------------------------------------------------
+  // A card's test command (e.g. run the app from the card's worktree) is started and stopped by the user.
+  // It runs in its own process group so stopping it also stops what it launched.
+
+  testLog(p: Project, cardId: string): LogLine[] {
+    const key = this.key(p, cardId);
+    return this.tests.get(key)?.lines ?? this.lastTestLines.get(key) ?? [];
+  }
+
+  private testLine(p: Project, cardId: string, lines: LogLine[], kind: LogLine["kind"], text: string) {
+    const line: LogLine = { at: new Date().toISOString(), kind, text };
+    lines.push(line);
+    if (lines.length > MAX_LOG_LINES) lines.splice(0, lines.length - MAX_LOG_LINES);
+    this.broadcast({ type: "testlog", project: p.path, cardId, line });
+  }
+
+  startTest(p: Project, cardId: string) {
+    const card = p.card(cardId);
+    if (!card?.test) throw new Error("This card has no test command");
+    const key = this.key(p, cardId);
+    if (this.tests.has(key)) throw new Error("The test is already running");
+    const lines: LogLine[] = [];
+    const proc = spawn("sh", ["-c", card.test.command], { cwd: p.path, detached: true, stdio: ["ignore", "pipe", "pipe"] });
+    const entry = { project: p, cardId, proc, lines };
+    this.tests.set(key, entry);
+    this.testLine(p, cardId, lines, "info", `$ ${card.test.command}`);
+    for (const [stream, kind] of [[proc.stdout, "text"], [proc.stderr, "error"]] as const) {
+      let buf = "";
+      stream?.on("data", (chunk: Buffer) => {
+        buf += chunk.toString();
+        let nl;
+        while ((nl = buf.indexOf("\n")) >= 0) {
+          const line = buf.slice(0, nl).replace(/\x1b\[[0-9;]*m/g, "");
+          buf = buf.slice(nl + 1);
+          if (line.trim()) this.testLine(p, cardId, lines, kind, line);
+        }
+      });
+    }
+    const done = (text: string) => {
+      if (this.tests.get(key) !== entry) return;
+      this.testLine(p, cardId, lines, "info", text);
+      this.tests.delete(key);
+      this.lastTestLines.set(key, lines);
+      this.broadcast({ type: "board", project: p.path, snapshot: this.snapshot(p) });
+    };
+    proc.on("error", (e) => done(`Could not start: ${e.message}`));
+    proc.on("exit", (code, signal) => done(`Exited (${signal ?? `code ${code}`}).`));
+    this.broadcast({ type: "board", project: p.path, snapshot: this.snapshot(p) });
+  }
+
+  stopTest(p: Project, cardId: string) {
+    const pid = this.tests.get(this.key(p, cardId))?.proc.pid;
+    if (!pid) return false;
+    const signal = (s: NodeJS.Signals) => {
+      try {
+        process.kill(-pid, s);
+      } catch {}
+    };
+    signal("SIGTERM");
+    setTimeout(() => this.tests.has(this.key(p, cardId)) && signal("SIGKILL"), 3000).unref?.();
+    return true;
+  }
+
   shutdown() {
     clearInterval(this.lockTimer);
+    for (const t of this.tests.values()) this.stopTest(t.project, t.cardId);
     for (const job of this.jobs.values()) this.kill(job);
     for (const p of this.projects.values()) {
       p.close();

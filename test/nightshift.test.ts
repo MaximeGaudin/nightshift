@@ -17,6 +17,7 @@ const { splitArgs, resolveModel } = await import("../src/server/orchestrator.ts"
 const { needsRun, normalizeBoard, numberingChanged, Project } = await import("../src/server/store.ts");
 const { startServer } = await import("../src/server/server.ts");
 const { updateSettings } = await import("../src/server/settings.ts");
+const { columnMaxParallel } = await import("../src/shared/types.ts");
 
 test("parseFrontmatter handles folded descriptions", () => {
   const fm = parseFrontmatter("---\nname: x\ndescription: >\n  hello\n  world\n---\nbody");
@@ -110,7 +111,7 @@ async function waitFor(fn: () => Promise<boolean>, ms = 8000) {
   throw new Error("timeout");
 }
 
-test("pipeline: skill column processes cards in parallel, respects limit, moves them on", async () => {
+test("pipeline: skill column without maxParallel runs one card at a time, respects limit, moves them on", async () => {
   const snap = await post("/api/projects/open", { path: proj });
   const [backlog, done] = snap.board.columns;
   const res = await post(
@@ -127,8 +128,8 @@ test("pipeline: skill column processes cards in parallel, respects limit, moves 
     maxRunning = Math.max(maxRunning, Object.values(s.live).filter((v) => v === "running").length);
     return Object.keys(s.live).length === 0;
   });
-  expect(maxRunning).toBeLessThanOrEqual(2);
-  expect(maxRunning).toBeGreaterThan(0);
+  // No maxParallel on the column: default 1, even though the global cap is 2.
+  expect(maxRunning).toBe(1);
 
   const file = JSON.parse(readFileSync(join(proj, "nightshift.json"), "utf8"));
   const byTitle = Object.fromEntries(file.cards.map((c: any) => [c.title, c]));
@@ -202,6 +203,197 @@ test("loop guard ignores runs before the last user action", async () => {
   await post(`/api/cards/${id}/move`, { project: proj, columnId: enrich.id });
   await waitFor(async () => (await get()).columnId !== enrich.id);
   expect((await get()).lastRun?.error).toBeUndefined();
+}, 20000);
+
+test("column maxParallel caps agents in that column", async () => {
+  const p2 = mkdtempSync(join(tmpdir(), "ns-colmax-"));
+  await post("/api/projects/open", { path: p2 });
+  const res = await post(
+    "/api/board",
+    { project: p2, columns: [{ name: "Merge", type: "skill", skill: "enrich", maxParallel: 1 }, { name: "Done", type: "inert" }] },
+    "PUT",
+  );
+  expect(res.board.columns[0].maxParallel).toBe(1);
+  for (const t of ["cap1", "cap2", "cap3"]) await post("/api/cards", { project: p2, columnId: res.board.columns[0].id, title: t });
+  let maxRunning = 0;
+  await waitFor(async () => {
+    const s = await fetch(`${base}/api/project?project=${encodeURIComponent(p2)}`).then((r) => r.json());
+    maxRunning = Math.max(maxRunning, Object.values(s.live).filter((v) => v === "running").length);
+    return Object.keys(s.live).length === 0;
+  });
+  expect(maxRunning).toBe(1);
+});
+
+const liveRunning = async (project: string) => {
+  const s = await fetch(`${base}/api/project?project=${encodeURIComponent(project)}`).then((r) => r.json());
+  return { running: Object.values(s.live).filter((v) => v === "running").length, idle: Object.keys(s.live).length === 0, board: s.board };
+};
+
+test("column maxParallel > 1 runs several cards", async () => {
+  const p = mkdtempSync(join(tmpdir(), "ns-colpar-"));
+  await post("/api/projects/open", { path: p });
+  const res = await post(
+    "/api/board",
+    { project: p, columns: [{ name: "Work", type: "skill", skill: "enrich", maxParallel: 2 }, { name: "Done", type: "inert" }] },
+    "PUT",
+  );
+  expect(res.board.columns[0].maxParallel).toBe(2);
+  for (const t of ["par1", "par2", "par3", "par4"]) await post("/api/cards", { project: p, columnId: res.board.columns[0].id, title: t });
+  let maxRunning = 0;
+  await waitFor(async () => {
+    const s = await liveRunning(p);
+    maxRunning = Math.max(maxRunning, s.running);
+    return s.idle && s.board.cards.every((c: any) => c.columnId === res.board.columns[1].id);
+  });
+  expect(maxRunning).toBe(2);
+});
+
+test("global cap cuts below the sum of column limits", async () => {
+  const p = mkdtempSync(join(tmpdir(), "ns-globalcap-"));
+  await post("/api/projects/open", { path: p });
+  const res = await post(
+    "/api/board",
+    {
+      project: p,
+      columns: [
+        { name: "A", type: "skill", skill: "enrich", maxParallel: 2 },
+        { name: "B", type: "skill", skill: "enrich", maxParallel: 2 },
+        { name: "Done", type: "inert" },
+      ],
+    },
+    "PUT",
+  );
+  const [a, b, done] = res.board.columns;
+  for (const t of ["a1", "a2", "a3"]) await post("/api/cards", { project: p, columnId: a.id, title: t });
+  for (const t of ["b1", "b2", "b3"]) await post("/api/cards", { project: p, columnId: b.id, title: t });
+  let maxRunning = 0;
+  await waitFor(async () => {
+    const s = await liveRunning(p);
+    maxRunning = Math.max(maxRunning, s.running);
+    return s.idle && s.board.cards.length === 6 && s.board.cards.every((c: any) => c.columnId === done.id);
+  }, 15000);
+  // Column limits sum to 4, but the global cap (2) bounds the total.
+  expect(maxRunning).toBeLessThanOrEqual(2);
+  expect(maxRunning).toBeGreaterThan(0);
+});
+
+test("column maxParallel normalization", async () => {
+  const p = mkdtempSync(join(tmpdir(), "ns-colnorm-"));
+  await post("/api/projects/open", { path: p });
+  const cols = [
+    { name: "Big", type: "skill", skill: "enrich", maxParallel: 99 },
+    { name: "Empty", type: "skill", skill: "enrich", maxParallel: "" },
+    { name: "Zero", type: "skill", skill: "enrich", maxParallel: 0 },
+    { name: "Text", type: "skill", skill: "enrich", maxParallel: "abc" },
+    { name: "Inert", type: "inert", maxParallel: 3 },
+  ];
+  const check = (columns: any[]) => {
+    expect(columns[0].maxParallel).toBe(32);
+    for (const c of columns.slice(1)) expect("maxParallel" in c).toBe(false);
+  };
+  const res = await post("/api/board", { project: p, columns: cols }, "PUT");
+  check(res.board.columns);
+  check(normalizeBoard({ columns: cols.map((c, i) => ({ id: `c${i}`, ...c })), cards: [] }, "x").columns);
+  expect(normalizeBoard({ columns: [{ id: "s", name: "S", type: "skill", skill: "s", maxParallel: "5" }], cards: [] }, "x").columns[0]!.maxParallel).toBe(5);
+});
+
+test("columnMaxParallel default", () => {
+  expect(columnMaxParallel({})).toBe(1);
+  expect(columnMaxParallel({ maxParallel: 5 })).toBe(5);
+});
+
+test("agent test command is stored on the card and can be started and stopped", async () => {
+  const p3 = mkdtempSync(join(tmpdir(), "ns-test-"));
+  await post("/api/projects/open", { path: p3 });
+  const res = await post("/api/board", { project: p3, columns: [{ name: "Impl", type: "skill", skill: "enrich" }, { name: "Testing", type: "inert" }] }, "PUT");
+  const { id } = await post("/api/cards", { project: p3, columnId: res.board.columns[0].id, title: "with-test" });
+  const snap = async () => fetch(`${base}/api/project?project=${encodeURIComponent(p3)}`).then((r) => r.json());
+  await waitFor(async () => !!(await snap()).board.cards[0].test);
+  expect((await snap()).board.cards[0].test).toEqual({ command: "echo hello-from-test; sleep 30", url: "http://localhost:9999" });
+  await post(`/api/cards/${id}/test/start`, { project: p3 });
+  expect((await snap()).testing).toEqual([id]);
+  const log = () => fetch(`${base}/api/cards/${id}/test?project=${encodeURIComponent(p3)}`).then((r) => r.json());
+  await waitFor(async () => (await log()).some((l: any) => l.text === "hello-from-test"));
+  await post(`/api/cards/${id}/test/stop`, { project: p3 });
+  await waitFor(async () => (await snap()).testing.length === 0);
+  expect((await log()).at(-1).text).toContain("Exited");
+});
+
+test("column maxParallel caps agents in that column", async () => {
+  const p2 = mkdtempSync(join(tmpdir(), "ns-colmax-"));
+  await post("/api/projects/open", { path: p2 });
+  const res = await post(
+    "/api/board",
+    { project: p2, columns: [{ name: "Merge", type: "skill", skill: "enrich", maxParallel: 1 }, { name: "Done", type: "inert" }] },
+    "PUT",
+  );
+  expect(res.board.columns[0].maxParallel).toBe(1);
+  for (const t of ["cap1", "cap2", "cap3"]) await post("/api/cards", { project: p2, columnId: res.board.columns[0].id, title: t });
+  let maxRunning = 0;
+  await waitFor(async () => {
+    const s = await fetch(`${base}/api/project?project=${encodeURIComponent(p2)}`).then((r) => r.json());
+    maxRunning = Math.max(maxRunning, Object.values(s.live).filter((v) => v === "running").length);
+    return Object.keys(s.live).length === 0;
+  });
+  expect(maxRunning).toBe(1);
+});
+
+test("agent test command is stored on the card and can be started and stopped", async () => {
+  const p3 = mkdtempSync(join(tmpdir(), "ns-test-"));
+  await post("/api/projects/open", { path: p3 });
+  const res = await post("/api/board", { project: p3, columns: [{ name: "Impl", type: "skill", skill: "enrich" }, { name: "Testing", type: "inert" }] }, "PUT");
+  const { id } = await post("/api/cards", { project: p3, columnId: res.board.columns[0].id, title: "with-test" });
+  const snap = async () => fetch(`${base}/api/project?project=${encodeURIComponent(p3)}`).then((r) => r.json());
+  await waitFor(async () => !!(await snap()).board.cards[0].test);
+  expect((await snap()).board.cards[0].test).toEqual({ command: "echo hello-from-test; sleep 30", url: "http://localhost:9999" });
+  await post(`/api/cards/${id}/test/start`, { project: p3 });
+  expect((await snap()).testing).toEqual([id]);
+  const log = () => fetch(`${base}/api/cards/${id}/test?project=${encodeURIComponent(p3)}`).then((r) => r.json());
+  await waitFor(async () => (await log()).some((l: any) => l.text === "hello-from-test"));
+  await post(`/api/cards/${id}/test/stop`, { project: p3 });
+  await waitFor(async () => (await snap()).testing.length === 0);
+  expect((await log()).at(-1).text).toContain("Exited");
+});
+
+test("fields unknown to this version survive load and PUT", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "ns-future-"));
+  writeFileSync(
+    join(dir, "nightshift.json"),
+    JSON.stringify({
+      version: 1,
+      name: "f",
+      futureBoardField: 1,
+      columns: [{ id: "c1", name: "A", type: "inert", futureColumnField: "x" }],
+      cards: [{ id: "k1", title: "t", columnId: "c1", futureCardField: [1, 2], history: [] }],
+    }),
+  );
+  const snap = await post("/api/projects/open", { path: dir });
+  await post("/api/board", { project: dir, columns: snap.board.columns }, "PUT");
+  await post(`/api/cards/k1`, { project: dir, title: "t2" }, "PATCH");
+  const file = JSON.parse(readFileSync(join(dir, "nightshift.json"), "utf8"));
+  expect(file.futureBoardField).toBe(1);
+  expect(file.columns[0].futureColumnField).toBe("x");
+  expect(file.cards[0].futureCardField).toEqual([1, 2]);
+  expect(file.cards[0].title).toBe("t2");
+});
+
+test("--no-agents instance never runs agents nor takes the lock", async () => {
+  const { Orchestrator } = await import("../src/server/orchestrator.ts");
+  const dir = mkdtempSync(join(tmpdir(), "ns-noagents-"));
+  writeFileSync(
+    join(dir, "nightshift.json"),
+    JSON.stringify({ version: 1, name: "n", columns: [{ id: "s", name: "S", type: "skill", skill: "enrich" }], cards: [{ id: "k", title: "t", columnId: "s", history: [] }] }),
+  );
+  const passive = new Orchestrator({ agents: false });
+  const p = passive.open(dir);
+  await Bun.sleep(300);
+  expect(p.card("k")!.lastRun).toBeUndefined();
+  expect(passive.snapshot(p).agentsDisabled).toBe(true);
+  expect(passive.snapshot(p).live).toEqual({ k: "queued" });
+  const { createHash } = await import("node:crypto");
+  const lock = join(home, "locks", `${createHash("sha1").update(dir).digest("hex").slice(0, 12)}.lock`);
+  expect(require("node:fs").existsSync(lock)).toBe(false);
+  passive.shutdown();
 });
 
 test("removing a column that still holds cards is refused", async () => {
@@ -391,6 +583,25 @@ test("numbering: load writes back only when changed", async () => {
   expect(opened.board.nextCardNumber).toBe(3);
   expect(readFileSync(cleanFile, "utf8")).toBe(before.text);
   expect(statSync(cleanFile).mtimeMs).toBe(before.mtime);
+});
+
+test("screenshot: serves a linked png and rejects the rest", async () => {
+  const snap = await post("/api/projects/open", { path: proj });
+  const backlog = snap.board.columns.find((c: { type: string }) => c.type === "inert");
+  const { id } = await post("/api/cards", { project: proj, columnId: backlog.id, title: "shot" });
+  const dir = join(mkdtempSync(join(tmpdir(), "ns-shot-")), "nightshift-screenshots");
+  mkdirSync(dir);
+  const png = join(dir, "01-home.png");
+  writeFileSync(png, Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64"));
+  const outside = join(tmpdir(), `not-a-shot-${Date.now()}.png`);
+  writeFileSync(outside, readFileSync(png));
+  await post(`/api/cards/${id}`, { project: proj, description: `## Screenshots\n\n![Home](${png})\n![Other](${outside})` }, "PATCH");
+  const q = `project=${encodeURIComponent(proj)}`;
+  const ok = await fetch(`${base}/api/cards/${id}/screenshot?${q}&file=${encodeURIComponent(png)}`);
+  expect(ok.status).toBe(200);
+  expect(ok.headers.get("content-type")).toContain("image/png");
+  const rejected = await fetch(`${base}/api/cards/${id}/screenshot?${q}&file=${encodeURIComponent(outside)}`);
+  expect(rejected.status).toBe(400);
 });
 
 test("prompt: includes card ref", async () => {

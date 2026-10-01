@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { Settings } from "../shared/types.ts";
+import { MAX_PARALLEL, type Settings } from "../shared/types.ts";
 import { api } from "./api.ts";
 import { ErrorBanner, Modal } from "./ui.tsx";
 
@@ -34,17 +34,18 @@ export function SettingsModal({ settings, onClose }: { settings: Settings; onClo
       }
     >
       <ErrorBanner error={error} onClose={() => setError(null)} />
-      <div className="form">
+      <div className="form settings">
         <label>
-          Agents en parallèle (tous projets confondus)
+          Plafond global d'agents en parallèle (tous projets confondus)
           <input
             type="number"
             min={1}
-            max={32}
+            max={MAX_PARALLEL}
             value={s.maxParallel}
             onChange={(e) => setS({ ...s, maxParallel: Number(e.target.value) })}
           />
         </label>
+        <p className="hint small">La limite se règle par colonne. Ce plafond empêche seulement d'en lancer trop au total.</p>
         <label>
           Mode de permission de Claude Code
           <select value={s.permissionMode} onChange={(e) => setS({ ...s, permissionMode: e.target.value as Settings["permissionMode"] })}>
@@ -90,7 +91,7 @@ export function SettingsModal({ settings, onClose }: { settings: Settings; onClo
           Joue un son quand une carte a besoin de vous (colonne inerte, question, erreur). Le navigateur exige un premier clic sur la
           page.
         </p>
-        <p className="hint small">Réglages globaux, stockés dans ~/.nightshift/settings.json.</p>
+        <p className="hint small settings-note">Réglages globaux, stockés dans ~/.nightshift/settings.json.</p>
       </div>
     </Modal>
   );

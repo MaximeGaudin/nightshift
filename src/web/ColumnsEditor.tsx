@@ -1,9 +1,39 @@
 import { useEffect, useState } from "react";
-import type { Column, ProjectSnapshot, SkillInfo } from "../shared/types.ts";
+import { MAX_PARALLEL, type Column, type ProjectSnapshot, type SkillInfo } from "../shared/types.ts";
 import { api } from "./api.ts";
+import { ColumnIcon, Icon } from "./icons.tsx";
 import { ErrorBanner, Modal } from "./ui.tsx";
 
+/** Up/down chevron for the reorder buttons (icons.tsx has no arrow glyph). */
+function Chevron({ up }: { up?: boolean }) {
+  return (
+    <svg
+      className="icon"
+      width={14}
+      height={14}
+      viewBox="0 0 14 14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d={up ? "M3.5 8.75L7 5.25l3.5 3.5" : "M3.5 5.25L7 8.75l3.5-3.5"} />
+    </svg>
+  );
+}
+
 type Draft = Column & { key: string };
+
+/** Empty input → undefined (column default); otherwise an integer clamped to 1–MAX_PARALLEL. */
+function clampParallel(raw: string): number | undefined {
+  if (raw.trim() === "") return undefined;
+  const n = Math.floor(Number(raw));
+  if (!Number.isFinite(n)) return undefined;
+  return Math.min(MAX_PARALLEL, Math.max(1, n));
+}
 
 export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClose: () => void }) {
   const [name, setName] = useState(snap.board.name);
@@ -51,7 +81,7 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
               setCols((cs) => [...cs, { id: "", key: crypto.randomUUID(), name: "Nouvelle colonne", type: "inert" }])
             }
           >
-            + Colonne
+            <Icon name="plus" /> Colonne
           </button>
           <div className="spacer" />
           <button onClick={onClose}>Annuler</button>
@@ -67,14 +97,15 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
         <input value={name} onChange={(e) => setName(e.target.value)} />
       </label>
       <p className="hint">
-        Une colonne <strong>skill</strong> exécute le skill choisi sur chaque fiche qui y arrive (en parallèle, dans la limite des
-        réglages). Le skill peut modifier la fiche puis l'envoyer à la colonne suivante.
+        Une colonne <strong>skill</strong> exécute le skill choisi sur chaque fiche qui y arrive. Chaque colonne skill a sa propre
+        limite d'agents en parallèle (1 par défaut), sous le plafond global des réglages. Le skill peut modifier la fiche puis l'envoyer à la colonne suivante.
       </p>
       <ol className="col-editor">
         {cols.map((c, i) => (
           <li key={c.key} className={c.type}>
             <div className="col-editor-row">
               <span className="order">{i + 1}</span>
+              <ColumnIcon type={c.type} />
               <input aria-label="Nom" value={c.name} onChange={(e) => patch(i, { name: e.target.value })} />
               <select aria-label="Type" value={c.type} onChange={(e) => patch(i, { type: e.target.value as Column["type"] })}>
                 <option value="inert">Inerte</option>
@@ -99,10 +130,10 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
               )}
               <div className="spacer" />
               <button className="icon-btn" disabled={i === 0} onClick={() => move(i, -1)} aria-label="Monter">
-                ↑
+                <Chevron up />
               </button>
               <button className="icon-btn" disabled={i === cols.length - 1} onClick={() => move(i, 1)} aria-label="Descendre">
-                ↓
+                <Chevron />
               </button>
               <button
                 className="icon-btn danger"
@@ -111,7 +142,7 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
                 onClick={() => setCols((cs) => cs.filter((_, j) => j !== i))}
                 aria-label="Supprimer"
               >
-                🗑
+                <Icon name="trash" />
               </button>
             </div>
             {c.type === "skill" && (
@@ -127,6 +158,19 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
                   />
                 </label>
                 <p className="hint small">Vide = modèle des réglages globaux.</p>
+                <label className="col-model">
+                  Agents en parallèle dans cette colonne
+                  <input
+                    type="number"
+                    min={1}
+                    max={MAX_PARALLEL}
+                    step={1}
+                    placeholder="1 (défaut)"
+                    value={c.maxParallel ?? ""}
+                    onChange={(e) => patch(i, { maxParallel: clampParallel(e.target.value) })}
+                  />
+                </label>
+                <p className="hint small">Vide = 1. Le plafond global des réglages s'applique toujours.</p>
                 <textarea
                   className="instructions"
                   placeholder="Instructions additionnelles pour l'agent (optionnel)…"

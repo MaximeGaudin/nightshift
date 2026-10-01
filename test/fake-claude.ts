@@ -30,6 +30,12 @@ if (title === "ask" && !resumed) {
     is_error: false,
     session_id: "sess-1",
     total_cost_usd: 0.01,
-    structured_output: { title: `${title} ✓`, description: "done by fake", move: "next", summary: "fake run" },
+    structured_output: {
+      title: `${title} ✓`,
+      description: "done by fake",
+      move: "next",
+      summary: "fake run",
+      ...(title === "with-test" ? { test: { command: "echo hello-from-test; sleep 30", url: "http://localhost:9999" } } : {}),
+    },
   });
 }
