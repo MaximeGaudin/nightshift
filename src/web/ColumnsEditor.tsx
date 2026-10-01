@@ -76,17 +76,15 @@ function SortableColumnRow({ col, skills, skillsLoading, cardCount, reducedMotio
     >
       <Collapsible open={open} onOpenChange={setOpen}>
         <div className="col-editor-row flex flex-wrap items-center gap-2 px-2 py-1.5">
-          <button
-            type="button"
+          <IconButton
             ref={setActivatorNodeRef}
-            aria-label={`Réordonner la colonne ${col.name}`}
-            title="Réordonner"
-            className="flex size-7 shrink-0 cursor-grab touch-none items-center justify-center rounded-md text-muted-foreground transition-colors duration-150 hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
+            label={`Réordonner la colonne ${col.name}`}
+            className="cursor-grab touch-none text-muted-foreground active:cursor-grabbing"
             {...attributes}
             {...listeners}
           >
-            <GripVertical className="size-3.5" aria-hidden="true" />
-          </button>
+            <GripVertical aria-hidden="true" />
+          </IconButton>
           <span className="flex size-5 shrink-0 items-center justify-center">
             <ColumnGlyph col={col} />
           </span>
