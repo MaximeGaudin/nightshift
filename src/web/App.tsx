@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { cardRef, columnMaxParallel, type Card, type Column, type LiveStatus, type ProjectSnapshot } from "../shared/types.ts";
 import { api, useServerEvents, useSettings } from "./api.ts";
 import { CardModal } from "./CardModal.tsx";
@@ -322,9 +322,24 @@ function CardTile({
   );
 }
 
-function AddCard({ onAdd }: { onAdd: (title: string) => void }) {
-  const [open, setOpen] = useState(false);
+function AddCard({
+  onAdd,
+  initialOpen,
+  onClose,
+  closeOnEmptyBlur,
+}: {
+  onAdd: (title: string) => void;
+  initialOpen?: boolean;
+  onClose?: () => void;
+  closeOnEmptyBlur?: boolean;
+}) {
+  const [open, setOpen] = useState(initialOpen ?? false);
   const [title, setTitle] = useState("");
+  const formRef = useRef<HTMLDivElement>(null);
+  const close = () => {
+    setOpen(false);
+    onClose?.();
+  };
   if (!open)
     return (
       <button className="add-card ghost" onClick={() => setOpen(true)}>
@@ -337,24 +352,30 @@ function AddCard({ onAdd }: { onAdd: (title: string) => void }) {
     setTitle("");
   };
   return (
-    <div className="add-card-form">
+    <div className="add-card-form" ref={formRef}>
       <textarea
         autoFocus
         value={title}
+        onBlur={(e) => {
+          if (!closeOnEmptyBlur || title.trim() !== "") return;
+          const next = e.relatedTarget as Node | null;
+          if (next && formRef.current?.contains(next)) return;
+          close();
+        }}
         placeholder="Titre de la fiche…"
         onChange={(e) => setTitle(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             submit();
-          } else if (e.key === "Escape") setOpen(false);
+          } else if (e.key === "Escape") close();
         }}
       />
       <div className="row">
         <button className="primary" onClick={submit}>
           Ajouter
         </button>
-        <button onClick={() => setOpen(false)}>Annuler</button>
+        <button onClick={close}>Annuler</button>
       </div>
     </div>
   );
