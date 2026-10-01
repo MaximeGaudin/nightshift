@@ -34,7 +34,6 @@ if (open && !process.env.NIGHTSHIFT_NO_OPEN)
 
 for (const sig of ["SIGINT", "SIGTERM"] as const) {
   process.on(sig, () => {
-    orch.shutdown();
-    process.exit(0);
+    orch.shutdown().finally(() => process.exit(0));
   });
 }

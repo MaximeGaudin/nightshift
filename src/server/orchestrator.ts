@@ -203,6 +203,8 @@ function summarizeToolInput(name: string, input: any): string {
 }
 
 // Column model wins over the global setting; neither means no --model (CLI default).
+/** How long shutdown() waits for agents and test commands to exit after SIGTERM before sending SIGKILL. */
+const SHUTDOWN_GRACE_MS = 2000;
 const CARD_ID_RE = /^[A-Za-z0-9_-]+$/;
 
 export function resolveModel(column: Column, settings: Settings): string | undefined {
@@ -434,7 +436,7 @@ export class Orchestrator {
       job.proc?.kill("SIGTERM");
       setTimeout(() => {
         if (job.proc && job.proc.exitCode === null) job.proc.kill("SIGKILL");
-      }, 5000);
+      }, 5000).unref?.();
     } catch {}
   }
 
@@ -893,10 +895,37 @@ export class Orchestrator {
     return true;
   }
 
-  shutdown() {
+  /**
+   * Stops every agent and test command: SIGTERM, a short grace period, then SIGKILL for whatever is left.
+   * The caller must await it before exiting the process, otherwise a process that ignores SIGTERM would be orphaned.
+   */
+  async shutdown(graceMs = SHUTDOWN_GRACE_MS) {
     clearInterval(this.lockTimer);
+    const groups = [...this.tests.values()].map((t) => t.proc.pid).filter((pid): pid is number => !!pid);
+    const jobs = [...this.jobs.values()];
     for (const t of this.tests.values()) this.stopTest(t.project, t.cardId);
-    for (const job of this.jobs.values()) this.kill(job);
+    for (const job of jobs) this.kill(job);
+    const groupAlive = (pid: number) => {
+      try {
+        process.kill(-pid, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    const jobAlive = (job: Job) => !!job.proc && job.proc.exitCode === null && job.proc.signalCode === null;
+    const end = Date.now() + graceMs;
+    while (Date.now() < end && (groups.some(groupAlive) || jobs.some(jobAlive))) await new Promise((r) => setTimeout(r, 25));
+    for (const pid of groups) {
+      try {
+        process.kill(-pid, "SIGKILL");
+      } catch {}
+    }
+    for (const job of jobs) {
+      try {
+        if (jobAlive(job)) job.proc?.kill("SIGKILL");
+      } catch {}
+    }
     for (const p of this.projects.values()) {
       p.close();
       if (!this.lockedBy.has(p.path)) rmSync(this.lockFile(p), { force: true });
