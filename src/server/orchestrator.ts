@@ -205,6 +205,10 @@ function summarizeToolInput(name: string, input: any): string {
 // Column model wins over the global setting; neither means no --model (CLI default).
 /** How long shutdown() waits for agents and test commands to exit after SIGTERM before sending SIGKILL. */
 const SHUTDOWN_GRACE_MS = 2000;
+/** How long a finished test command may take to flush its output pipes before "Exited" is reported anyway. */
+const STREAM_DRAIN_MS = 500;
+// biome-ignore lint/suspicious/noControlCharactersInRegex: strips ANSI colour escape sequences (ESC is the point)
+const ANSI_COLOR_RE = /\x1b\[[0-9;]*m/g;
 const CARD_ID_RE = /^[A-Za-z0-9_-]+$/;
 
 export function resolveModel(column: Column, settings: Settings): string | undefined {
@@ -873,20 +877,35 @@ export class Orchestrator {
     const entry = { project: p, cardId, proc, lines };
     this.tests.set(key, entry);
     this.testLine(p, cardId, lines, "info", `$ ${card.test.command}`);
+    const ended: Promise<void>[] = [];
     for (const [stream, kind] of [
       [proc.stdout, "text"],
       [proc.stderr, "error"],
     ] as const) {
       let buf = "";
+      const emit = (raw: string) => {
+        const line = raw.replace(ANSI_COLOR_RE, "");
+        if (line.trim()) this.testLine(p, cardId, lines, kind, line);
+      };
       stream?.on("data", (chunk: Buffer) => {
         buf += chunk.toString();
-        let nl;
-        while ((nl = buf.indexOf("\n")) >= 0) {
-          const line = buf.slice(0, nl).replace(/\x1b\[[0-9;]*m/g, "");
+        for (let nl = buf.indexOf("\n"); nl >= 0; nl = buf.indexOf("\n")) {
+          emit(buf.slice(0, nl));
           buf = buf.slice(nl + 1);
-          if (line.trim()) this.testLine(p, cardId, lines, kind, line);
         }
       });
+      // The last line has no trailing newline (printf, final error message): flush it when the stream ends.
+      if (stream)
+        ended.push(
+          new Promise((resolve) => {
+            stream.on("end", () => {
+              emit(buf);
+              buf = "";
+              resolve();
+            });
+            stream.on("error", () => resolve());
+          }),
+        );
     }
     const done = (text: string) => {
       if (this.tests.get(key) !== entry) return;
@@ -896,7 +915,11 @@ export class Orchestrator {
       this.broadcast({ type: "board", project: p.path, snapshot: this.snapshot(p) });
     };
     proc.on("error", (e) => done(`Could not start: ${e.message}`));
-    proc.on("exit", (code, signal) => done(`Exited (${signal ?? `code ${code}`}).`));
+    proc.on("exit", (code, signal) => {
+      // Let the streams drain so the "Exited" line comes after the last output; a background child holding the pipes cannot block it.
+      const drained = Promise.race([Promise.all(ended), new Promise((r) => setTimeout(r, STREAM_DRAIN_MS).unref?.())]);
+      void drained.then(() => done(`Exited (${signal ?? `code ${code}`}).`));
+    });
     this.broadcast({ type: "board", project: p.path, snapshot: this.snapshot(p) });
   }
 
