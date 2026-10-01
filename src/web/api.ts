@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import type { LogLine, ProjectSnapshot, ServerEvent, Settings, SkillInfo } from "../shared/types.ts";
 
-async function call<T = any>(method: string, url: string, body?: unknown): Promise<T> {
+async function call<T = unknown>(method: string, url: string, body?: unknown): Promise<T> {
   const res = await fetch(url, {
     method,
     headers: body || method === "POST" || method === "PUT" || method === "PATCH" ? { "content-type": "application/json" } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
-  const data = await res.json().catch(() => ({}));
+  const data: { error?: string } = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error ?? res.statusText);
   return data as T;
 }

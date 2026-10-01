@@ -1,7 +1,8 @@
 import { afterAll, beforeEach, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { removeTempDirs, tempDir } from "./helpers.ts";
+import type { Settings } from "../src/shared/types.ts";
+import { removeTempDirs, settingsGlobal, tempDir } from "./helpers.ts";
 
 const prevHome = process.env.NIGHTSHIFT_HOME;
 let n = 0;
@@ -15,7 +16,7 @@ async function load(file?: string) {
     writeFileSync(join(home, "settings.json"), file);
   }
   process.env.NIGHTSHIFT_HOME = home;
-  (globalThis as any).__nightshiftSettings = undefined;
+  settingsGlobal().__nightshiftSettings = undefined;
   try {
     return await import(`../src/server/settings.ts?case=${++n}`);
   } finally {
@@ -25,7 +26,7 @@ async function load(file?: string) {
 }
 
 beforeEach(() => {
-  (globalThis as any).__nightshiftSettings = undefined;
+  settingsGlobal().__nightshiftSettings = undefined;
 });
 
 test("settings-reject", async () => {
@@ -44,7 +45,7 @@ test("settings-reject", async () => {
     { soundNotifications: "yes" },
     { permissionMode: "nope" },
   ]) {
-    expect(() => updateSettings(bad as any)).toThrow();
+    expect(() => updateSettings(bad as unknown as Partial<Settings>)).toThrow();
   }
   expect(readFileSync(file, "utf8")).toBe(before);
   expect(getSettings()).toEqual(ok);

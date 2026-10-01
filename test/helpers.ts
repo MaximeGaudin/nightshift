@@ -137,3 +137,6 @@ export function must<T>(value: T | null | undefined, what = "value"): T {
   if (value === null || value === undefined) throw new Error(`Expected ${what} to be defined`);
   return value;
 }
+
+/** The settings module keeps its state on globalThis (shared across `bun --hot` reloads); tests reset it between cases. */
+export const settingsGlobal = () => globalThis as { __nightshiftSettings?: { current: unknown; listeners: Set<unknown> } };

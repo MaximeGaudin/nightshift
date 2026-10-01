@@ -96,8 +96,8 @@ test("server-security-rebinding /api/fs error does not leak the path", async () 
 });
 
 const openWs = (headers?: Record<string, string>) =>
-  new Promise<{ ok: boolean; first?: any }>((resolve) => {
-    const ws = new WebSocket(`ws://localhost:${port}/ws`, headers ? ({ headers } as any) : undefined);
+  new Promise<{ ok: boolean; first?: { type: string } }>((resolve) => {
+    const ws = new WebSocket(`ws://localhost:${port}/ws`, headers ? ({ headers } as unknown as string[]) : undefined);
     ws.addEventListener("message", (e) => {
       resolve({ ok: true, first: JSON.parse(String(e.data)) });
       ws.close();
@@ -114,6 +114,6 @@ test("server-security-ws accepts no origin and the server origin; first message 
   for (const h of [undefined, { origin: `http://localhost:${port}` }]) {
     const r = await openWs(h);
     expect(r.ok).toBe(true);
-    expect(r.first.type).toBe("settings");
+    expect(r.first?.type).toBe("settings");
   }
 });

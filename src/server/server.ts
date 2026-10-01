@@ -19,7 +19,7 @@ import { Orchestrator } from "./orchestrator.ts";
 import { removeScreenshots, resolveScreenshot } from "./screenshots.ts";
 import { getSettings, updateSettings } from "./settings.ts";
 import { createSkill, listSkills, readSkill, saveSkill } from "./skills.ts";
-import { COLUMN_KEYS, newId, unknownFields } from "./store.ts";
+import { COLUMN_KEYS, isRaw, newId, type Raw, unknownFields } from "./store.ts";
 
 export function startServer({ port, development, agents = true }: { port: number; development?: boolean; agents?: boolean }) {
   // `bun --hot` re-runs this module on every change. Reuse the orchestrator from the previous run:
@@ -49,7 +49,7 @@ export function startServer({ port, development, agents = true }: { port: number
   };
 
   /** Empty body is `{}`; anything else must be a JSON object. */
-  const parseBody = (text: string): any => {
+  const parseBody = (text: string): Raw => {
     if (!text.trim()) return {};
     let data: unknown;
     try {
@@ -57,12 +57,12 @@ export function startServer({ port, development, agents = true }: { port: number
     } catch {
       throw new Error("Invalid JSON body");
     }
-    if (typeof data !== "object" || data === null || Array.isArray(data)) throw new Error("Body must be a JSON object");
+    if (!isRaw(data)) throw new Error("Body must be a JSON object");
     return data;
   };
 
   /** DELETE may carry a body with the project; a bad one is ignored (the query string still works). */
-  const lenientBody = (text: string): any => {
+  const lenientBody = (text: string): Raw => {
     try {
       return parseBody(text);
     } catch {
@@ -72,7 +72,7 @@ export function startServer({ port, development, agents = true }: { port: number
 
   /** Wraps a handler: parses the JSON body and turns thrown errors into 400s. */
   const h =
-    (fn: (body: any, url: URL, req: Request & { params: Record<string, string> }) => unknown) =>
+    (fn: (body: Raw, url: URL, req: Request & { params: Record<string, string> }) => unknown) =>
     async (req: Request & { params: Record<string, string> }) => {
       const denied = checkRequest(req, server.port as number);
       if (denied) return denied;
@@ -87,19 +87,19 @@ export function startServer({ port, development, agents = true }: { port: number
     };
 
   /** Optional string field: undefined/null give undefined, any other non-string is a 400. */
-  const optString = (b: any, key: string): string | undefined => {
+  const optString = (b: Raw, key: string): string | undefined => {
     const v = b[key];
     if (v == null) return undefined;
     if (typeof v !== "string") throw new Error(`${key} must be a string`);
     return v;
   };
-  const reqString = (b: any, key: string): string => {
+  const reqString = (b: Raw, key: string): string => {
     const v = optString(b, key);
     if (v === undefined) throw new Error(`${key} is required`);
     return v;
   };
 
-  const project = (body: any, url: URL) => {
+  const project = (body: Raw, url: URL) => {
     const raw = body.project ?? url.searchParams.get("project");
     if (typeof raw !== "string" || !raw) throw new Error("Missing project");
     const path = resolve(raw);
@@ -159,22 +159,30 @@ export function startServer({ port, development, agents = true }: { port: number
           p.mutate((board) => {
             if (typeof b.name === "string" && b.name.trim()) board.name = b.name.trim();
             if (Array.isArray(b.columns)) {
-              const userCols: Column[] = b.columns.map((c: any, i: number) => {
-                if (typeof c !== "object" || c === null || Array.isArray(c)) throw new Error(`Column ${i + 1} must be an object`);
-                for (const key of ["id", "name", "skill", "instructions", "model"]) {
-                  if (c[key] != null && typeof c[key] !== "string") throw new Error(`Column ${i + 1}: ${key} must be a string`);
-                }
+              const userCols: Column[] = b.columns.map((c: unknown, i: number) => {
+                if (!isRaw(c)) throw new Error(`Column ${i + 1} must be an object`);
+                const field = (key: string): string | undefined => {
+                  const v = c[key];
+                  if (v == null) return undefined;
+                  if (typeof v !== "string") throw new Error(`Column ${i + 1}: ${key} must be a string`);
+                  return v;
+                };
+                const id = field("id");
+                const name = field("name");
+                const skill = field("skill");
+                const instructions = field("instructions")?.trim();
+                const model = field("model")?.trim();
                 const type: ColumnType = c.type === "skill" ? "skill" : "inert";
                 const maxParallel = normalizeColumnParallel(type, c.maxParallel);
                 const emoji = normalizeColumnEmoji(c.emoji);
                 return {
                   ...unknownFields(c, COLUMN_KEYS),
-                  id: typeof c.id === "string" && c.id ? c.id : newId("col"),
-                  name: String(c.name || "Column").trim(),
+                  id: id || newId("col"),
+                  name: (name || "Column").trim(),
                   type,
-                  ...(type === "skill" && c.skill ? { skill: String(c.skill) } : {}),
-                  ...(c.instructions?.trim() ? { instructions: String(c.instructions).trim() } : {}),
-                  ...(typeof c.model === "string" && c.model.trim() ? { model: c.model.trim() } : {}),
+                  ...(type === "skill" && skill ? { skill } : {}),
+                  ...(instructions ? { instructions } : {}),
+                  ...(model ? { model } : {}),
                   ...(maxParallel !== undefined ? { maxParallel } : {}),
                   ...(emoji !== undefined ? { emoji } : {}),
                 };
@@ -253,8 +261,9 @@ export function startServer({ port, development, agents = true }: { port: number
         POST: h((b, url, req) => {
           const p = project(b, url);
           const columnId = reqString(b, "columnId");
-          if (b.index != null && !Number.isInteger(b.index)) throw new Error("index must be an integer");
-          p.mutate((board) => p.moveCard(board, req.params.id, columnId, b.index ?? undefined, "Moved by user"));
+          const index = b.index ?? undefined;
+          if (index !== undefined && !Number.isInteger(index)) throw new Error("index must be an integer");
+          p.mutate((board) => p.moveCard(board, req.params.id, columnId, index as number | undefined, "Moved by user"));
         }),
       },
       "/api/cards/:id/retry": {

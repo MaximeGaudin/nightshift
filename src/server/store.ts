@@ -9,8 +9,10 @@ import {
   doneColumn,
   ensureDoneColumn,
   type HistoryEntry,
+  type LastRun,
   normalizeColumnEmoji,
   normalizeColumnParallel,
+  type TimePart,
   type TimeState,
 } from "../shared/types.ts";
 
@@ -45,6 +47,12 @@ export function defaultBoard(name: string): Board {
   };
 }
 
+/** A JSON object read from disk or from a request: nothing is known about its fields until they are checked. */
+export type Raw = Record<string, unknown>;
+export const isRaw = (v: unknown): v is Raw => typeof v === "object" && v !== null && !Array.isArray(v);
+
+const asString = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined);
+
 const validNumber = (n: unknown): n is number => Number.isInteger(n) && (n as number) >= 1;
 
 /**
@@ -76,16 +84,17 @@ function assignNumbers(cards: Card[], rawNumbers: unknown[], rawNext: unknown): 
 }
 
 /** True when normalization changed the numbering of a raw board, so it must be written back. */
-export function numberingChanged(raw: any, board: Board): boolean {
-  if (raw?.nextCardNumber !== board.nextCardNumber) return true;
-  const rawById = new Map<string, any>();
-  if (Array.isArray(raw?.cards)) for (const c of raw.cards) if (c && typeof c.id === "string" && !rawById.has(c.id)) rawById.set(c.id, c);
+export function numberingChanged(raw: unknown, board: Board): boolean {
+  const r: Raw = isRaw(raw) ? raw : {};
+  if (r.nextCardNumber !== board.nextCardNumber) return true;
+  const rawById = new Map<string, Raw>();
+  if (Array.isArray(r.cards)) for (const c of r.cards) if (isRaw(c) && typeof c.id === "string" && !rawById.has(c.id)) rawById.set(c.id, c);
   return board.cards.some((c) => rawById.get(c.id)?.number !== c.number);
 }
 
 /** True when normalization had to repair the raw columns (missing, duplicated or misplaced Done column). */
-export function doneColumnChanged(raw: any, board: Board): boolean {
-  const rawCols: any[] = Array.isArray(raw?.columns) ? raw.columns : [];
+export function doneColumnChanged(raw: unknown, board: Board): boolean {
+  const rawCols: unknown[] = isRaw(raw) && Array.isArray(raw.columns) ? raw.columns : [];
   return JSON.stringify(rawCols) !== JSON.stringify(board.columns);
 }
 
@@ -112,40 +121,42 @@ const BOARD_KEYS = ["version", "name", "columns", "cards", "nextCardNumber"];
  * (an instance started from an older worktree, a teammate on another branch): without this, the oldest
  * one would silently delete every newer field (column model, parallelism…) on its next write.
  */
-export function unknownFields(raw: any, known: string[]): Record<string, unknown> {
-  if (!raw || typeof raw !== "object") return {};
+export function unknownFields(raw: unknown, known: string[]): Record<string, unknown> {
+  if (!isRaw(raw)) return {};
   return Object.fromEntries(Object.entries(raw).filter(([k]) => !known.includes(k)));
 }
 
-const TIME_PARTS = ["inert", "queued", "running", "human", "legacy"];
-const validPart = (v: any) => typeof v === "string" && TIME_PARTS.includes(v);
+const TIME_PARTS: readonly string[] = ["inert", "queued", "running", "human", "legacy"];
+const validPart = (v: unknown): v is TimePart => typeof v === "string" && TIME_PARTS.includes(v);
 
-function normalizeTimeBase(raw: any): TimeState | undefined {
-  if (!raw || typeof raw !== "object" || !Array.isArray(raw.totals)) return undefined;
+function normalizeTimeBase(raw: unknown): TimeState | undefined {
+  if (!isRaw(raw) || !Array.isArray(raw.totals)) return undefined;
   const totals: TimeState["totals"] = [];
   for (const t of raw.totals) {
-    if (!t || typeof t !== "object" || typeof t.columnName !== "string" || !validPart(t.part)) return undefined;
+    if (!isRaw(t) || typeof t.columnName !== "string" || !validPart(t.part)) return undefined;
     if (typeof t.ms !== "number" || !Number.isFinite(t.ms) || t.ms < 0) return undefined;
     if (t.columnId !== undefined && typeof t.columnId !== "string") return undefined;
     totals.push({ ...(t.columnId !== undefined ? { columnId: t.columnId } : {}), columnName: t.columnName, part: t.part, ms: t.ms });
   }
   const c = raw.cursor;
   if (c === undefined) return { totals };
-  if (!c || typeof c !== "object" || typeof c.at !== "string" || typeof c.columnName !== "string") return undefined;
+  if (!isRaw(c) || typeof c.at !== "string" || typeof c.columnName !== "string") return undefined;
   if (c.part !== null && !validPart(c.part)) return undefined;
+  const part: TimePart | null = c.part;
   if (c.columnId !== undefined && typeof c.columnId !== "string") return undefined;
   return {
     totals,
-    cursor: { at: c.at, ...(c.columnId !== undefined ? { columnId: c.columnId } : {}), columnName: c.columnName, part: c.part },
+    cursor: { at: c.at, ...(c.columnId !== undefined ? { columnId: c.columnId } : {}), columnName: c.columnName, part },
   };
 }
 
 /** Normalizes a parsed board so the rest of the code can trust its shape. */
-export function normalizeBoard(raw: any, fallbackName: string): Board {
-  const columns: Column[] = Array.isArray(raw?.columns)
-    ? raw.columns
-        .filter((c: any) => c && typeof c.id === "string")
-        .map((c: any) => {
+export function normalizeBoard(raw: unknown, fallbackName: string): Board {
+  const r: Raw = isRaw(raw) ? raw : {};
+  const columns: Column[] = Array.isArray(r.columns)
+    ? r.columns
+        .filter((c): c is Raw & { id: string } => isRaw(c) && typeof c.id === "string")
+        .map((c) => {
           const type: ColumnType = c.type === "skill" ? "skill" : "inert";
           const maxParallel = normalizeColumnParallel(type, c.maxParallel);
           const emoji = normalizeColumnEmoji(c.emoji);
@@ -165,25 +176,26 @@ export function normalizeBoard(raw: any, fallbackName: string): Board {
   if (columns.length === 0) columns.push(...defaultBoard(fallbackName).columns);
   columns.splice(0, columns.length, ...ensureDoneColumn(columns));
   const colIds = new Set(columns.map((c) => c.id));
-  const rawCards: any[] = Array.isArray(raw?.cards) ? raw.cards.filter((c: any) => c && typeof c.id === "string") : [];
-  const cards: Card[] = rawCards.map((c: any) => {
+  const rawCards = Array.isArray(r.cards) ? r.cards.filter((c): c is Raw & { id: string } => isRaw(c) && typeof c.id === "string") : [];
+  const cards: Card[] = rawCards.map((c) => {
     const rawHistory: HistoryEntry[] = Array.isArray(c.history) ? c.history : [];
     let timeBase = normalizeTimeBase(c.timeBase);
     // Entries cut by the cap are folded into the checkpoint first, so their time is not lost.
-    if (rawHistory.length > 50) timeBase = replayHistory(timeBase, rawHistory.slice(0, -50), c.createdAt ?? now());
+    if (rawHistory.length > 50) timeBase = replayHistory(timeBase, rawHistory.slice(0, -50), asString(c.createdAt) ?? now());
     return {
       ...unknownFields(c, CARD_KEYS),
       id: c.id,
       number: 0,
       title: String(c.title ?? ""),
       description: String(c.description ?? ""),
-      columnId: colIds.has(c.columnId) ? c.columnId : columns[0]?.id,
-      createdAt: c.createdAt ?? now(),
-      updatedAt: c.updatedAt ?? now(),
-      enteredColumnAt: c.enteredColumnAt ?? c.updatedAt ?? now(),
-      ...(c.lastRun ? { lastRun: c.lastRun } : {}),
-      ...(c.pendingAnswer ? { pendingAnswer: c.pendingAnswer } : {}),
-      ...(c.test && typeof c.test.command === "string" && c.test.command.trim()
+      columnId: typeof c.columnId === "string" && colIds.has(c.columnId) ? c.columnId : columns[0]?.id,
+      createdAt: asString(c.createdAt) ?? now(),
+      updatedAt: asString(c.updatedAt) ?? now(),
+      enteredColumnAt: asString(c.enteredColumnAt) ?? asString(c.updatedAt) ?? now(),
+      // Kept as found, like the other run fields: they are written by Nightshift itself.
+      ...(c.lastRun ? { lastRun: c.lastRun as LastRun } : {}),
+      ...(c.pendingAnswer ? { pendingAnswer: c.pendingAnswer as Card["pendingAnswer"] } : {}),
+      ...(isRaw(c.test) && typeof c.test.command === "string" && c.test.command.trim()
         ? { test: { command: c.test.command, ...(c.test.url ? { url: String(c.test.url) } : {}) } }
         : {}),
       history: rawHistory.slice(-50),
@@ -193,9 +205,9 @@ export function normalizeBoard(raw: any, fallbackName: string): Board {
   const nextCardNumber = assignNumbers(
     cards,
     rawCards.map((c) => c.number),
-    raw?.nextCardNumber,
+    r.nextCardNumber,
   );
-  return { ...unknownFields(raw, BOARD_KEYS), version: 1, name: String(raw?.name ?? fallbackName), columns, cards, nextCardNumber };
+  return { ...unknownFields(raw, BOARD_KEYS), version: 1, name: String(r.name ?? fallbackName), columns, cards, nextCardNumber };
 }
 
 /**
@@ -228,7 +240,7 @@ export class Project {
 
   /** Loads the file into `board`. Writes it back at once when numbering had to be migrated or repaired. */
   private read() {
-    let raw: any;
+    let raw: unknown;
     try {
       raw = JSON.parse(readFileSync(this.file, "utf8"));
     } catch (e) {

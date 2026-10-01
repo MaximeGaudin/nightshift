@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { Card } from "../src/shared/types.ts";
 import { removeTempDirs, tempDir, waitFor } from "./helpers.ts";
 
 // The server runs as a child process: modules are shared between bun test files, and this suite
@@ -15,7 +16,6 @@ writeFileSync(
   fake,
   `#!/usr/bin/env bun
 import { readFileSync } from "node:fs";
-import { removeTempDirs, tempDir, waitFor } from "./helpers.ts";
 const e = (o) => console.log(JSON.stringify(o));
 e({ type: "system", subtype: "init", session_id: "s", model: "fake" });
 e({ type: "result", is_error: false, session_id: "s", structured_output: { description: readFileSync(process.env.FAKE_DESC_FILE, "utf8"), move: "stay", summary: "ok" } });
@@ -47,12 +47,12 @@ async function runAgent(description: string, existingId?: string) {
   } else {
     id = (await post("/api/cards", { project: proj, columnId: workId, title: "shots" })).id as string;
   }
-  const before = existingId ? (await snapshot()).board.cards.find((c: any) => c.id === id).lastRun?.at : undefined;
+  const before = existingId ? (await snapshot()).board.cards.find((c: Card) => c.id === id).lastRun?.at : undefined;
   await waitFor(async () => {
-    const c = (await snapshot()).board.cards.find((c: any) => c.id === id);
+    const c = (await snapshot()).board.cards.find((c: Card) => c.id === id);
     return !!c?.lastRun && c.lastRun.at !== before;
   });
-  return { id, card: (await snapshot()).board.cards.find((c: any) => c.id === id) };
+  return { id, card: (await snapshot()).board.cards.find((c: Card) => c.id === id) };
 }
 
 beforeAll(async () => {

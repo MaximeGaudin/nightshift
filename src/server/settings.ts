@@ -74,7 +74,7 @@ export function getSettings(): Settings {
     if (raw && typeof raw === "object" && !Array.isArray(raw)) {
       const obj = raw as Record<string, unknown>;
       for (const key of KEYS) {
-        if (key in obj && checkField(key, obj[key]) === null) (loaded as any)[key] = obj[key];
+        if (key in obj && checkField(key, obj[key]) === null) (loaded as unknown as Record<string, unknown>)[key] = obj[key];
       }
       loaded.maxParallel = clampParallel(loaded.maxParallel);
     }

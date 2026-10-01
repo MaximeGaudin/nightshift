@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { Card, Column } from "../src/shared/types.ts";
 import { quiet, removeTempDirs, tempDir, waitFor } from "./helpers.ts";
 
 // The server, orchestrator and settings modules keep process-wide singletons (NIGHTSHIFT_HOME is read at
@@ -78,7 +79,7 @@ if (!CHILD) {
     return { dir, id };
   }
 
-  const stripAt = (p: any) => {
+  const stripAt = (p: { at?: unknown }) => {
     const { at, ...rest } = p;
     expect(typeof at).toBe("string");
     return rest;
@@ -125,9 +126,9 @@ if (!CHILD) {
 
   test("prompt-mentions-marker", () => {
     const board = defaultBoard("x");
-    const col: any = { id: "c", name: "Work", type: "skill", skill: "enrich" };
-    const card: any = { id: "k", number: 1, title: "t", description: "d" };
-    const prompt = buildPrompt({ ...board, columns: [col] } as any, card, col, undefined);
+    const col: Column = { id: "c", name: "Work", type: "skill", skill: "enrich" };
+    const card = { id: "k", number: 1, title: "t", description: "d" } as Card;
+    const prompt = buildPrompt({ ...board, columns: [col] }, card, col, undefined);
     expect(prompt).toContain("[nightshift-progress]");
     expect(prompt).toContain("## Progress");
   });

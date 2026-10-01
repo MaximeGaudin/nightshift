@@ -86,8 +86,8 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
         columns: cols.map(({ key, ...c }) => c),
       });
       onClose();
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setSaving(false);
     }

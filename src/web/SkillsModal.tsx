@@ -68,8 +68,8 @@ export function SkillsModal({ project, onClose }: { project: string; onClose: ()
         setOriginal(content);
         reload();
       }
-    } catch (e: any) {
-      setError(e.message);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
     }
   };
 

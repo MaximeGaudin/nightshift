@@ -23,7 +23,32 @@ import { parseProgressMarker, progressFromTodos } from "./progress.ts";
 import { persistScreenshots } from "./screenshots.ts";
 import { getSettings, NIGHTSHIFT_HOME, onSettingsChange, rememberProject } from "./settings.ts";
 import { findSkill } from "./skills.ts";
-import { needsRun, Project } from "./store.ts";
+import { isRaw, needsRun, Project, type Raw } from "./store.ts";
+
+/** One block of an assistant message in `claude -p --output-format stream-json` (only what Nightshift reads). */
+interface StreamBlock {
+  type?: string;
+  text?: string;
+  name?: string;
+  input?: unknown;
+}
+
+/** One line of the stream-json output (only what Nightshift reads). The `result` event carries the structured output. */
+interface StreamEvent {
+  type?: string;
+  subtype?: string;
+  session_id?: string;
+  model?: string;
+  parent_tool_use_id?: string | null;
+  message?: { content?: StreamBlock[] };
+  is_error?: boolean;
+  result?: unknown;
+  total_cost_usd?: number;
+  structured_output?: unknown;
+}
+
+/** Structured output of an agent (--json-schema). Untrusted: every field is checked before use; `questions` is normalized. */
+type AgentOutput = Raw & { questions: string[] };
 
 interface Job {
   key: string;
@@ -53,8 +78,8 @@ function isAlive(pid: number) {
   try {
     process.kill(pid, 0);
     return true;
-  } catch (e: any) {
-    return e?.code === "EPERM";
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === "EPERM";
   }
 }
 /** Safety net against skills bouncing a card between columns forever. */
@@ -196,8 +221,8 @@ export function splitArgs(s: string): string[] {
   return out;
 }
 
-function summarizeToolInput(name: string, input: any): string {
-  if (!input || typeof input !== "object") return name;
+function summarizeToolInput(name: string, input: unknown): string {
+  if (!isRaw(input)) return name;
   const v = input.command ?? input.file_path ?? input.pattern ?? input.skill ?? input.url ?? input.description ?? input.query;
   return v ? `${name}: ${String(v).slice(0, 200)}` : name;
 }
@@ -635,16 +660,16 @@ export class Orchestrator {
       costUsd += Number(result?.total_cost_usd) || 0;
       const sessionId: string | undefined = result?.session_id ?? job.sessionId;
       const out = result?.structured_output;
-      if (result && !result.is_error && out) {
+      if (result && !result.is_error && isRaw(out)) {
         const questions = Array.isArray(out.questions)
           ? out.questions
               .map(String)
-              .map((q: string) => q.trim())
+              .map((q) => q.trim())
               .filter(Boolean)
           : [];
-        out.questions = questions;
+        const output: AgentOutput = { ...out, questions };
         return this.finish(job, questions.length > 0 ? "question" : "success", {
-          output: out,
+          output,
           costUsd,
           ...(sessionId ? { sessionId } : {}),
         });
@@ -676,7 +701,7 @@ export class Orchestrator {
     prompt: string,
     resumeId: string | undefined,
     verb: string,
-  ): Promise<{ startError: string } | { result: any; stderr: string; exit: string }> {
+  ): Promise<{ startError: string } | { result: StreamEvent | null; stderr: string; exit: string }> {
     const p = job.project;
     job.progress = undefined;
     job.markerSeen = false;
@@ -709,7 +734,7 @@ export class Orchestrator {
       `${verb} ${job.skill ? `skill "${job.skill}"` : "session"} in "${column.name}" (permission mode: ${settings.permissionMode}, model: ${model ?? "default"}).`,
     );
 
-    let result: any = null;
+    let result: StreamEvent | null = null;
     let stderr = "";
     try {
       const proc = Bun.spawn(args, {
@@ -730,9 +755,11 @@ export class Orchestrator {
           const line = buf.slice(0, nl).trim();
           buf = buf.slice(nl + 1);
           if (!line) continue;
-          let ev: any;
+          let ev: StreamEvent;
           try {
-            ev = JSON.parse(line);
+            const parsed: unknown = JSON.parse(line);
+            if (!isRaw(parsed)) throw new Error("not an event");
+            ev = parsed as StreamEvent;
           } catch {
             this.log(p, card.id, "text", line);
             continue;
@@ -745,18 +772,18 @@ export class Orchestrator {
       await readStderr;
       const exit = proc.signalCode ? `signal ${proc.signalCode}` : `exit code ${proc.exitCode}`;
       return { result, stderr, exit };
-    } catch (e: any) {
-      return { startError: `Could not start "${settings.claudePath}": ${e?.message ?? e}` };
+    } catch (e) {
+      return { startError: `Could not start "${settings.claudePath}": ${e instanceof Error ? e.message : String(e)}` };
     }
   }
 
-  private handleEvent(job: Job, ev: any) {
+  private handleEvent(job: Job, ev: StreamEvent) {
     const p = job.project;
     const cardId = job.cardId;
     if (ev.type === "assistant") {
       // Subagent messages carry parent_tool_use_id: they are logged but never drive the card's progress.
       const own = !ev.parent_tool_use_id;
-      for (const block of ev.message?.content ?? []) {
+      for (const block of Array.isArray(ev.message?.content) ? ev.message.content : []) {
         if (block.type === "text" && block.text?.trim()) {
           this.log(p, cardId, "text", block.text.trim());
           const m = own ? parseProgressMarker(block.text) : undefined;
@@ -765,7 +792,7 @@ export class Orchestrator {
             this.setProgress(job, m, "marker");
           }
         } else if (block.type === "tool_use" && block.name !== "StructuredOutput") {
-          this.log(p, cardId, "tool", summarizeToolInput(block.name, block.input));
+          this.log(p, cardId, "tool", summarizeToolInput(block.name ?? "tool", block.input));
           if (own && block.name === "TodoWrite" && !job.markerSeen) {
             const t = progressFromTodos(block.input);
             if (t) this.setProgress(job, t, "todo");
@@ -786,7 +813,7 @@ export class Orchestrator {
     this.broadcast({ type: "board", project: job.project.path, snapshot: this.snapshot(job.project) });
   }
 
-  private finish(job: Job, status: RunStatus, data: { output?: any; error?: string; costUsd?: number; sessionId?: string }) {
+  private finish(job: Job, status: RunStatus, data: { output?: AgentOutput; error?: string; costUsd?: number; sessionId?: string }) {
     const p = job.project;
     job.done = true;
     const card = p.card(job.cardId);
@@ -809,7 +836,7 @@ export class Orchestrator {
         status,
         at: now,
         ...(out?.summary ? { summary: String(out.summary) } : {}),
-        ...(status === "question" ? { questions: out.questions as string[] } : {}),
+        ...(status === "question" ? { questions: out?.questions ?? [] } : {}),
         ...(data.error ? { error: data.error } : {}),
         ...(data.costUsd !== undefined ? { costUsd: data.costUsd } : {}),
         ...(sessionId ? { sessionId } : {}),
@@ -822,20 +849,20 @@ export class Orchestrator {
         status === "success"
           ? `${colName}: ${out?.summary ?? "done"}`
           : status === "question"
-            ? `${colName}: ${out.questions.length} question(s) for the user`
+            ? `${colName}: ${out?.questions.length ?? 0} question(s) for the user`
             : `${colName}: ${status}${data.error ? ` (${data.error.slice(0, 200)})` : ""}`,
       );
       if ((status !== "success" && status !== "question") || !out) return;
       if (typeof out.title === "string" && out.title.trim()) card.title = out.title.trim();
       if (typeof out.description === "string") card.description = persistScreenshots(card.id, out.description);
-      if (out.test && typeof out.test.command === "string" && out.test.command.trim()) {
+      if (isRaw(out.test) && typeof out.test.command === "string" && out.test.command.trim()) {
         // A url from the agent is only kept when it is a plain http(s) URL (it ends up in a link).
         const testUrl = typeof out.test.url === "string" ? safeHttpUrl(out.test.url.trim()) : null;
         card.test = { command: out.test.command.trim(), ...(testUrl ? { url: testUrl } : {}) };
       }
       card.updatedAt = now;
       if (status === "question") {
-        out.questions.forEach((q: string, i: number) => {
+        out.questions.forEach((q, i) => {
           this.log(p, job.cardId, "info", `Question ${i + 1}: ${q}`);
         });
         return;
