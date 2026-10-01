@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "./api.ts";
+import { Icon } from "./icons.tsx";
 
 export function ProjectPicker({
   recent,
@@ -31,7 +32,10 @@ export function ProjectPicker({
     <div className="picker">
       <header>
         <h1>
-          <span className="moon">☾</span> Nightshift
+          <span className="moon">
+            <Icon name="moon" size={22} />
+          </span>
+          Nightshift
         </h1>
         <p className="muted">
           Un dossier = un kanban. L'état est stocké dans <code>nightshift.json</code> à la racine du dossier.
@@ -44,8 +48,11 @@ export function ProjectPicker({
             {recent.map((p) => (
               <li key={p}>
                 <button className={p === current ? "active" : ""} onClick={() => onPick(p)}>
-                  <strong>{p.split("/").pop()}</strong>
-                  <span className="muted">{p}</span>
+                  <Icon name="folder" />
+                  <span className="recent-text">
+                    <strong className="truncate">{p.split("/").pop()}</strong>
+                    <span className="muted mono truncate">{p}</span>
+                  </span>
                 </button>
               </li>
             ))}
@@ -79,12 +86,18 @@ export function ProjectPicker({
           <ul className="browser">
             {browse.parent && (
               <li>
-                <button onClick={() => go(browse.parent!)}>..</button>
+                <button onClick={() => go(browse.parent!)}>
+                  <Icon name="folder" />
+                  <span className="truncate">..</span>
+                </button>
               </li>
             )}
             {browse.dirs.map((d) => (
               <li key={d}>
-                <button onClick={() => go(`${browse.dir}/${d}`)}>📁 {d}</button>
+                <button onClick={() => go(`${browse.dir}/${d}`)}>
+                  <Icon name="folder" />
+                  <span className="truncate">{d}</span>
+                </button>
               </li>
             ))}
           </ul>

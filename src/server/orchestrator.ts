@@ -133,7 +133,11 @@ export class Orchestrator {
   private tests = new Map<string, { project: Project; cardId: string; proc: ChildProcess; lines: LogLine[] }>();
   private lastTestLines = new Map<string, LogLine[]>();
 
-  constructor() {
+  /** False for a test instance (`--no-agents`): it shows and edits boards but never runs agents nor takes locks. */
+  readonly agents: boolean;
+
+  constructor({ agents = true }: { agents?: boolean } = {}) {
+    this.agents = agents;
     onSettingsChange((settings) => {
       this.broadcast({ type: "settings", settings });
       this.scheduleTick();
@@ -190,7 +194,7 @@ export class Orchestrator {
     if (p) return p;
     if (!existsSync(path)) throw new Error(`Folder not found: ${path}`);
     p = new Project(path);
-    this.acquireLock(p);
+    if (this.agents) this.acquireLock(p);
     this.projects.set(path, p);
     p.onChange(() => {
       this.cancelStaleJobs(p!);
@@ -215,7 +219,7 @@ export class Orchestrator {
     }
     const lockedBy = this.lockedBy.get(p.path);
     const testing = [...this.tests.values()].filter((t) => t.project === p).map((t) => t.cardId);
-    return { path: p.path, board: p.board, live, testing, ...(lockedBy ? { lockedBy } : {}) };
+    return { path: p.path, board: p.board, live, testing, ...(lockedBy ? { lockedBy } : {}), ...(this.agents ? {} : { agentsDisabled: true }) };
   }
 
   private key(p: Project, cardId: string) {
@@ -269,6 +273,7 @@ export class Orchestrator {
   }
 
   private tick() {
+    if (!this.agents) return;
     const max = getSettings().maxParallel;
     if (this.jobs.size >= max) return;
     const candidates: { p: Project; card: Card }[] = [];

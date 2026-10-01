@@ -61,6 +61,20 @@ export function numberingChanged(raw: any, board: Board): boolean {
   return board.cards.some((c) => rawById.get(c.id)?.number !== c.number);
 }
 
+export const COLUMN_KEYS = ["id", "name", "type", "skill", "instructions", "model", "maxParallel"];
+const CARD_KEYS = ["id", "number", "title", "description", "columnId", "createdAt", "updatedAt", "enteredColumnAt", "lastRun", "pendingAnswer", "test", "history"];
+const BOARD_KEYS = ["version", "name", "columns", "cards", "nextCardNumber"];
+
+/**
+ * Fields this version does not know, kept as they are. Several Nightshift versions write the same file
+ * (an instance started from an older worktree, a teammate on another branch): without this, the oldest
+ * one would silently delete every newer field (column model, parallelism…) on its next write.
+ */
+export function unknownFields(raw: any, known: string[]): Record<string, unknown> {
+  if (!raw || typeof raw !== "object") return {};
+  return Object.fromEntries(Object.entries(raw).filter(([k]) => !known.includes(k)));
+}
+
 /** Normalizes a parsed board so the rest of the code can trust its shape. */
 export function normalizeBoard(raw: any, fallbackName: string): Board {
   const columns: Column[] = Array.isArray(raw?.columns)
@@ -70,6 +84,7 @@ export function normalizeBoard(raw: any, fallbackName: string): Board {
           const type: ColumnType = c.type === "skill" ? "skill" : "inert";
           const maxParallel = normalizeColumnParallel(type, c.maxParallel);
           return {
+            ...unknownFields(c, COLUMN_KEYS),
             id: c.id,
             name: String(c.name ?? "Column"),
             type,
@@ -84,6 +99,7 @@ export function normalizeBoard(raw: any, fallbackName: string): Board {
   const colIds = new Set(columns.map((c) => c.id));
   const rawCards: any[] = Array.isArray(raw?.cards) ? raw.cards.filter((c: any) => c && typeof c.id === "string") : [];
   const cards: Card[] = rawCards.map((c: any) => ({
+    ...unknownFields(c, CARD_KEYS),
     id: c.id,
     number: 0,
     title: String(c.title ?? ""),
@@ -100,7 +116,7 @@ export function normalizeBoard(raw: any, fallbackName: string): Board {
     history: Array.isArray(c.history) ? c.history.slice(-50) : [],
   }));
   const nextCardNumber = assignNumbers(cards, rawCards.map((c) => c.number), raw?.nextCardNumber);
-  return { version: 1, name: String(raw?.name ?? fallbackName), columns, cards, nextCardNumber };
+  return { ...unknownFields(raw, BOARD_KEYS), version: 1, name: String(raw?.name ?? fallbackName), columns, cards, nextCardNumber };
 }
 
 /**

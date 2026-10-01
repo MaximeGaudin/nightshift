@@ -1,0 +1,97 @@
+/* Editors zone: columns editor, skills, settings. Linear density: 32px rows, 30px fields. */
+
+/* ---------- Columns editor ---------- */
+.board-name { margin-bottom: var(--sp-3); }
+
+/* One bordered list, rows split by hairlines. Hint/instructions indent = order (16px) + icon (14px) + 2 gaps. */
+.col-editor {
+  /* Inside the flex .modal-body: keep full height so the body scrolls instead of clipping the list. */
+  flex-shrink: 0;
+  list-style: none; padding: 0; margin: 0;
+  display: flex; flex-direction: column;
+  border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
+  overflow: hidden;
+}
+.col-editor li {
+  display: flex; flex-direction: column; gap: var(--sp-1);
+  padding: var(--sp-1) var(--sp-3);
+  transition: background var(--dur);
+}
+.col-editor li + li { border-top: 1px solid var(--border); }
+.col-editor li:hover { background: var(--surface-2); }
+.col-editor li.skill { padding-bottom: var(--sp-3); }
+
+.col-editor-row { display: flex; gap: var(--sp-3); align-items: center; min-height: 32px; }
+.col-editor-row .col-icon { flex: 0 0 auto; }
+.col-editor .order {
+  color: var(--muted); width: 16px; text-align: right; flex: 0 0 auto;
+  font: var(--fs-xs) var(--font-mono); font-variant-numeric: tabular-nums;
+}
+
+/* Inline fields: quiet until hovered or focused (focus ring comes from base). */
+.col-editor-row input, .col-editor-row select {
+  min-height: var(--field-h); padding-top: 0; padding-bottom: 0;
+  background: transparent; border-color: transparent;
+}
+.col-editor-row input { flex: 1 1 200px; font-weight: 500; }
+.col-editor-row select { width: auto; max-width: 260px; color: var(--muted); cursor: pointer; }
+.col-editor-row select:hover:not(:disabled) { color: var(--text); }
+.col-editor-row input:focus, .col-editor-row select:focus { background: var(--surface-2); color: var(--text); }
+
+/* Row actions: muted icon buttons, delete turns red on hover only. */
+.col-editor-row .icon-btn { min-height: 24px; min-width: 24px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+.col-editor-row .icon-btn.danger { color: var(--muted); }
+.col-editor-row .icon-btn.danger:hover:not(:disabled) { color: var(--err); background: var(--err-soft); }
+
+.col-editor .hint { margin: 0 0 0 calc(30px + 2 * var(--sp-3)); font-size: var(--fs-sm); }
+.col-editor .instructions {
+  min-height: 52px; margin-left: calc(30px + 2 * var(--sp-3)); width: calc(100% - calc(30px + 2 * var(--sp-3)));
+  font-size: var(--fs-sm); background: var(--surface-2);
+}
+
+/* ---------- Skills ---------- */
+.skills { display: grid; grid-template-columns: 300px 1fr; gap: var(--sp-5); flex: 1; min-height: 0; }
+
+.skill-list { display: flex; flex-direction: column; gap: var(--sp-3); min-height: 0; }
+.skill-list ul { list-style: none; padding: 0; margin: 0; overflow: auto; flex: 1; display: flex; flex-direction: column; gap: 1px; }
+.skill-list li button {
+  width: 100%; min-height: 32px; text-align: left;
+  border: 0; border-radius: var(--radius); background: transparent;
+  padding: var(--sp-2) var(--sp-3);
+  display: flex; flex-direction: column; gap: 2px;
+}
+.skill-list li button:hover:not(:disabled) { background: var(--surface-hover); border-color: transparent; }
+.skill-list li button.active, .skill-list li button.active:hover:not(:disabled) { background: var(--accent-soft); }
+
+.skill-name { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; width: 100%; font-weight: 500; }
+.skill-name .icon-bolt { color: var(--muted); }
+.skill-list li button.active .icon-bolt { color: var(--accent); }
+.skill-desc {
+  font-size: var(--fs-sm); color: var(--muted); padding-left: calc(14px + var(--sp-2));
+  overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+.scope {
+  flex: 0 0 auto; margin-left: auto;
+  font: 400 var(--fs-xs)/1.5 var(--font-mono);
+  padding: 0 var(--sp-2); border-radius: 99px;
+  background: var(--surface-2); color: var(--muted); border: 1px solid var(--border);
+}
+.scope.project { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+
+.skill-editor { display: flex; flex-direction: column; gap: var(--sp-4); min-height: 0; }
+.skill-editor .hint { margin: 0; }
+textarea.code { font: var(--fs-md)/1.55 var(--font-mono); padding: var(--sp-4); }
+.empty { margin: auto; font-size: var(--fs-md); }
+
+@media (max-width: 800px) {
+  .skills { grid-template-columns: 1fr; }
+}
+
+/* ---------- Settings ---------- */
+.settings { gap: var(--sp-5); }
+.settings input[type="number"] { width: 120px; font-variant-numeric: tabular-nums; }
+.settings-note { margin: 0; padding-top: var(--sp-4); border-top: 1px solid var(--border); font-size: var(--fs-sm); }
+
+/* Per-column model and parallelism fields. */
+.col-model { flex-direction: row; align-items: center; gap: var(--sp-3); margin-left: 26px; }
+.col-model input { flex: 0 1 260px; }

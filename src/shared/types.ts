@@ -137,6 +137,8 @@ export interface ProjectSnapshot {
   live: Record<string, LiveStatus>;
   /** Pid of another Nightshift process that runs this project's agents; this one does not. */
   lockedBy?: number;
+  /** Started with `--no-agents`: this instance never runs agents. */
+  agentsDisabled?: boolean;
   /** Cards whose test command is running. */
   testing: string[];
 }

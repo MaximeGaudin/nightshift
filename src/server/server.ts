@@ -6,15 +6,16 @@ import index from "../web/index.html";
 import { normalizeColumnParallel, type Column, type ColumnType, type ServerEvent } from "../shared/types.ts";
 import { Orchestrator } from "./orchestrator.ts";
 import { getSettings, updateSettings } from "./settings.ts";
-import { newId } from "./store.ts";
+import { COLUMN_KEYS, newId, unknownFields } from "./store.ts";
+import { resolveScreenshot } from "./screenshots.ts";
 import { createSkill, listSkills, readSkill, saveSkill } from "./skills.ts";
 
-export function startServer({ port, development }: { port: number; development?: boolean }) {
+export function startServer({ port, development, agents = true }: { port: number; development?: boolean; agents?: boolean }) {
   // `bun --hot` re-runs this module on every change. Reuse the orchestrator from the previous run:
   // a new one would schedule every card a second time next to the old one, which keeps its watchers.
   const g = globalThis as { __nightshift?: { orch: Orchestrator; sockets: Set<ServerWebSocket<unknown>> } };
   if (!g.__nightshift) {
-    const orch = new Orchestrator();
+    const orch = new Orchestrator({ agents });
     const sockets = new Set<ServerWebSocket<unknown>>();
     orch.on((e: ServerEvent) => {
       const msg = JSON.stringify(e);
@@ -88,6 +89,7 @@ export function startServer({ port, development }: { port: number; development?:
                 const type: ColumnType = c.type === "skill" ? "skill" : "inert";
                 const maxParallel = normalizeColumnParallel(type, c.maxParallel);
                 return {
+                  ...unknownFields(c, COLUMN_KEYS),
                   id: typeof c.id === "string" && c.id ? c.id : newId("col"),
                   name: String(c.name || "Column").trim(),
                   type,
@@ -165,6 +167,14 @@ export function startServer({ port, development }: { port: number; development?:
       },
       "/api/cards/:id/answer": {
         POST: h((b, url, req) => orch.answer(project(b, url), req.params.id!, Array.isArray(b.answers) ? b.answers.map(String) : [])),
+      },
+      "/api/cards/:id/screenshot": {
+        GET: h((_b, url, req) => {
+          const card = project({}, url).card(req.params.id!);
+          if (!card) throw new Error("Unknown card");
+          const file = resolveScreenshot(card.description, url.searchParams.get("file") ?? "");
+          return new Response(Bun.file(file), { headers: { "content-type": "image/png" } });
+        }),
       },
       "/api/cards/:id/test": {
         GET: h((b, url, req) => orch.testLog(project(b, url), req.params.id!)),

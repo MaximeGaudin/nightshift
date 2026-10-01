@@ -33,7 +33,7 @@ export function SettingsModal({ settings, onClose }: { settings: Settings; onClo
       }
     >
       <ErrorBanner error={error} onClose={() => setError(null)} />
-      <div className="form">
+      <div className="form settings">
         <label>
           Plafond global d'agents en parallèle (tous projets confondus)
           <input
@@ -77,7 +77,7 @@ export function SettingsModal({ settings, onClose }: { settings: Settings; onClo
             onChange={(e) => setS({ ...s, extraArgs: e.target.value })}
           />
         </label>
-        <p className="hint small">Réglages globaux, stockés dans ~/.nightshift/settings.json.</p>
+        <p className="hint small settings-note">Réglages globaux, stockés dans ~/.nightshift/settings.json.</p>
       </div>
     </Modal>
   );

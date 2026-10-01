@@ -2,6 +2,29 @@ import { useEffect, useRef, useState } from "react";
 import type { Card, LogLine } from "../shared/types.ts";
 import { api, useServerEvents } from "./api.ts";
 
+function screenshotsOf(description: string): { alt: string; file: string }[] {
+  return [...description.matchAll(/!\[([^\]]*)\]\(([^)\s]+\.png)\)/g)].map((m) => ({
+    alt: m[1] || "Capture",
+    file: m[2]!,
+  }));
+}
+
+function Screenshots({ project, cardId, description }: { project: string; cardId: string; description: string }) {
+  const shots = screenshotsOf(description);
+  if (shots.length === 0) return null;
+  const q = `project=${encodeURIComponent(project)}`;
+  return (
+    <div className="test-shots">
+      {shots.map((s) => (
+        <figure key={s.file}>
+          <img src={`/api/cards/${cardId}/screenshot?${q}&file=${encodeURIComponent(s.file)}`} alt={s.alt} />
+          <figcaption>{s.alt}</figcaption>
+        </figure>
+      ))}
+    </div>
+  );
+}
+
 /** Runs the card's test command (set by an agent, editable here) and streams its output. */
 export function TestPanel({
   project,
@@ -101,6 +124,7 @@ export function TestPanel({
         )}
       </div>
       <pre className="test-command">{card.test!.command}</pre>
+      <Screenshots project={project} cardId={card.id} description={card.description} />
       {card.test!.url && (
         <a href={card.test!.url} target="_blank" rel="noreferrer">
           {card.test!.url}
