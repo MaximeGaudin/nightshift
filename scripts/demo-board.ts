@@ -45,28 +45,28 @@ function card(title: string, columnId: string, extra: Partial<Card> & { descript
     createdAt: at(created),
     updatedAt: at(created + 20),
     enteredColumnAt: at(created + 10),
-    history: [entry("created", "Carte créée", created, columns[0]?.id), entry("moved", "Déplacée", created + 10, columnId)],
+    history: [entry("created", "Card created", created, columns[0]?.id), entry("moved", "Moved", created + 10, columnId)],
     ...extra,
   };
 }
 
-const richDescription = `## Contexte
+const richDescription = `## Context
 
-Les utilisateurs veulent **exporter** le tableau en \`CSV\` depuis la barre du haut.
+Users want to **export** the board as \`CSV\` from the top bar.
 
-### À faire
+### To do
 
-- Ajouter un bouton *Exporter* à côté de « Réglages »
-- Générer le fichier côté serveur
-  - colonnes : numéro, titre, colonne
-  - encodage UTF-8
-- Afficher un toast à la fin
+- Add an *Export* button next to "Settings"
+- Generate the file on the server
+  - columns: number, title, column
+  - UTF-8 encoding
+- Show a toast when done
 
-1. Écrire le test
-2. Implémenter
-3. Mettre à jour le [README](https://example.com/readme)
+1. Write the test
+2. Implement
+3. Update the [README](https://example.com/readme)
 
-> Attention : ne pas bloquer la boucle d'événements sur les gros tableaux.
+> Warning: do not block the event loop on large boards.
 
 \`\`\`ts
 export function toCsv(cards: Card[]): string {
@@ -74,7 +74,7 @@ export function toCsv(cards: Card[]): string {
 }
 \`\`\`
 
-| Colonne | Type | Limite |
+| Column | Type | Limit |
 | --- | --- | --- |
 | Plan | skill | 2 |
 | Implement | skill | 3 |
@@ -82,42 +82,45 @@ export function toCsv(cards: Card[]): string {
 `;
 
 const cards: Card[] = [
-  card("Exporter le tableau en CSV", "col_backlog", { description: richDescription }),
-  card("Corriger le défilement de la modale", "col_backlog", { description: "La colonne latérale ne défile pas sur les petits écrans." }),
-  card("Ajouter un mode compact", "col_backlog", {
-    description: "Réduire la hauteur des cartes.",
+  card("Export the board as CSV", "col_backlog", { description: richDescription }),
+  card("Fix modal scrolling", "col_backlog", { description: "The side column does not scroll on small screens." }),
+  card("Add a compact mode", "col_backlog", {
+    description: "Reduce card height.",
     skipColumnIds: ["col_plan", "col_review"],
   }),
-  card("Notifications de fin de run", "col_build", {
-    description: "Jouer un son et afficher une notification quand un agent termine.",
-    lastRun: { columnId: "col_build", status: "success", at: at(200), summary: "Son ajouté, notification affichée.", costUsd: 0.42 },
+  card("Run completion notifications", "col_build", {
+    description: "Play a sound and show a notification when an agent finishes.",
+    lastRun: { columnId: "col_build", status: "success", at: at(200), summary: "Sound added, notification shown.", costUsd: 0.42 },
   }),
-  card("Migrer l'authentification", "col_plan", {
-    description: "Passer sur des jetons à durée courte.",
+  card("Migrate authentication", "col_plan", {
+    description: "Switch to short-lived tokens.",
     lastRun: {
       columnId: "col_plan",
       status: "question",
       at: at(210),
-      summary: "Deux points à préciser avant de planifier.",
-      questions: ["Faut-il conserver les anciens jetons pendant la migration ?", "Quelle durée de vie pour les nouveaux jetons ?"],
+      summary: "Two points to clarify before planning.",
+      questions: ["Should old tokens be kept during the migration?", "What lifetime for the new tokens?"],
       sessionId: "sess_demo_question",
     },
   }),
-  card("Réparer l'import des skills", "col_build", {
-    description: "L'import échoue quand le dossier contient un point.",
+  card("Fix skill import", "col_build", {
+    description: "Import fails when the folder name contains a dot.",
     lastRun: { columnId: "col_build", status: "error", at: at(220), error: "Command failed: bun test (exit 1)", costUsd: 0.18 },
   }),
-  card("Revue de la page Réglages", "col_review", { description: "Vérifier la cohérence des libellés." }),
-  card("Prévisualiser l'interface", "col_test", {
-    description: "Lancer l'application depuis le worktree.",
+  card("Review the Settings page", "col_review", {
+    description: "Check label consistency.",
+    lastRun: { columnId: "col_review", status: "success", at: at(230), summary: "Labels checked, no inconsistency found.", costUsd: 0.12 },
+  }),
+  card("Preview the interface", "col_test", {
+    description: "Run the app from the worktree.",
     test: { command: "bun start --no-agents --port 4611", url: "http://localhost:4611" },
   }),
-  card("Déploiement automatique", "col_done", { description: "Pipeline de déploiement en un clic." }),
-  card("Recherche dans les cartes", "col_done", { description: "Champ de recherche dans la barre du haut." }),
-  card("Thème sombre", "col_done", { description: "Suivre prefers-color-scheme." }),
+  card("Automatic deployment", "col_done", { description: "One-click deployment pipeline." }),
+  card("Card search", "col_done", { description: "Search field in the top bar." }),
+  card("Dark theme", "col_done", { description: "Follow prefers-color-scheme." }),
 ];
 
-const board: Board = { version: 1, name: "Démo Nightshift", columns, cards, nextCardNumber: counter + 1 };
+const board: Board = { version: 1, name: "Nightshift Demo", columns, cards, nextCardNumber: counter + 1 };
 
 function skill(root: string, name: string, description: string, body: string) {
   const folder = join(root, name);
@@ -135,21 +138,16 @@ const projectSkills = join(dir, ".claude", "skills");
 skill(
   projectSkills,
   "demo-plan",
-  "Écrit un plan d'implémentation à partir d'une carte.",
-  "# Plan\n\nLis la carte puis écris un plan en étapes numérotées.",
+  "Writes an implementation plan from a card.",
+  "# Plan\n\nRead the card, then write a plan in numbered steps.",
 );
 skill(
   projectSkills,
   "demo-implement",
-  "Implémente une carte selon son plan.",
-  "# Implémentation\n\nImplémente le plan, lance les tests, commite.",
+  "Implements a card according to its plan.",
+  "# Implementation\n\nImplement the plan, run the tests, commit.",
 );
-skill(
-  userSkillsDir,
-  "user-review",
-  "Relit un diff et signale les défauts.",
-  "# Revue\n\nRelis le diff, corrige les défauts, relance les tests.",
-);
-skill(userSkillsDir, "user-summarize", "Résume un fil de discussion.", "# Résumé\n\nProduis un résumé court et factuel.");
+skill(userSkillsDir, "user-review", "Reviews a diff and reports defects.", "# Review\n\nRead the diff, fix the defects, re-run the tests.");
+skill(userSkillsDir, "user-summarize", "Summarizes a discussion thread.", "# Summary\n\nProduce a short, factual summary.");
 
 console.log(`Demo project written to ${dir} (user skills: ${userSkillsDir})`);

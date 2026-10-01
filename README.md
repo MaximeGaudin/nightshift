@@ -1,40 +1,46 @@
-<p align="center"><img src="docs/logo/logo.svg" width="64" height="64" alt="Nightshift"></p>
-
 # Nightshift
 
-A kanban board that orchestrates Claude Code agents. One folder is one board: the whole board state lives in a single file, `nightshift.json`, at the folder root. Drop a card in a skill column and a `claude -p` agent picks it up in your project folder, reports progress, asks you questions when it is blocked, and hands the card to the next column. Leave it running and review the results in the morning.
+![Nightshift banner](docs/assets/readme-banner.svg)
 
-![Nightshift board](nightshift-screenshots/01-home.png)
+[![License: MIT](https://img.shields.io/badge/license-MIT-5e6ad2)](LICENSE)
+[![Runtime: Bun](https://img.shields.io/badge/runtime-Bun-000000?logo=bun)](https://bun.sh)
+[![Built for Claude Code](https://img.shields.io/badge/built%20for-Claude%20Code-d97757)](https://docs.claude.com/en/docs/claude-code)
+
+**Drop a card on a board, let Claude Code work through the night.** A kanban board that orchestrates Claude Code agents. One folder is one board: the whole board state lives in a single file, `nightshift.json`, at the folder root. Drop a card in a skill column and a `claude -p` agent picks it up in your project folder, reports progress, asks you questions when it is blocked, and hands the card to the next column. Leave it running and review the results in the morning.
+
+- **Skill columns**: every card entering a column is processed by the skill you chose, in your project folder.
+- **Batched questions**: a blocked agent returns all its questions at once; answering resumes the same session.
+- **Feedback and resume**: send free-text feedback to the agent from any card.
+- **Sequential mode**: a play/pause button moves cards one at a time.
+- **One committable file**: the whole board is a single `nightshift.json`.
+- **Template skills shipped**: grill, plan, implement, review and merge, copied into new projects.
+- **Local only**: the server listens on `127.0.0.1` only.
+
+[Quick start](#quick-start) · [Concepts](#concepts) · [Configuration](#configuration) · [Development](#development)
 
 ## Prerequisites
 
 - [Bun](https://bun.sh) >= 1.4.2
-- [Claude Code CLI](https://docs.claude.com/en/docs/claude-code) installed and logged in
+- [Claude Code CLI](https://docs.claude.com/en/docs/claude-code) installed and logged in (check that `claude -p "hi"` answers)
 - git
 - macOS and Linux are supported; Windows is untested.
 
 ## Quick start
 
 ```sh
-git clone https://github.com/MaximeGaudin/nightshift.git nightshift && cd nightshift && bun install && bun start <project>
+git clone https://github.com/MaximeGaudin/nightshift.git   # get Nightshift
+cd nightshift && bun install                                 # install dependencies
+claude -p "hi"                                               # check Claude Code is installed and logged in
+bun start ~/code/my-project                                  # open a board for your project (opens http://localhost:4545)
 ```
 
-`<project>` is the folder you want a board for (it defaults to the current directory).
+1. On first launch Nightshift creates `nightshift.json` in your project and copies the 5 template skills into `<project>/.claude/skills/`. There is no skill install step.
+2. Create a card in Backlog with a one-sentence request.
+3. Drag it into Grill.
 
-## Usage
+**What happens next.** The card flows Grill -> Plan -> Implement -> Review -> To Test -> Merge -> Done. When the agent needs a decision, its questions show on the card; answering in the card resumes the same session. The project must be a git repository, because the implement and merge skills use worktrees; `git init` is enough for a new folder.
 
-```sh
-bun install
-bun start [project-dir] [--port 4545] [--no-open] [--no-agents]   # defaults to the current directory
-bun run dev                                                        # same as start (development mode: HMR and browser console echo unless NODE_ENV=production)
-bun test
-```
-
-Options: `--port <n>` / `-p <n>` (0..65535, also read from the `PORT` environment variable, default 4545), `--no-open` (do not open the browser), `--no-agents` (never start agents), `--help`. Environment: `NIGHTSHIFT_HOME` (data directory, default `~/.nightshift`), `NIGHTSHIFT_USER_SKILLS` (user skills directory, default `~/.claude/skills`), `NIGHTSHIFT_NO_OPEN` (set to any value to skip opening the browser).
-
-The server listens on `127.0.0.1` only, and rejects requests whose `Host` or `Origin` is not local or whose body is not `application/json`.
-
-Development scripts: `bun run lint` (Biome), `bun run format`, `bun run typecheck`, `bun test`, `bun run test:coverage`, and `bun run check` (lint + typecheck + tests, run it before committing). Code is formatted and linted with [Biome](https://biomejs.dev).
+![Nightshift board](docs/assets/board.png)
 
 ## Concepts
 
@@ -57,13 +63,23 @@ Nightshift ships five template skills in the repository `skills/` folder: `night
 - Customize a skill by editing its project copy, or in the Skills modal.
 - If a copy fails, the board is still created and a toast names the skills that were not copied.
 
-## Language
-
-The interface is available in English and French. Choose it in Settings -> Language: Auto (follows the browser language), English or Français. The choice is stored as `language` (`auto`, `en` or `fr`) in `~/.nightshift/settings.json` and applies immediately. Server messages, agent prompts and skills stay in English.
-
 ## Sequential mode
 
 A play/pause button on the board moves cards one at a time. "Play" moves the first card of the first column (the backlog) into the second one, skips inert columns (except Done), then starts the next card once the current one reaches Done. "Pause" lets the running card finish but does not start the next one. The sequence stops (with a message) if the backlog is empty, if the card is deleted or moved back to the backlog, or if its run fails, is cancelled or leaves the card in place; a pending question does not stop it. Pressing play again resumes the stopped card. The state is kept in memory (never in `nightshift.json`); the routes are `POST /api/sequence/play` and `/api/sequence/pause` (`{project}`), rejected with 409 on an instance without agents.
+
+## Language
+
+The interface is available in English and French. Choose it in Settings -> Language: Auto (follows the browser language), English or French. The choice is stored as `language` (`auto`, `en` or `fr`) in `~/.nightshift/settings.json` and applies immediately. Server messages, agent prompts and skills stay in English.
+
+## Configuration
+
+```sh
+bun start [project-dir] [--port 4545] [--no-open] [--no-agents]   # defaults to the current directory
+```
+
+Options: `--port <n>` / `-p <n>` (0..65535, also read from the `PORT` environment variable, default 4545), `--no-open` (do not open the browser), `--no-agents` (never start agents), `--help`. Environment: `NIGHTSHIFT_HOME` (data directory, default `~/.nightshift`), `NIGHTSHIFT_USER_SKILLS` (user skills directory, default `~/.claude/skills`), `NIGHTSHIFT_NO_OPEN` (set to any value to skip opening the browser).
+
+The server listens on `127.0.0.1` only, and rejects requests whose `Host` or `Origin` is not local or whose body is not `application/json`.
 
 ## Files
 
@@ -77,6 +93,15 @@ A play/pause button on the board moves cards one at a time. "Play" moves the fir
 
 Agents run unattended with the configured `--permission-mode` (default `auto`: Claude Code's classifier approves or denies each action; anything it would escalate to a human is denied, since nobody is watching). Use the extra arguments setting for `--allowedTools`, `--max-budget-usd`, etc. `bypassPermissions` lets agents run any command in the project folder.
 
+## Development
+
+```sh
+bun run dev    # same as start (development mode: HMR and browser console echo unless NODE_ENV=production)
+bun test
+```
+
+Scripts: `bun run lint` (Biome), `bun run format`, `bun run typecheck`, `bun test`, `bun run test:coverage`, and `bun run check` (lint + typecheck + tests, run it before committing). Code is formatted and linted with [Biome](https://biomejs.dev).
+
 ## Layout
 
 - `bin/nightshift.ts`: CLI entry point.
@@ -84,6 +109,8 @@ Agents run unattended with the configured `--permission-mode` (default `auto`: C
 - `src/web/`: React UI bundled by Bun.
 - `src/web/i18n/`: in-house translation layer, `en/` and `fr/` message files per namespace.
 - `skills/`: template skills copied into new projects.
+- `docs/assets/`: README banner and screenshot.
+- `docs/logo/`: logo source.
 - `test/`: tests, with `fake-claude.ts` standing in for the CLI.
 - `.github/`: CI workflow, issue and pull request templates.
 
