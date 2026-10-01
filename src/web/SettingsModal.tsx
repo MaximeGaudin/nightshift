@@ -155,6 +155,15 @@ export function SettingsContent({
   );
 }
 
+const DISCARD = "Abandonner les modifications non enregistrées ?";
+
+const EDITABLE = ["maxParallel", "claudePath", "permissionMode", "model", "extraArgs", "soundNotifications"] as const;
+
+/** True when the form differs from the saved settings on any editable field. */
+export function settingsDirty(saved: Settings, draft: Settings): boolean {
+  return EDITABLE.some((k) => saved[k] !== draft[k]);
+}
+
 export function SettingsModal({
   settings,
   onClose,
@@ -205,6 +214,7 @@ export function SettingsModal({
         onOpenProject={
           onOpenProject &&
           ((path) => {
+            if (settingsDirty(settings, s) && !confirm(DISCARD)) return;
             onClose();
             onOpenProject(path);
           })

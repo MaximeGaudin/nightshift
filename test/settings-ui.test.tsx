@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Settings } from "../src/shared/types.ts";
-import { SettingsContent } from "../src/web/SettingsModal.tsx";
+import { SettingsContent, settingsDirty } from "../src/web/SettingsModal.tsx";
 
 const base: Settings = {
   maxParallel: 3,
@@ -33,4 +33,11 @@ test("settings-sections: empty state without recent projects", () => {
 test("settings-sections: bypassPermissions shows a warning alert", () => {
   expect(render(base)).not.toContain('role="alert"');
   expect(render({ ...base, permissionMode: "bypassPermissions" })).toContain('role="alert"');
+});
+
+test("settings-dirty: only editable fields count as unsaved changes", () => {
+  expect(settingsDirty(base, { ...base })).toBe(false);
+  expect(settingsDirty(base, { ...base, recentProjects: ["/x"] })).toBe(false);
+  expect(settingsDirty(base, { ...base, model: "opus" })).toBe(true);
+  expect(settingsDirty(base, { ...base, soundNotifications: true })).toBe(true);
 });
