@@ -84,7 +84,11 @@ export function SkillsModal({ project, onClose }: { project: string; onClose: ()
               type="button"
               variant="outline"
               onClick={() => {
-                if (confirmDiscard()) setCreating(true);
+                if (!confirmDiscard()) return;
+                setSelected(null);
+                setContent("");
+                setOriginal("");
+                setCreating(true);
               }}
             >
               <Plus /> Nouveau skill (projet)
