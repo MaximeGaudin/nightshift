@@ -2,7 +2,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileS
 import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import type { Subprocess } from "bun";
-import type { Board, Card, Column, LiveStatus, LogLine, ProjectSnapshot, RunStatus, ServerEvent, Settings } from "../shared/types.ts";
+import type { AttentionKind, Board, Card, Column, LiveStatus, LogLine, ProjectSnapshot, RunStatus, ServerEvent, Settings } from "../shared/types.ts";
 import { cardRef } from "../shared/types.ts";
 import { getSettings, NIGHTSHIFT_HOME, onSettingsChange, rememberProject } from "./settings.ts";
 import { needsRun, Project } from "./store.ts";
@@ -486,6 +486,9 @@ export class Orchestrator {
       return;
     }
     if (data.error) this.log(p, job.cardId, "error", data.error);
+    // Decided inside the mutation, broadcast only once it has been applied.
+    let attention: AttentionKind | undefined =
+      status === "error" ? "error" : status === "question" ? "question" : undefined;
     p.mutate((board) => {
       const now = new Date().toISOString();
       const out = data.output;
@@ -526,8 +529,10 @@ export class Orchestrator {
       if (target && target.id !== card.columnId) {
         p.moveCard(board, card.id, target.id, undefined, "Agent");
         this.log(p, job.cardId, "info", `Moved to "${target.name}".`);
+        if (target.type === "inert") attention = "inert";
       }
     });
+    if (attention) this.broadcast({ type: "attention", project: p.path, cardId: job.cardId, kind: attention });
   }
 
   shutdown() {
