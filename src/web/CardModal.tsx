@@ -10,6 +10,7 @@ import {
   type RunProgress as RunProgressData,
 } from "../shared/types.ts";
 import { api, useServerEvents } from "./api.ts";
+import { attempt, deleteThenClose, sendThenClear } from "./cardActions.ts";
 import { FeedbackForm } from "./FeedbackForm.tsx";
 import { StatusIcon } from "./icons.tsx";
 import { Markdown } from "./markdown.tsx";
@@ -28,6 +29,7 @@ export function CardModal({
   progress,
   testing,
   onClose,
+  onError,
 }: {
   project: string;
   card: Card;
@@ -36,6 +38,8 @@ export function CardModal({
   progress?: RunProgressData;
   testing: boolean;
   onClose: () => void;
+  /** Receives errors that happen after the card is closed (a failed save), to show them in the application banner. */
+  onError: (message: string) => void;
 }) {
   const [title, setTitle] = useState(card.title);
   const [description, setDescription] = useState(card.description);
@@ -93,7 +97,7 @@ export function CardModal({
     if (tab === "time" && logRef.current) logRef.current.scrollTop = 0;
   }, [tab]);
 
-  const guard = (p: Promise<unknown>) => p.catch((e) => setError(e.message));
+  const guard = (p: Promise<unknown>) => attempt(p, setError);
   const saveOrThrow = () => api.updateCard(project, card.id, { title, description }).then(() => setBase({ title, description }));
   const save = () => guard(saveOrThrow());
   const lr = card.lastRun;
@@ -111,7 +115,8 @@ export function CardModal({
         </span>
       }
       onClose={() => {
-        if (dirty) save();
+        // The card closes at once; a failed save is shown in the application banner, not lost silently.
+        if (dirty) void attempt(saveOrThrow(), (m) => onError(`Enregistrement de la fiche échoué : ${m}`));
         onClose();
       }}
       footer={
@@ -119,7 +124,7 @@ export function CardModal({
           <button
             className="danger"
             onClick={() => {
-              if (confirm("Supprimer cette fiche ?")) guard(api.deleteCard(project, card.id)).then(onClose);
+              if (confirm("Supprimer cette fiche ?")) void deleteThenClose(api.deleteCard(project, card.id), onClose, setError);
             }}
           >
             Supprimer
@@ -210,7 +215,8 @@ export function CardModal({
               className="question"
               onSubmit={(e) => {
                 e.preventDefault();
-                if (answers.some((a) => a.trim())) guard(api.answer(project, card.id, answers)).then(() => setAnswers([]));
+                if (answers.some((a) => a.trim()))
+                  void sendThenClear(api.answer(project, card.id, answers), () => setAnswers([]), setError);
               }}
             >
               <strong className="question-head">

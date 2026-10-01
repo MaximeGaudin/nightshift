@@ -36,18 +36,26 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [modal, setModal] = useState<"settings" | "columns" | "skills" | "projects" | null>(null);
   const [openCard, setOpenCard] = useState<string | null>(null);
-  const settings = useSettings();
+  const settings = useSettings(setError);
 
   useEffect(() => {
     setSnap(null);
     if (!project) return;
+    // Switching project quickly: only the answer of the latest open may be shown.
+    let cancelled = false;
     api
       .open(project)
       .then((s) => {
+        if (cancelled) return;
         setSnap(s);
         if (s.path !== project) setProject(s.path);
       })
-      .catch((e) => setError(e.message));
+      .catch((e) => {
+        if (!cancelled) setError(e.message);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [project]);
 
   useEffect(() => installAudioUnlock(), []);
@@ -150,6 +158,7 @@ export function App() {
           progress={snap.progress?.[card.id]}
           testing={snap.testing?.includes(card.id) ?? false}
           onClose={() => setOpenCard(null)}
+          onError={setError}
         />
       )}
       {modal === "columns" && <ColumnsEditor snap={snap} onClose={() => setModal(null)} />}

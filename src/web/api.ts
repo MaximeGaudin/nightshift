@@ -49,14 +49,38 @@ export const api = {
 type Listener = (e: ServerEvent) => void;
 const listeners = new Set<Listener>();
 let socket: WebSocket | null = null;
+let failures = 0;
+
+/** Reconnection delay: 1 s after the first failure, doubling up to 30 s. */
+export function reconnectDelay(failureCount: number): number {
+  return Math.min(1000 * 2 ** Math.max(0, failureCount - 1), 30_000);
+}
+
+/** Decodes a WebSocket message; anything that is not a JSON object with a `type` is dropped (null). */
+export function parseServerEvent(data: unknown): ServerEvent | null {
+  if (typeof data !== "string") return null;
+  try {
+    const e = JSON.parse(data);
+    return typeof e === "object" && e !== null && typeof e.type === "string" ? (e as ServerEvent) : null;
+  } catch {
+    return null;
+  }
+}
 
 function connect() {
-  socket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
-  socket.onmessage = (m) => {
-    const e = JSON.parse(m.data) as ServerEvent;
-    for (const l of listeners) l(e);
+  const ws = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`);
+  socket = ws;
+  ws.onopen = () => {
+    failures = 0;
   };
-  socket.onclose = () => setTimeout(connect, 1000);
+  ws.onmessage = (m) => {
+    const e = parseServerEvent(m.data);
+    if (e) for (const l of listeners) l(e);
+  };
+  ws.onclose = () => {
+    failures += 1;
+    setTimeout(connect, reconnectDelay(failures));
+  };
 }
 
 export function useServerEvents(fn: Listener) {
@@ -70,9 +94,17 @@ export function useServerEvents(fn: Listener) {
   }, []);
 }
 
-export function useSettings() {
+/** Loads the settings and follows their changes. A failed first load is reported through `onError` instead of being left unhandled. */
+export function useSettings(onError?: (message: string) => void) {
   const [settings, setSettings] = useState<Settings | null>(null);
-  useEffect(() => void api.settings().then(setSettings), []);
+  const errorRef = useRef(onError);
+  errorRef.current = onError;
+  useEffect(() => {
+    api
+      .settings()
+      .then(setSettings)
+      .catch((e: unknown) => errorRef.current?.(e instanceof Error ? e.message : String(e)));
+  }, []);
   useServerEvents((e) => e.type === "settings" && setSettings(e.settings));
   return settings;
 }
