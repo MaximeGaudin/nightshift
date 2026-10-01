@@ -116,3 +116,17 @@ export function applyDrop(local: LocalOrder, activeId: string, drop: DropTarget)
   next[drop.columnId] = target;
   return next;
 }
+
+/** Column and 1-based position announced for the hovered target, read from the cards shown on screen (local order). */
+export function hoverPosition(
+  shown: Record<string, Card[]>,
+  activeId: string,
+  over: DropOver,
+): { columnId: string; position: number } | null {
+  const columnId =
+    over.kind === "card" ? Object.keys(shown).find((id) => shown[id]?.some((c) => c.id === over.cardId)) : over.columnId;
+  if (!columnId) return null;
+  const list = shown[columnId] ?? [];
+  const index = over.kind === "card" ? list.findIndex((c) => c.id === over.cardId) : list.filter((c) => c.id !== activeId).length;
+  return { columnId, position: Math.max(0, index) + 1 };
+}

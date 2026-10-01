@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { Card, Column } from "../src/shared/types.ts";
-import { applyDrop, cardsByColumn, localCards, localColumnOf, moveLocal, resolveDrop, snapshotOrder } from "../src/web/boardDnd.ts";
+import { applyDrop, cardsByColumn, hoverPosition, localCards, localColumnOf, moveLocal, resolveDrop, snapshotOrder } from "../src/web/boardDnd.ts";
 
 const col = (id: string, type: Column["type"] = "inert"): Column => ({ id, name: id, type }) as Column;
 const columns = [col("X"), col("Y"), col("Z"), col("col_done")];
@@ -83,4 +83,14 @@ test("board-dnd-apply-drop", () => {
   expect(cross.Y).toEqual(["D", "A", "E"]);
   expect(applyDrop(order, "A", { columnId: "col_done" }).col_done).toEqual(["F", "A"]);
   expect(applyDrop(order, "A", { columnId: "Z", index: 0 }).Z).toEqual(["A"]);
+});
+
+test("board-dnd-hover-position-follows-local-order", () => {
+  // A was live-moved into Y before E: hovering it or E announces Y, not its origin column X.
+  const shown = cardsByColumn(columns, cards, moveLocal(snapshotOrder(columns, cards), "A", "Y", "E"), "A");
+  expect(hoverPosition(shown, "A", onCard("A"))).toEqual({ columnId: "Y", position: 2 });
+  expect(hoverPosition(shown, "A", onCard("E"))).toEqual({ columnId: "Y", position: 3 });
+  expect(hoverPosition(shown, "A", onCol("Y"))).toEqual({ columnId: "Y", position: 3 });
+  expect(hoverPosition(shown, "A", onCol("Z"))).toEqual({ columnId: "Z", position: 1 });
+  expect(hoverPosition(shown, "A", onCard("ghost"))).toBeNull();
 });

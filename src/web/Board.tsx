@@ -28,6 +28,7 @@ import {
   applyDrop,
   cardsByColumn,
   type DropOver,
+  hoverPosition,
   type LocalOrder,
   localCards,
   localColumnOf,
@@ -226,22 +227,21 @@ export function Board({
     clearLocal();
   };
 
-  const position = (over: { id: string | number; data: { current?: { type?: string; columnId?: string } } } | null) => {
+  const position = (
+    activeId: string | number,
+    over: { id: string | number; data: { current?: { type?: string; columnId?: string } } } | null,
+  ) => {
     const target = over ? describe(over) : null;
-    if (!target) return undefined;
-    const columnId = target.kind === "card" ? (over?.data.current?.columnId as string) : target.columnId;
-    const list = shownCards[columnId] ?? [];
-    const index = target.kind === "card" ? list.findIndex((c) => c.id === target.cardId) : list.length;
-    return { columnId, position: Math.max(0, index) + 1 };
+    return target ? hoverPosition(shownCards, String(activeId), target) : null;
   };
   const announcements: Announcements = {
     onDragStart: ({ active }) => `Carte ${label(active.id)} saisie`,
     onDragOver: ({ active, over }) => {
-      const p = position(over);
+      const p = position(active.id, over);
       return p ? `Carte ${label(active.id)} au-dessus de ${colName(p.columnId)}, position ${p.position}` : undefined;
     },
     onDragEnd: ({ active, over }) => {
-      const p = position(over);
+      const p = position(active.id, over);
       return p ? `Carte ${label(active.id)} déposée dans ${colName(p.columnId)}` : `Carte ${label(active.id)} relâchée`;
     },
     onDragCancel: ({ active }) => `Déplacement de la carte ${label(active.id)} annulé`,
