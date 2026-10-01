@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -10,7 +10,7 @@ process.env.NIGHTSHIFT_USER_SKILLS = userSkills;
 
 const { parseFrontmatter, listSkills, createSkill } = await import("../src/server/skills.ts");
 const { splitArgs } = await import("../src/server/orchestrator.ts");
-const { needsRun, normalizeBoard } = await import("../src/server/store.ts");
+const { needsRun, normalizeBoard, numberingChanged, Project } = await import("../src/server/store.ts");
 const { startServer } = await import("../src/server/server.ts");
 const { updateSettings } = await import("../src/server/settings.ts");
 
@@ -248,4 +248,30 @@ test("numbering: counter too low is raised, higher counter kept", () => {
   expect(numbers(high)).toEqual({ a: 7, b: 2, c: 20 });
   expect(high.nextCardNumber).toBe(21);
   expect(normalizeBoard({ nextCardNumber: 20, cards }, "x").nextCardNumber).toBe(20);
+});
+
+test("numbering: load writes back only when changed", async () => {
+  const legacy = mkdtempSync(join(tmpdir(), "ns-legacy-"));
+  const legacyFile = join(legacy, "nightshift.json");
+  writeFileSync(
+    legacyFile,
+    JSON.stringify({ version: 1, name: "legacy", columns: [{ id: "col", name: "Backlog", type: "inert" }], cards: [rawCard("b", "2026-01-02T00:00:00Z"), rawCard("a", "2026-01-01T00:00:00Z")] }),
+  );
+  const migrated = new Project(legacy);
+  migrated.close();
+  const onDisk = JSON.parse(readFileSync(legacyFile, "utf8"));
+  expect(numbers(onDisk)).toEqual({ a: 1, b: 2 });
+  expect(onDisk.nextCardNumber).toBe(3);
+  expect(numberingChanged(onDisk, normalizeBoard(onDisk, "legacy"))).toBe(false);
+
+  const clean = mkdtempSync(join(tmpdir(), "ns-clean-"));
+  const cleanFile = join(clean, "nightshift.json");
+  writeFileSync(cleanFile, JSON.stringify(onDisk));
+  const before = { text: readFileSync(cleanFile, "utf8"), mtime: statSync(cleanFile).mtimeMs };
+  await Bun.sleep(20);
+  const opened = new Project(clean);
+  opened.close();
+  expect(opened.board.nextCardNumber).toBe(3);
+  expect(readFileSync(cleanFile, "utf8")).toBe(before.text);
+  expect(statSync(cleanFile).mtimeMs).toBe(before.mtime);
 });

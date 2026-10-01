@@ -102,7 +102,7 @@ export function normalizeBoard(raw: any, fallbackName: string): Board {
 export class Project {
   readonly path: string;
   readonly file: string;
-  board: Board;
+  board!: Board;
   private listeners = new Set<() => void>();
   private watcher: FSWatcher | null = null;
   private lastWrittenMtime = 0;
@@ -111,7 +111,7 @@ export class Project {
     this.path = path;
     this.file = join(path, BOARD_FILE);
     if (existsSync(this.file)) {
-      this.board = this.read();
+      this.read();
     } else {
       this.board = defaultBoard(basename(path));
       this.write();
@@ -119,9 +119,11 @@ export class Project {
     this.watch();
   }
 
-  private read(): Board {
-    const text = readFileSync(this.file, "utf8");
-    return normalizeBoard(JSON.parse(text), basename(this.path));
+  /** Loads the file into `board`. Writes it back at once when numbering had to be migrated or repaired. */
+  private read() {
+    const raw = JSON.parse(readFileSync(this.file, "utf8"));
+    this.board = normalizeBoard(raw, basename(this.path));
+    if (numberingChanged(raw, this.board)) this.write();
   }
 
   private write() {
@@ -147,7 +149,7 @@ export class Project {
       const mtime = statSync(this.file).mtimeMs;
       if (mtime === this.lastWrittenMtime) return;
       this.lastWrittenMtime = mtime;
-      this.board = this.read();
+      this.read();
       this.emit();
     } catch {
       // Partial write or invalid JSON: keep the in-memory board.
