@@ -7,9 +7,13 @@ const home = mkdtempSync(join(tmpdir(), "ns-home-"));
 const userSkills = mkdtempSync(join(tmpdir(), "ns-skills-"));
 process.env.NIGHTSHIFT_HOME = home;
 process.env.NIGHTSHIFT_USER_SKILLS = userSkills;
+// Read by the fake claude binary, which inherits the server's environment.
+const argsLog = join(mkdtempSync(join(tmpdir(), "ns-args-")), "args.jsonl");
+const prevArgsLog = process.env.FAKE_ARGS_LOG;
+process.env.FAKE_ARGS_LOG = argsLog;
 
 const { parseFrontmatter, listSkills, createSkill } = await import("../src/server/skills.ts");
-const { splitArgs } = await import("../src/server/orchestrator.ts");
+const { splitArgs, resolveModel } = await import("../src/server/orchestrator.ts");
 const { needsRun, normalizeBoard } = await import("../src/server/store.ts");
 const { startServer } = await import("../src/server/server.ts");
 const { updateSettings } = await import("../src/server/settings.ts");
@@ -36,6 +40,31 @@ test("needsRun logic", () => {
   expect(needsRun(b, card)).toBe(true);
   card.columnId = "b";
   expect(needsRun(b, card)).toBe(false);
+});
+
+test("normalizeBoard keeps a trimmed model and drops empty ones", () => {
+  const b = normalizeBoard(
+    {
+      columns: [
+        { id: "a", name: "A", type: "skill", skill: "s", model: " sonnet " },
+        { id: "b", name: "B", type: "skill", skill: "s", model: "   " },
+        { id: "c", name: "C", type: "inert" },
+      ],
+      cards: [],
+    },
+    "x",
+  );
+  expect(b.columns[0]!.model).toBe("sonnet");
+  expect("model" in b.columns[1]!).toBe(false);
+  expect("model" in b.columns[2]!).toBe(false);
+});
+
+test("resolveModel priority", () => {
+  const col = (model?: string): any => ({ id: "a", name: "A", type: "skill", skill: "s", ...(model ? { model } : {}) });
+  const settings = (model: string): any => ({ maxParallel: 1, claudePath: "claude", permissionMode: "auto", model, extraArgs: "", recentProjects: [] });
+  expect(resolveModel(col("opus"), settings("sonnet"))).toBe("opus");
+  expect(resolveModel(col(), settings(" sonnet "))).toBe("sonnet");
+  expect(resolveModel(col(), settings(""))).toBeUndefined();
 });
 
 test("project skills shadow user skills", () => {
@@ -65,6 +94,8 @@ beforeAll(() => {
 afterAll(() => {
   srv.orch.shutdown();
   srv.server.stop(true);
+  if (prevArgsLog === undefined) delete process.env.FAKE_ARGS_LOG;
+  else process.env.FAKE_ARGS_LOG = prevArgsLog;
 });
 
 const post = (path: string, body: object, method = "POST") =>
@@ -161,4 +192,74 @@ test("removing a column that still holds cards is refused", async () => {
   const snap = await post("/api/projects/open", { path: proj });
   const res = await post("/api/board", { project: proj, columns: [snap.board.columns[0]] }, "PUT");
   expect(res.error).toContain("move them first");
+});
+
+// ---- per-column model ---------------------------------------------------------
+
+const argsEntries = (): { title: string; resumed: boolean; model: string | null }[] =>
+  readFileSync(argsLog, "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l));
+const getProject = (path: string) => fetch(`${base}/api/project?project=${encodeURIComponent(path)}`).then((r) => r.json());
+
+test("PUT /api/board keeps model on an inert column", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "ns-model-inert-"));
+  await post("/api/projects/open", { path: dir });
+  const res = await post("/api/board", { project: dir, columns: [{ name: "Inbox", type: "inert", model: "opus" }] }, "PUT");
+  expect(res.board.columns[0].model).toBe("opus");
+  const file = JSON.parse(readFileSync(join(dir, "nightshift.json"), "utf8"));
+  expect(file.columns[0].model).toBe("opus");
+});
+
+test("run passes the column model to claude", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "ns-model-run-"));
+  updateSettings({ model: "sonnet" });
+  try {
+    await post("/api/projects/open", { path: dir });
+    const res = await post(
+      "/api/board",
+      {
+        project: dir,
+        columns: [
+          { name: "Fast", type: "skill", skill: "enrich", model: "haiku" },
+          { name: "Plain", type: "skill", skill: "enrich" },
+          { name: "Done", type: "inert" },
+        ],
+      },
+      "PUT",
+    );
+    const [fast, plain, done] = res.board.columns;
+    const { id } = await post("/api/cards", { project: dir, columnId: fast.id, title: "m1" });
+    await waitFor(async () => (await getProject(dir)).board.cards.find((c: any) => c.id === id)?.columnId === done.id);
+    const entries = argsEntries();
+    expect(entries.find((e) => e.title === "m1")?.model).toBe("haiku");
+    expect(entries.find((e) => e.title === "m1 ✓")?.model).toBe("sonnet");
+
+    updateSettings({ model: "" });
+    const second = await post("/api/cards", { project: dir, columnId: plain.id, title: "m2" });
+    await waitFor(async () => (await getProject(dir)).board.cards.find((c: any) => c.id === second.id)?.columnId === done.id);
+    const entry = argsEntries().find((e) => e.title === "m2");
+    expect(entry).toBeDefined();
+    expect(entry!.model).toBeNull();
+  } finally {
+    updateSettings({ model: "" });
+  }
+});
+
+test("resume uses the column model at resume time", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "ns-model-resume-"));
+  await post("/api/projects/open", { path: dir });
+  const res = await post(
+    "/api/board",
+    { project: dir, columns: [{ name: "Ask", type: "skill", skill: "enrich", model: "opus" }, { name: "Done", type: "inert" }] },
+    "PUT",
+  );
+  const [ask, done] = res.board.columns;
+  const { id } = await post("/api/cards", { project: dir, columnId: ask.id, title: "ask" });
+  await waitFor(async () => (await getProject(dir)).board.cards.find((c: any) => c.id === id)?.lastRun?.status === "question");
+  const before = argsEntries().length;
+  await post("/api/board", { project: dir, columns: [{ ...ask, model: "haiku" }, done] }, "PUT");
+  await post(`/api/cards/${id}/answer`, { project: dir, answers: ["blue", "big"] });
+  await waitFor(async () => (await getProject(dir)).board.cards.find((c: any) => c.id === id)?.columnId === done.id);
+  const resumed = argsEntries().slice(before).filter((e) => e.resumed);
+  expect(resumed).toHaveLength(1);
+  expect(resumed[0]!.model).toBe("haiku");
 });
