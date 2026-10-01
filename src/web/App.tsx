@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { columnMaxParallel, isDoneColumn, DONE_COLUMN_ID, type Card, type Column, type LiveStatus, type ProjectSnapshot } from "../shared/types.ts";
 import { api, useServerEvents, useSettings } from "./api.ts";
 import { CardTile } from "./CardTile.tsx";
+import { nextColumn } from "./nextColumn.ts";
 import { CardModal } from "./CardModal.tsx";
 import { CompactColumnBand, compactColumnTitle, isCompactColumn } from "./compactColumn.tsx";
 import { DoneColumn } from "./DoneColumn.tsx";
@@ -179,6 +180,7 @@ function Board({
   const [drag, setDrag] = useState<string | null>(null);
   const [drop, setDrop] = useState<{ col: string; index: number } | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [sending, setSending] = useState<Set<string>>(() => new Set());
 
   const [doneCollapsed, setDoneCollapsed] = useState(() => readDoneCollapsed(window.localStorage, snap.path));
   useEffect(() => {
@@ -200,11 +202,29 @@ function Board({
     setDrag(null);
     setDrop(null);
   };
-  const tile = (card: Card) => (
+  const sendNext = (card: Card, nextId: string) => {
+    if (sending.has(card.id)) return;
+    setSending((s) => new Set(s).add(card.id));
+    guard(
+      api.moveCard(snap.path, card.id, nextId).finally(() =>
+        setSending((s) => {
+          const n = new Set(s);
+          n.delete(card.id);
+          return n;
+        }),
+      ),
+    );
+  };
+  const tile = (card: Card) => {
+    const next = nextColumn(snap.board.columns, card.columnId);
+    return (
     <CardTile
       card={card}
       live={snap.live[card.id]}
       dragging={drag === card.id}
+      next={next ? { name: next.name } : undefined}
+      onSendNext={next ? () => sendNext(card, next.id) : undefined}
+      sending={sending.has(card.id)}
       onOpen={() => onOpen(card.id)}
       onDragStart={() => setDrag(card.id)}
       onDragEnd={() => {
@@ -212,7 +232,8 @@ function Board({
         setDrop(null);
       }}
     />
-  );
+    );
+  };
 
   return (
     <main className="board">
@@ -295,17 +316,7 @@ function Board({
                 {cards.map((card, i) => (
                   <div key={card.id}>
                     {drop?.col === col.id && drop.index === i && <div className="drop-indicator" />}
-                    <CardTile
-                      card={card}
-                      live={snap.live[card.id]}
-                      dragging={drag === card.id}
-                      onOpen={() => onOpen(card.id)}
-                      onDragStart={() => setDrag(card.id)}
-                      onDragEnd={() => {
-                        setDrag(null);
-                        setDrop(null);
-                      }}
-                    />
+                    {tile(card)}
                   </div>
                 ))}
                 {drop?.col === col.id && drop.index === cards.length && <div className="drop-indicator" />}
