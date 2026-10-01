@@ -12,6 +12,7 @@ import {
   type RunProgress as RunProgressData,
 } from "../shared/types.ts";
 import { api, useServerEvents } from "./api.ts";
+import { dragHasFiles, fileToBase64, insertAttachments, MAX_ATTACHMENT_BYTES } from "./attachments.ts";
 import { SequenceBadge } from "./CardTile.tsx";
 import { attempt, deleteThenClose, sendThenClear } from "./cardActions.ts";
 import { AppDialog } from "./components/app-dialog.tsx";
@@ -222,6 +223,8 @@ export function CardModalContent({
   const [descMode, setDescMode] = useState<"preview" | "edit">(card.description.trim() ? "preview" : "edit");
   const descRef = useRef<HTMLTextAreaElement>(null);
   const focusDesc = useRef(false);
+  const [dragging, setDragging] = useState(false);
+  const [uploading, setUploading] = useState(0);
   // Skipped columns are saved on each change; the display follows the board snapshot (the server value wins on every update).
   const serverSkip = card.skipColumnIds ?? [];
   const [skip, setSkip] = useState(serverSkip);
@@ -238,6 +241,25 @@ export function CardModalContent({
   const editDescription = () => {
     focusDesc.current = true;
     setDescMode("edit");
+  };
+
+  // Dropped files are stored by the server and linked in the description by absolute path, so agents can read them.
+  const attachFiles = async (files: File[]) => {
+    const caret = descMode === "edit" ? descRef.current?.selectionStart : undefined;
+    setUploading((n) => n + files.length);
+    const markdowns: string[] = [];
+    for (const file of files) {
+      try {
+        if (file.size > MAX_ATTACHMENT_BYTES) throw new Error(t("card.attachTooLarge", { name: file.name }));
+        const { markdown } = await api.attach(project, card.id, file.name, await fileToBase64(file));
+        markdowns.push(markdown);
+      } catch (e) {
+        notifyError(t("card.attachFailed", { name: file.name, message: e instanceof Error ? e.message : String(e) }));
+      } finally {
+        setUploading((n) => n - 1);
+      }
+    }
+    setDescription((d) => insertAttachments(d, markdowns, caret));
   };
 
   useEffect(() => {
@@ -275,7 +297,26 @@ export function CardModalContent({
           </Label>
           <Input id="card-title" value={title} onChange={(e) => setTitle(e.target.value)} />
         </div>
-        <div className="card-desc flex min-h-[220px] min-w-0 flex-1 flex-col gap-1.5">
+        {/* biome-ignore lint/a11y/noStaticElementInteractions: file drop is a mouse shortcut; the description stays editable by keyboard */}
+        <div
+          className="card-desc relative flex min-h-[220px] min-w-0 flex-1 flex-col gap-1.5"
+          onDragOver={(e) => {
+            if (!dragHasFiles(e.dataTransfer)) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "copy";
+            setDragging(true);
+          }}
+          onDragLeave={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false);
+          }}
+          onDrop={(e) => {
+            if (!dragHasFiles(e.dataTransfer)) return;
+            e.preventDefault();
+            setDragging(false);
+            const files = Array.from(e.dataTransfer.files);
+            if (files.length > 0) void attachFiles(files);
+          }}
+        >
           <div className="flex items-center justify-between gap-3">
             <span id="card-desc-label" className="text-xs font-medium text-muted-foreground">
               {t("card.descriptionLabel")}
@@ -311,6 +352,17 @@ export function CardModalContent({
                 <p className="text-muted-foreground">{t("card.noDescription")}</p>
               )}
             </div>
+          )}
+          {dragging && (
+            <div className="card-drop pointer-events-none absolute inset-0 flex items-center justify-center rounded-md border-2 border-dashed border-primary bg-background/80 text-sm font-medium text-primary">
+              {t("card.dropFiles")}
+            </div>
+          )}
+          {uploading > 0 && (
+            <p className="card-attaching m-0 flex items-center gap-2 text-xs text-muted-foreground" aria-live="polite">
+              <Loader2 className="size-3 animate-spin" aria-hidden />
+              {tn("card.attaching", uploading)}
+            </p>
           )}
         </div>
         {live === "running" && dirty && (

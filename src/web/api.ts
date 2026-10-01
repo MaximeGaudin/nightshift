@@ -32,6 +32,8 @@ export const api = {
     }),
   updateCard: (project: string, id: string, patch: { title?: string; description?: string; skipColumnIds?: string[] }) =>
     call("PATCH", `/api/cards/${id}`, { project, ...patch }),
+  attach: (project: string, id: string, name: string, data: string) =>
+    call<{ path: string; markdown: string }>("POST", `/api/cards/${id}/attachments`, { project, name, data }),
   deleteCard: (project: string, id: string) => call("DELETE", `/api/cards/${id}?${q(project)}`),
   moveCard: (project: string, id: string, columnId: string, index?: number) =>
     call("POST", `/api/cards/${id}/move`, { project, columnId, index }),
