@@ -24,7 +24,7 @@ import { COLUMN_KEYS, newId, unknownFields } from "./store.ts";
 export function startServer({ port, development, agents = true }: { port: number; development?: boolean; agents?: boolean }) {
   // `bun --hot` re-runs this module on every change. Reuse the orchestrator from the previous run:
   // a new one would schedule every card a second time next to the old one, which keeps its watchers.
-  const g = globalThis as { __nightshift?: { orch: Orchestrator; sockets: Set<ServerWebSocket<unknown>> } };
+  const g = globalThis as { __nightshift?: { orch: Orchestrator; sockets: Set<ServerWebSocket<unknown>>; opened: Set<string> } };
   if (!g.__nightshift) {
     const orch = new Orchestrator({ agents });
     const sockets = new Set<ServerWebSocket<unknown>>();
@@ -32,12 +32,36 @@ export function startServer({ port, development, agents = true }: { port: number
       const msg = JSON.stringify(e);
       for (const ws of sockets) ws.send(msg);
     });
-    g.__nightshift = { orch, sockets };
+    g.__nightshift = { orch, sockets, opened: new Set() };
   }
   const { orch, sockets } = g.__nightshift;
+  // Projects opened through POST /api/projects/open: the only ones other routes may address.
+  const opened = (g.__nightshift.opened ??= new Set());
 
   const json = (data: unknown, status = 200) => Response.json(data, { status });
   const fail = (e: any) => json({ error: e?.message ?? String(e) }, 400);
+
+  /** Empty body is `{}`; anything else must be a JSON object. */
+  const parseBody = (text: string): any => {
+    if (!text.trim()) return {};
+    let data: unknown;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error("Invalid JSON body");
+    }
+    if (typeof data !== "object" || data === null || Array.isArray(data)) throw new Error("Body must be a JSON object");
+    return data;
+  };
+
+  /** DELETE may carry a body with the project; a bad one is ignored (the query string still works). */
+  const lenientBody = (text: string): any => {
+    try {
+      return parseBody(text);
+    } catch {
+      return {};
+    }
+  };
 
   /** Wraps a handler: parses the JSON body and turns thrown errors into 400s. */
   const h =
@@ -47,7 +71,7 @@ export function startServer({ port, development, agents = true }: { port: number
       if (denied) return denied;
       try {
         const url = new URL(req.url);
-        const body = req.method === "GET" || req.method === "DELETE" ? {} : await req.json().catch(() => ({}));
+        const body = req.method === "GET" ? {} : req.method === "DELETE" ? lenientBody(await req.text()) : parseBody(await req.text());
         const out = await fn(body, url, req);
         return out instanceof Response ? out : json(out ?? { ok: true });
       } catch (e) {
@@ -55,7 +79,26 @@ export function startServer({ port, development, agents = true }: { port: number
       }
     };
 
-  const project = (body: any, url: URL) => orch.get(body.project ?? url.searchParams.get("project") ?? "");
+  /** Optional string field: undefined/null give undefined, any other non-string is a 400. */
+  const optString = (b: any, key: string): string | undefined => {
+    const v = b[key];
+    if (v == null) return undefined;
+    if (typeof v !== "string") throw new Error(`${key} must be a string`);
+    return v;
+  };
+  const reqString = (b: any, key: string): string => {
+    const v = optString(b, key);
+    if (v === undefined) throw new Error(`${key} is required`);
+    return v;
+  };
+
+  const project = (body: any, url: URL) => {
+    const raw = body.project ?? url.searchParams.get("project");
+    if (typeof raw !== "string" || !raw) throw new Error("Missing project");
+    const path = resolve(raw);
+    if (!opened.has(path)) throw new Error("Unknown project");
+    return orch.get(path);
+  };
 
   const server: Server<undefined> = Bun.serve({
     port,
@@ -70,7 +113,11 @@ export function startServer({ port, development, agents = true }: { port: number
       },
 
       "/api/projects/open": {
-        POST: h((b) => orch.snapshot(orch.open(String(b.path ?? "")))),
+        POST: h((b) => {
+          const p = orch.open(String(b.path ?? ""));
+          opened.add(p.path);
+          return orch.snapshot(p);
+        }),
       },
       "/api/project": {
         GET: h((_b, url) => orch.snapshot(project({}, url))),
@@ -105,7 +152,11 @@ export function startServer({ port, development, agents = true }: { port: number
           p.mutate((board) => {
             if (typeof b.name === "string" && b.name.trim()) board.name = b.name.trim();
             if (Array.isArray(b.columns)) {
-              const userCols: Column[] = b.columns.map((c: any) => {
+              const userCols: Column[] = b.columns.map((c: any, i: number) => {
+                if (typeof c !== "object" || c === null || Array.isArray(c)) throw new Error(`Column ${i + 1} must be an object`);
+                for (const key of ["id", "name", "skill", "instructions", "model"]) {
+                  if (c[key] != null && typeof c[key] !== "string") throw new Error(`Column ${i + 1}: ${key} must be a string`);
+                }
                 const type: ColumnType = c.type === "skill" ? "skill" : "inert";
                 const maxParallel = normalizeColumnParallel(type, c.maxParallel);
                 const emoji = normalizeColumnEmoji(c.emoji);
@@ -121,6 +172,11 @@ export function startServer({ port, development, agents = true }: { port: number
                   ...(emoji !== undefined ? { emoji } : {}),
                 };
               });
+              const seen = new Set<string>();
+              for (const c of userCols) {
+                if (seen.has(c.id)) throw new Error(`Duplicate column id "${c.id}"`);
+                seen.add(c.id);
+              }
               if (userCols.filter((c) => !isDoneColumn(c)).length === 0) throw new Error("A board needs at least one column");
               const cols = ensureDoneColumn(userCols);
               const ids = new Set(cols.map((c) => c.id));
@@ -137,15 +193,17 @@ export function startServer({ port, development, agents = true }: { port: number
         POST: h((b, url) => {
           const p = project(b, url);
           const now = new Date().toISOString();
-          const columnId = b.columnId ?? p.board.columns[0]!.id;
+          const title = optString(b, "title");
+          const description = optString(b, "description");
+          const columnId = optString(b, "columnId") ?? p.board.columns[0]!.id;
           if (!p.column(columnId)) throw new Error("Unknown column");
           const id = newId("card");
           const number = p.mutate((board) => {
             const card: Card = {
               id,
               number: board.nextCardNumber,
-              title: String(b.title || "Untitled").trim(),
-              description: String(b.description ?? ""),
+              title: (title || "Untitled").trim(),
+              description: description ?? "",
               columnId,
               createdAt: now,
               updatedAt: now,
@@ -164,11 +222,13 @@ export function startServer({ port, development, agents = true }: { port: number
       "/api/cards/:id": {
         PATCH: h((b, url, req) => {
           const p = project(b, url);
+          const title = optString(b, "title");
+          const description = optString(b, "description");
           p.mutate(() => {
             const card = p.card(req.params.id!);
             if (!card) throw new Error("Unknown card");
-            if (typeof b.title === "string") card.title = b.title;
-            if (typeof b.description === "string") card.description = b.description;
+            if (title !== undefined) card.title = title;
+            if (description !== undefined) card.description = description;
             card.updatedAt = new Date().toISOString();
             p.addHistory(card, "edited", "Edited by user");
           });
@@ -184,7 +244,9 @@ export function startServer({ port, development, agents = true }: { port: number
       "/api/cards/:id/move": {
         POST: h((b, url, req) => {
           const p = project(b, url);
-          p.mutate((board) => p.moveCard(board, req.params.id!, String(b.columnId), b.index, "Moved by user"));
+          const columnId = reqString(b, "columnId");
+          if (b.index != null && !Number.isInteger(b.index)) throw new Error("index must be an integer");
+          p.mutate((board) => p.moveCard(board, req.params.id!, columnId, b.index ?? undefined, "Moved by user"));
         }),
       },
       "/api/cards/:id/retry": {
@@ -211,12 +273,11 @@ export function startServer({ port, development, agents = true }: { port: number
         GET: h((b, url, req) => orch.testLog(project(b, url), req.params.id!)),
         PUT: h((b, url, req) => {
           const p = project(b, url);
+          const command = (optString(b, "command") ?? "").trim();
+          const rawUrl = (optString(b, "url") ?? "").trim();
           p.mutate(() => {
             const card = p.card(req.params.id!);
             if (!card) throw new Error("Unknown card");
-            const command = String(b.command ?? "").trim();
-            if (b.url != null && typeof b.url !== "string") throw new Error("url must be a string");
-            const rawUrl = (b.url ?? "").trim();
             const testUrl = rawUrl ? safeHttpUrl(rawUrl) : "";
             if (testUrl === null) throw new Error("url must be an absolute http(s) URL");
             if (command) card.test = { command, ...(testUrl ? { url: testUrl } : {}) };
@@ -239,11 +300,13 @@ export function startServer({ port, development, agents = true }: { port: number
 
       "/api/skills": {
         GET: h((b, url) => listSkills(project(b, url).path)),
-        POST: h((b, url) => createSkill(project(b, url).path, String(b.name ?? ""), String(b.description ?? ""), String(b.body ?? ""))),
+        POST: h((b, url) =>
+          createSkill(project(b, url).path, reqString(b, "name"), optString(b, "description") ?? "", optString(b, "body") ?? ""),
+        ),
       },
       "/api/skill": {
         GET: h((b, url) => readSkill(project(b, url).path, url.searchParams.get("name") ?? "")),
-        PUT: h((b, url) => saveSkill(project(b, url).path, String(b.name), String(b.content))),
+        PUT: h((b, url) => saveSkill(project(b, url).path, reqString(b, "name"), reqString(b, "content"))),
       },
 
       "/ws": (req, srv) =>
