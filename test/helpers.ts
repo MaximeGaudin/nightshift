@@ -87,3 +87,30 @@ export async function waitFor(fn: () => Promise<boolean> | boolean, ms = 8000) {
   }
   throw new Error("timeout");
 }
+
+/** Opens a fresh project with a one-skill column then an inert one, and adds a card (the agent starts at once). */
+export async function addAgentCard(srv: ChildServer, title: string) {
+  const { mkdirSync, mkdtempSync, writeFileSync } = await import("node:fs");
+  mkdirSync(join(srv.skills, "enrich"), { recursive: true });
+  writeFileSync(join(srv.skills, "enrich", "SKILL.md"), "---\nname: enrich\ndescription: test\n---\n");
+  const dir = mkdtempSync(join(srv.tmp, "proj-"));
+  await srv.call("/api/projects/open", { body: { path: dir } });
+  const board = await srv
+    .call("/api/board", {
+      method: "PUT",
+      body: {
+        project: dir,
+        columns: [
+          { name: "Work", type: "skill", skill: "enrich" },
+          { name: "Done", type: "inert" },
+        ],
+      },
+    })
+    .then((r) => r.json());
+  const { id } = await srv.call("/api/cards", { body: { project: dir, columnId: board.board.columns[0].id, title } }).then((r) => r.json());
+  const card = async () => {
+    const snap = await srv.call(`/api/project?project=${encodeURIComponent(dir)}`).then((r) => r.json());
+    return snap.board.cards.find((c: { id: string }) => c.id === id);
+  };
+  return { dir, id, card };
+}

@@ -553,11 +553,22 @@ export class Orchestrator {
         if (file) writeFileSync(file, "");
       } catch {}
     }
-    this.run(job, card, column).finally(() => {
-      this.jobs.delete(job.key);
-      this.broadcast({ type: "board", project: p.path, snapshot: this.snapshot(p) });
-      this.scheduleTick();
-    });
+    this.run(job, card, column)
+      .catch((e) => {
+        // An exception inside run/finish must never become an unhandled rejection: Bun would exit the process.
+        const error = e instanceof Error ? e.message : String(e);
+        console.error(`Agent run failed for card ${card.id}:`, e);
+        try {
+          this.finish(job, "error", { error });
+        } catch (e2) {
+          console.error(`Could not record the failure of card ${card.id}:`, e2);
+        }
+      })
+      .finally(() => {
+        this.jobs.delete(job.key);
+        this.broadcast({ type: "board", project: p.path, snapshot: this.snapshot(p) });
+        this.scheduleTick();
+      });
   }
 
   private async run(job: Job, card: Card, column: Column) {

@@ -117,6 +117,7 @@ if (title === "no-output" && !resumed) {
       description: "done by fake",
       move: "next",
       summary: "fake run",
+      ...(title === "bad-url" ? { test: { command: "echo hi", url: 123 } } : {}),
       ...(title === "with-test" ? { test: { command: "echo hello-from-test; sleep 30", url: "http://localhost:9999" } } : {}),
     },
   });
