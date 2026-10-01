@@ -177,3 +177,14 @@ button.add-card:hover:not(:disabled) { color: var(--text); }
 }
 .done-head { cursor: pointer; }
 .done-chevron { display: inline-block; width: 1em; color: var(--muted, inherit); }
+
+/* ---------- Run progress ---------- */
+.run-progress { display: flex; flex-direction: column; gap: var(--sp-1); margin-top: var(--sp-2); min-width: 0; }
+.run-progress-head {
+  display: flex; align-items: baseline; gap: var(--sp-2); min-width: 0;
+  font-size: var(--fs-xs); color: var(--muted);
+}
+.run-progress-step { flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.run-progress-label { min-width: 0; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.run-progress-bar { height: 4px; border-radius: 99px; background: var(--border); overflow: hidden; }
+.run-progress-fill { height: 100%; background: var(--accent); border-radius: 99px; transition: width var(--dur); }
