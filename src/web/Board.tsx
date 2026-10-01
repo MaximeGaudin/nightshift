@@ -7,9 +7,11 @@ import {
   type DragOverEvent,
   DragOverlay,
   type DragStartEvent,
+  type KeyboardCoordinateGetter,
   KeyboardSensor,
   PointerSensor,
   pointerWithin,
+  type UniqueIdentifier,
   useDroppable,
   useSensor,
   useSensors,
@@ -34,6 +36,7 @@ import {
   cardsByColumn,
   type DropOver,
   hoverPosition,
+  isColumnSection,
   type LocalOrder,
   localCards,
   localColumnOf,
@@ -75,6 +78,20 @@ const collide: CollisionDetection = (args) => {
   const rect = nearest ? args.droppableRects.get(nearest.id) : undefined;
   if (!nearest || !rect || args.pointerCoordinates.y > rect.top + rect.height) return [column];
   return [nearest];
+};
+
+/** Wide columns with cards are reached through their cards: hiding their sections stops an arrow press landing on the own column. */
+const keyboardCoordinates: KeyboardCoordinateGetter = (event, args) => {
+  const all = args.context.droppableContainers;
+  const keep = (c: { data: { current?: { type?: string } } } | undefined) => c !== undefined && !isColumnSection(c.data.current?.type);
+  const droppableContainers = {
+    getEnabled: () => all.getEnabled().filter(keep),
+    get: (id: UniqueIdentifier) => {
+      const c = all.get(id);
+      return keep(c) ? c : undefined;
+    },
+  } as typeof all;
+  return sortableKeyboardCoordinates(event, { ...args, context: { ...args.context, droppableContainers } });
 };
 
 function SortableCard({ card, render }: { card: Card; render: (card: Card, extra: TileExtra) => ReactNode }) {
@@ -144,7 +161,7 @@ export function Board({
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
+      coordinateGetter: keyboardCoordinates,
       // Space starts, moves with the arrows, drops; Enter keeps opening the card.
       keyboardCodes: { start: ["Space"], cancel: ["Escape"], end: ["Space"] },
     }),

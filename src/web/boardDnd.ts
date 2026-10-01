@@ -64,7 +64,12 @@ export function snapshotOrder(columns: Column[], cards: Card[]): LocalOrder {
  * With `movingId`, only that card keeps its local column: any other card a snapshot moved elsewhere leaves the local list and
  * joins its new column at the end.
  */
-export function cardsByColumn(columns: Column[], cards: Card[], local: LocalOrder | null, movingId?: string | null): Record<string, Card[]> {
+export function cardsByColumn(
+  columns: Column[],
+  cards: Card[],
+  local: LocalOrder | null,
+  movingId?: string | null,
+): Record<string, Card[]> {
   const server = Object.fromEntries(columns.map((col) => [col.id, cards.filter((c) => c.columnId === col.id)]));
   if (!local) return server;
   const byId = new Map(cards.map((c) => [c.id, c]));
@@ -123,10 +128,14 @@ export function hoverPosition(
   activeId: string,
   over: DropOver,
 ): { columnId: string; position: number } | null {
-  const columnId =
-    over.kind === "card" ? Object.keys(shown).find((id) => shown[id]?.some((c) => c.id === over.cardId)) : over.columnId;
+  const columnId = over.kind === "card" ? Object.keys(shown).find((id) => shown[id]?.some((c) => c.id === over.cardId)) : over.columnId;
   if (!columnId) return null;
   const list = shown[columnId] ?? [];
   const index = over.kind === "card" ? list.findIndex((c) => c.id === over.cardId) : list.filter((c) => c.id !== activeId).length;
   return { columnId, position: Math.max(0, index) + 1 };
+}
+
+/** Droppable type of a wide column that holds cards (its cards are the keyboard targets, not the section itself). */
+export function isColumnSection(type: string | undefined): boolean {
+  return type === "column";
 }

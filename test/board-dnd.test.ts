@@ -1,6 +1,16 @@
 import { expect, test } from "bun:test";
 import type { Card, Column } from "../src/shared/types.ts";
-import { applyDrop, cardsByColumn, hoverPosition, localCards, localColumnOf, moveLocal, resolveDrop, snapshotOrder } from "../src/web/boardDnd.ts";
+import {
+  applyDrop,
+  cardsByColumn,
+  hoverPosition,
+  isColumnSection,
+  localCards,
+  localColumnOf,
+  moveLocal,
+  resolveDrop,
+  snapshotOrder,
+} from "../src/web/boardDnd.ts";
 
 const col = (id: string, type: Column["type"] = "inert"): Column => ({ id, name: id, type }) as Column;
 const columns = [col("X"), col("Y"), col("Z"), col("col_done")];
@@ -93,4 +103,11 @@ test("board-dnd-hover-position-follows-local-order", () => {
   expect(hoverPosition(shown, "A", onCol("Y"))).toEqual({ columnId: "Y", position: 3 });
   expect(hoverPosition(shown, "A", onCol("Z"))).toEqual({ columnId: "Z", position: 1 });
   expect(hoverPosition(shown, "A", onCard("ghost"))).toBeNull();
+});
+
+test("board-dnd-keyboard-skips-column-sections", () => {
+  expect(isColumnSection("column")).toBe(true);
+  expect(isColumnSection("card")).toBe(false);
+  expect(isColumnSection("column-empty")).toBe(false);
+  expect(isColumnSection(undefined)).toBe(false);
 });
