@@ -42,3 +42,14 @@ test("settings-dirty: only editable fields count as unsaved changes", () => {
   expect(settingsDirty(base, { ...base, model: "opus" })).toBe(true);
   expect(settingsDirty(base, { ...base, soundNotifications: true })).toBe(true);
 });
+
+test("language-switch-ui: Settings shows the Language select with Auto / English / Français and the stored value", async () => {
+  const { languageOptions } = await import("../src/web/SettingsModal.tsx");
+  expect(languageOptions().map((o) => o.label)).toEqual(["Auto", "English", "Français"]);
+  const html = render({ ...base, language: "en" });
+  expect(html).toContain('id="set-language"');
+  expect(html).toContain("Langue");
+  expect(html).toMatch(/id="set-language"[^>]*>.*?<span[^>]*>English<\/span>/s);
+  expect(render({ ...base, language: "auto" })).toMatch(/id="set-language"[^>]*>.*?<span[^>]*>Auto<\/span>/s);
+  expect(settingsDirty(base, { ...base, language: "fr" })).toBe(true);
+});

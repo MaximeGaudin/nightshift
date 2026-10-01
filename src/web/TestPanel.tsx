@@ -7,6 +7,7 @@ import { Button } from "./components/ui/button.tsx";
 import { Input } from "./components/ui/input.tsx";
 import { Label } from "./components/ui/label.tsx";
 import { Textarea } from "./components/ui/textarea.tsx";
+import { formatTime, useT } from "./i18n/index.ts";
 import { notifyError } from "./notify.ts";
 
 /** Runs the card's test command (set by an agent, editable here) and streams its output. */
@@ -21,6 +22,7 @@ export function TestPanel({
   running: boolean;
   onError: (message: string) => void;
 }) {
+  const { t } = useT();
   const linkUrl = safeHttpUrl(card.test?.url);
   const [editing, setEditing] = useState(false);
   const [command, setCommand] = useState(card.test?.command ?? "");
@@ -66,7 +68,7 @@ export function TestPanel({
         className="test-add shrink-0 self-start border-dashed text-muted-foreground"
         onClick={() => setEditing(true)}
       >
-        + Commande de test
+        {t("card.test.add")}
       </Button>
     );
   }
@@ -80,10 +82,10 @@ export function TestPanel({
           guard(api.setTest(project, card.id, command, url).then(() => setEditing(false)));
         }}
       >
-        <strong className="text-[13px] font-semibold">Commande de test</strong>
+        <strong className="text-[13px] font-semibold">{t("card.test.title")}</strong>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="test-command" className="self-start">
-            Commande (lancée avec sh -c depuis le dossier du projet)
+            {t("card.test.commandLabel")}
           </Label>
           <Textarea
             id="test-command"
@@ -95,15 +97,15 @@ export function TestPanel({
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="test-url" className="self-start">
-            URL (optionnel)
+            {t("card.test.urlLabel")}
           </Label>
           <Input id="test-url" value={url} placeholder="http://localhost:4546" onChange={(e) => setUrl(e.target.value)} />
         </div>
         <div className="flex items-center justify-end gap-2">
           <Button type="button" variant="outline" onClick={() => setEditing(false)}>
-            Annuler
+            {t("common.cancel")}
           </Button>
-          <Button type="submit">Enregistrer</Button>
+          <Button type="submit">{t("common.save")}</Button>
         </div>
       </form>
     );
@@ -112,15 +114,15 @@ export function TestPanel({
   return (
     <div className="test-panel flex shrink-0 flex-col gap-2 rounded-md border bg-card p-3">
       <div className="flex items-center gap-2">
-        <strong className="text-[13px] font-semibold">Tester</strong>
+        <strong className="text-[13px] font-semibold">{t("card.test.run")}</strong>
         {running && <Loader2 className="animate-spin text-muted-foreground" aria-hidden />}
         <div className="flex-1" />
         <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(true)} disabled={running}>
-          Modifier
+          {t("card.test.edit")}
         </Button>
         {running ? (
           <Button type="button" variant="outline" size="sm" onClick={() => guard(api.stopTest(project, card.id))}>
-            Arrêter
+            {t("card.test.stop")}
           </Button>
         ) : (
           <Button
@@ -131,7 +133,7 @@ export function TestPanel({
               guard(api.startTest(project, card.id));
             }}
           >
-            Lancer
+            {t("card.test.start")}
           </Button>
         )}
       </div>
@@ -149,7 +151,7 @@ export function TestPanel({
           className="test-toggle cursor-pointer self-start text-xs text-muted-foreground hover:text-foreground"
           onClick={() => setShowOutput((s) => !s)}
         >
-          {showOutput ? "Masquer la sortie" : "Afficher la sortie"}
+          {showOutput ? t("card.test.hideOutput") : t("card.test.showOutput")}
         </button>
       )}
       {showOutput && lines.length > 0 && (
@@ -160,7 +162,7 @@ export function TestPanel({
           {lines.map((l, i) => (
             // biome-ignore lint/suspicious/noArrayIndexKey: output lines have no id and the list only grows at its end
             <div key={i} className={`log-line grid grid-cols-[70px_minmax(0,1fr)] gap-3 py-px ${l.kind}`}>
-              <time className="text-muted-foreground tabular-nums">{new Date(l.at).toLocaleTimeString("fr-FR")}</time>
+              <time className="text-muted-foreground tabular-nums">{formatTime(l.at)}</time>
               <span
                 className={`break-words whitespace-pre-wrap ${l.kind === "error" ? "text-err" : l.kind === "info" ? "text-muted-foreground" : l.kind === "tool" ? "text-primary" : ""}`}
               >

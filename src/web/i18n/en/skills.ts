@@ -1,1 +1,26 @@
-export const skills = {} as const;
+export const skills = {
+  "skills.create.template":
+    "You receive a kanban card (title + description).\n\n1. Read the card.\n2. Do the requested work.\n3. Update the description with the result.\n4. Send the card to the next column.",
+  "skills.create.title": "New skill",
+  "skills.create.descriptionBefore": "The skill will be created in",
+  "skills.create.nameToken": "name",
+  "skills.create.descriptionAfter": "in the project (committable).",
+  "skills.create.submit": "Create",
+  "skills.create.nameLabel": "Name (lowercase, digits, dashes)",
+  "skills.create.namePlaceholder": "e.g. write-spec",
+  "skills.create.descriptionLabel": "Description (when to use it)",
+  "skills.create.bodyLabel": "Instructions",
+  "skills.discardChanges": "Discard unsaved changes?",
+  "skills.title": "Skills",
+  "skills.description": "Reusable instructions that columns hand to agents.",
+  "skills.new": "New skill (project)",
+  "skills.searchLabel": "Search a skill",
+  "skills.searchPlaceholder": "Search…",
+  "skills.empty": "No skill yet. Create one with “New skill”.",
+  "skills.noMatch": "No skill matches the search.",
+  "skills.scopeProject": "project",
+  "skills.scopeUser": "user",
+  "skills.userScopeNote": " · user skill, shared by all your projects",
+  "skills.contentLabel": "Content of skill {name}",
+  "skills.pick": "Pick a skill to edit, or create a new one.",
+} as const;

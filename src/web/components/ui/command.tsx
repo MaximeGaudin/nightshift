@@ -3,6 +3,7 @@ import { SearchIcon } from "lucide-react";
 import type * as React from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { useT } from "../../i18n/index.ts";
 
 function Command({ className, ...props }: React.ComponentProps<typeof CommandPrimitive>) {
   return (
@@ -15,16 +16,17 @@ function Command({ className, ...props }: React.ComponentProps<typeof CommandPri
 }
 
 function CommandDialog({
-  title = "Palette de commandes",
-  description = "Rechercher une commande ou une carte",
+  title,
+  description,
   children,
   ...props
 }: React.ComponentProps<typeof Dialog> & { title?: string; description?: string }) {
+  const { t } = useT();
   return (
     <Dialog {...props}>
       <DialogHeader className="sr-only">
-        <DialogTitle>{title}</DialogTitle>
-        <DialogDescription>{description}</DialogDescription>
+        <DialogTitle>{title ?? t("palette.title")}</DialogTitle>
+        <DialogDescription>{description ?? t("palette.dialogDescription")}</DialogDescription>
       </DialogHeader>
       <DialogContent className="overflow-hidden p-0" showCloseButton={false}>
         <Command className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group]]:px-1 [&_[cmdk-input-wrapper]_svg]:size-3.5 [&_[cmdk-input]]:h-9 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-1.5">

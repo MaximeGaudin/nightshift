@@ -23,6 +23,7 @@ import { Skeleton } from "./components/ui/skeleton.tsx";
 import { Tabs, TabsList, TabsTrigger } from "./components/ui/tabs.tsx";
 import { Textarea } from "./components/ui/textarea.tsx";
 import { FeedbackForm } from "./FeedbackForm.tsx";
+import { formatTime, useT } from "./i18n/index.ts";
 import { StatusIcon } from "./icons.tsx";
 import { cn } from "./lib/utils.ts";
 import { Markdown } from "./markdown.tsx";
@@ -99,6 +100,7 @@ export type CardDraft = ReturnType<typeof useCardDraft>;
 
 export function CardModal(props: CardModalProps) {
   const { project, card, board, live, sequential, onClose, onError } = props;
+  const { t } = useT();
   const draft = useCardDraft(project, card);
   const column = board.columns.find((c) => c.id === card.columnId);
   return (
@@ -106,7 +108,7 @@ export function CardModal(props: CardModalProps) {
       size="xl"
       title={
         <span>
-          Fiche <CopyRef card={card} /> {sequential && <SequenceBadge />}{" "}
+          {t("card.heading")} <CopyRef card={card} /> {sequential && <SequenceBadge />}{" "}
           <span className="font-normal text-muted-foreground">
             · {column && columnEmoji(column) ? `${columnEmoji(column)} ` : ""}
             {column?.name}
@@ -115,7 +117,7 @@ export function CardModal(props: CardModalProps) {
       }
       onClose={() => {
         // The card closes at once; a failed save is shown in the application banner, not lost silently.
-        if (draft.dirty) void attempt(draft.saveOrThrow(), (m) => onError(`Enregistrement de la fiche échoué : ${m}`));
+        if (draft.dirty) void attempt(draft.saveOrThrow(), (m) => onError(t("card.saveFailed", { message: m })));
         onClose();
       }}
       footer={<CardModalFooter project={project} card={card} board={board} live={live} draft={draft} onClose={onClose} />}
@@ -140,6 +142,7 @@ function CardModalFooter({
   draft: CardDraft;
   onClose: () => void;
 }) {
+  const { t } = useT();
   const column = board.columns.find((c) => c.id === card.columnId);
   const lr = card.lastRun;
   const guard = (p: Promise<unknown>) => void attempt(p, notifyError);
@@ -150,15 +153,15 @@ function CardModalFooter({
         variant="outline"
         className="text-err hover:text-err"
         onClick={() => {
-          if (confirm("Supprimer cette fiche ?")) void deleteThenClose(api.deleteCard(project, card.id), onClose, notifyError);
+          if (confirm(t("card.confirmDelete"))) void deleteThenClose(api.deleteCard(project, card.id), onClose, notifyError);
         }}
       >
-        Supprimer
+        {t("common.delete")}
       </Button>
       <div className="flex-1" />
       {live === "running" && (
         <Button type="button" variant="outline" onClick={() => guard(api.cancel(project, card.id))}>
-          Arrêter l'agent
+          {t("card.stopAgent")}
         </Button>
       )}
       {column?.type === "skill" &&
@@ -166,18 +169,13 @@ function CardModalFooter({
         lr?.sessionId &&
         lr.columnId === card.columnId &&
         (lr.status === "error" || lr.status === "cancelled") && (
-          <Button
-            type="button"
-            variant="outline"
-            title="Reprend la même session Claude : l'agent vérifie où il en était et termine, sans tout recommencer."
-            onClick={() => guard(api.resumeSession(project, card.id))}
-          >
-            Reprendre la session
+          <Button type="button" variant="outline" title={t("card.resumeHint")} onClick={() => guard(api.resumeSession(project, card.id))}>
+            {t("card.resume")}
           </Button>
         )}
       {column?.type === "skill" && live !== "running" && (
         <Button type="button" variant="outline" onClick={() => guard(api.retry(project, card.id))}>
-          {lr?.columnId === card.columnId ? "Relancer" : "Lancer"}
+          {lr?.columnId === card.columnId ? t("card.rerun") : t("card.run")}
         </Button>
       )}
       <NextColumnButton
@@ -189,7 +187,7 @@ function CardModalFooter({
         live={live}
       />
       <Button type="button" disabled={!draft.dirty} onClick={() => guard(draft.saveOrThrow())}>
-        Enregistrer
+        {t("common.save")}
       </Button>
     </>
   );
@@ -214,6 +212,7 @@ export function CardModalContent({
   draft: CardDraft;
 }) {
   const { title, setTitle, description, setDescription, dirty } = draft;
+  const { t, tn } = useT();
   const [log, setLog] = useState<LogLine[]>([]);
   const [logLoaded, setLogLoaded] = useState(false);
   const [tab, setTab] = useState<"log" | "history" | "time">("log");
@@ -272,19 +271,19 @@ export function CardModalContent({
       <div className="card-edit flex min-h-0 min-w-0 flex-col gap-3">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="card-title" className="self-start">
-            Titre
+            {t("card.titleLabel")}
           </Label>
           <Input id="card-title" value={title} onChange={(e) => setTitle(e.target.value)} />
         </div>
         <div className="card-desc flex min-h-[220px] min-w-0 flex-1 flex-col gap-1.5">
           <div className="flex items-center justify-between gap-3">
             <span id="card-desc-label" className="text-xs font-medium text-muted-foreground">
-              Description
+              {t("card.descriptionLabel")}
             </span>
             <Tabs value={descMode} onValueChange={(v) => (v === "edit" ? editDescription() : setDescMode("preview"))}>
               <TabsList aria-labelledby="card-desc-label">
-                <TabsTrigger value="preview">Aperçu</TabsTrigger>
-                <TabsTrigger value="edit">Modifier</TabsTrigger>
+                <TabsTrigger value="preview">{t("card.preview")}</TabsTrigger>
+                <TabsTrigger value="edit">{t("card.edit")}</TabsTrigger>
               </TabsList>
             </Tabs>
           </div>
@@ -292,7 +291,7 @@ export function CardModalContent({
             <Textarea
               ref={descRef}
               className="card-desc-body min-h-0 min-w-0 flex-1 resize-none font-mono leading-relaxed"
-              aria-label="Description (markdown)"
+              aria-label={t("card.descriptionMarkdown")}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               spellCheck
@@ -303,22 +302,20 @@ export function CardModalContent({
               role="tabpanel"
               // biome-ignore lint/a11y/noNoninteractiveTabindex: the scrollable preview must be reachable by keyboard
               tabIndex={0}
-              title="Double-cliquer pour modifier"
+              title={t("card.doubleClickEdit")}
               onDoubleClick={editDescription}
             >
               {description.trim() ? (
                 <Markdown source={description} renderImage={renderCardImage(project, card.id)} />
               ) : (
-                <p className="text-muted-foreground">Aucune description. Double-cliquer pour en écrire une.</p>
+                <p className="text-muted-foreground">{t("card.noDescription")}</p>
               )}
             </div>
           )}
         </div>
         {live === "running" && dirty && (
           <Alert variant="warn" className="hint warn">
-            <AlertDescription>
-              Un agent travaille sur cette fiche : son résultat écrasera vos modifications non enregistrées.
-            </AlertDescription>
+            <AlertDescription>{t("card.agentOverwriteWarning")}</AlertDescription>
           </Alert>
         )}
       </div>
@@ -344,9 +341,9 @@ export function CardModalContent({
           >
             <strong className="question-head flex items-center gap-2 font-semibold">
               <StatusIcon status="question" />
-              L'agent a {lr.questions?.length ?? 0} question{(lr.questions?.length ?? 0) > 1 ? "s" : ""}
+              {tn("card.agentQuestions", lr.questions?.length ?? 0)}
             </strong>
-            <p className="hint small m-0 text-xs text-muted-foreground">Une réponse vide laisse l'agent décider.</p>
+            <p className="hint small m-0 text-xs text-muted-foreground">{t("card.emptyAnswerHint")}</p>
             {(lr.questions ?? []).map((q, i) => (
               // biome-ignore lint/suspicious/noArrayIndexKey: questions have no id; the answers are positional (answers[i])
               <div key={i} className="qa flex flex-col gap-2">
@@ -355,11 +352,11 @@ export function CardModalContent({
                   <Markdown source={q} className="min-w-0 flex-1" />
                 </div>
                 <Textarea
-                  aria-label={`Réponse à la question ${i + 1}`}
+                  aria-label={t("card.answerLabel", { number: i + 1 })}
                   autoFocus={i === 0}
                   className="min-h-14"
                   value={answers[i] ?? ""}
-                  placeholder="Votre réponse… (⌘+Entrée pour tout envoyer)"
+                  placeholder={t("card.answerPlaceholder")}
                   onChange={(e) => setAnswers((a) => Object.assign([...a], { [i]: e.target.value }))}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) e.currentTarget.form?.requestSubmit();
@@ -368,7 +365,7 @@ export function CardModalContent({
               </div>
             ))}
             <Button className="self-end" type="submit" disabled={!answers.some((a) => a?.trim())}>
-              Répondre et reprendre
+              {t("card.answerAndResume")}
             </Button>
           </form>
         )}
@@ -376,7 +373,7 @@ export function CardModalContent({
           <div className={cn("last-run min-w-0 shrink-0 rounded-md border bg-card p-3", LAST_RUN_TONE[lr.status], `st-${lr.status}`)}>
             <div className="last-run-head flex min-w-0 items-center gap-2">
               <StatusIcon status={lr.status} />
-              <strong className="font-semibold">Dernier run</strong>
+              <strong className="font-semibold">{t("card.lastRun")}</strong>
               <span className="truncate text-muted-foreground">
                 · {board.columns.find((c) => c.id === lr.columnId)?.name ?? "?"} · {timeAgo(lr.at)}
               </span>
@@ -386,12 +383,12 @@ export function CardModalContent({
             <div className="last-run-meta mt-2 text-xs text-muted-foreground">
               {lr.costUsd !== undefined && (
                 <>
-                  Coût : ${lr.costUsd.toFixed(3)}
+                  {t("card.cost", { amount: `$${lr.costUsd.toFixed(3)}` })}
                   {lr.sessionId ? " · " : ""}
                 </>
               )}
               {lr.sessionId && (
-                <span title="Reprendre la session dans un terminal">
+                <span title={t("card.resumeInTerminal")}>
                   <code className="font-mono text-[11px]">claude -r {lr.sessionId}</code>
                 </span>
               )}
@@ -402,9 +399,11 @@ export function CardModalContent({
         <TestPanel project={project} card={card} running={testing} onError={notifyError} />
         <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)} className="shrink-0">
           <TabsList>
-            <TabsTrigger value="log">Journal agent {live === "running" && <Loader2 className="animate-spin" aria-hidden />}</TabsTrigger>
-            <TabsTrigger value="history">Historique</TabsTrigger>
-            <TabsTrigger value="time">Temps</TabsTrigger>
+            <TabsTrigger value="log">
+              {t("card.tabLog")} {live === "running" && <Loader2 className="animate-spin" aria-hidden />}
+            </TabsTrigger>
+            <TabsTrigger value="history">{t("card.tabHistory")}</TabsTrigger>
+            <TabsTrigger value="time">{t("card.tabTime")}</TabsTrigger>
           </TabsList>
         </Tabs>
         {tab === "log" && <RunProgress progress={progress} live={live} />}
@@ -416,12 +415,12 @@ export function CardModalContent({
             log.length ? (
               log.map((l, i) => (
                 // biome-ignore lint/suspicious/noArrayIndexKey: log lines have no id and the list only grows at its end
-                <LogRow key={i} kind={l.kind} time={new Date(l.at).toLocaleTimeString("fr-FR")} text={l.text} />
+                <LogRow key={i} kind={l.kind} time={formatTime(l.at)} text={l.text} />
               ))
             ) : !logLoaded ? (
               <LogSkeleton />
             ) : (
-              <p className="m-0 font-sans text-muted-foreground">Aucun run pour cette fiche.</p>
+              <p className="m-0 font-sans text-muted-foreground">{t("card.noRun")}</p>
             )
           ) : tab === "time" ? (
             <TimePanel card={card} board={board} />
@@ -460,6 +459,7 @@ function LogRow({ kind, time, text }: { kind: string; time: string; text: string
 
 /** Card ref shown as muted text; click copies it and briefly confirms. Clipboard failures stay silent. */
 function CopyRef({ card }: { card: Card }) {
+  const { t } = useT();
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const mounted = useRef(true);
@@ -487,13 +487,13 @@ function CopyRef({ card }: { card: Card }) {
     <button
       type="button"
       className="card-ref-copy cursor-pointer rounded-sm px-0.5 font-normal text-muted-foreground tabular-nums hover:text-foreground hover:underline"
-      title="Copier la référence"
+      title={t("card.copyRef")}
       onClick={(e) => {
         e.stopPropagation();
         void copy();
       }}
     >
-      {copied ? "Copié" : ref}
+      {copied ? t("card.copied") : ref}
     </button>
   );
 }

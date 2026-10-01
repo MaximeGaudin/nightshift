@@ -1,3 +1,43 @@
-import type { settings as ensettings } from "../en/settings.ts";
+import type { settings as enSettings } from "../en/settings.ts";
 
-export const settings: Record<keyof typeof ensettings, string> = {};
+export const settings: Record<keyof typeof enSettings, string> = {
+  "settings.title": "Réglages",
+  "settings.description": "Préférences globales, communes à tous vos projets.",
+  "settings.interface.title": "Interface",
+  "settings.interface.description": "Apparence et langue de Nightshift.",
+  "settings.language.label": "Langue",
+  "settings.language.help": "Auto suit la langue du navigateur.",
+  "settings.language.auto": "Auto",
+  "settings.agents.title": "Agents",
+  "settings.agents.description": "Combien d'agents peuvent tourner en même temps, et comment vous êtes prévenu.",
+  "settings.maxParallel.label": "Plafond global d'agents en parallèle",
+  "settings.maxParallel.help":
+    "Tous projets confondus. La limite se règle par colonne ; ce plafond empêche seulement d'en lancer trop au total.",
+  "settings.sound.label": "Sons de notification",
+  "settings.sound.help":
+    "Joue un son quand une carte a besoin de vous (colonne inerte, question, erreur). Le navigateur exige un premier clic sur la page.",
+  "settings.claude.title": "Claude",
+  "settings.claude.description": "Comment Claude Code est lancé pour chaque carte.",
+  "settings.permission.label": "Mode de permission de Claude Code",
+  "settings.permission.help": "Contrôle ce que les agents ont le droit de faire sans confirmation.",
+  "settings.permission.auto": "auto — un classifieur autorise ou refuse chaque action (recommandé)",
+  "settings.permission.acceptEdits": "acceptEdits — édite les fichiers, refuse les commandes non autorisées",
+  "settings.permission.dontAsk": "dontAsk — refuse tout ce qui n'est pas pré-autorisé",
+  "settings.permission.bypassPermissions": "bypassPermissions — tout autorisé (risqué)",
+  "settings.permission.plan": "plan — lecture seule",
+  "settings.permission.bypassWarning":
+    "Les agents pourront exécuter n'importe quelle commande dans le dossier du projet sans confirmation.",
+  "settings.model.label": "Modèle par défaut",
+  "settings.model.help": "S'applique aux colonnes sans modèle propre. Vide = défaut du CLI claude.",
+  "settings.model.placeholder": "ex. sonnet, opus",
+  "settings.claudePath.label": "Commande claude",
+  "settings.extraArgs.label": "Arguments supplémentaires",
+  "settings.extraArgs.placeholder": 'ex. --allowedTools "Bash(git *)" --max-budget-usd 2',
+  "settings.recent.title": "Projets récents",
+  "settings.recent.description": "Projets ouverts récemment. Ouvrir l'un d'eux remplace le tableau affiché.",
+  "settings.recent.empty": "Aucun projet récent pour le moment.",
+  "settings.recent.current": "Projet courant",
+  "settings.recent.open": "Ouvrir",
+  "settings.footnote": "Réglages globaux, stockés dans ~/.nightshift/settings.json.",
+  "settings.discardChanges": "Abandonner les modifications non enregistrées ?",
+};

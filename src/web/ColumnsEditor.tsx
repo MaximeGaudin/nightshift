@@ -16,19 +16,20 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrig
 import { Skeleton } from "./components/ui/skeleton.tsx";
 import { Textarea } from "./components/ui/textarea.tsx";
 import { usePrefersReducedMotion } from "./hooks/use-reduced-motion.ts";
+import { useT } from "./i18n/index.ts";
 import { ColumnGlyph } from "./icons.tsx";
 import { notifyError } from "./notify.ts";
 
-const EMOJI_TITLE = "Emoji optionnel — tapez ou collez-en un (macOS : Ctrl+Cmd+Espace). Vide = icône de type.";
 const NO_SKILL = "__none__";
 
 function EmojiInput({ value, onChange }: { value: string | undefined; onChange: (v: string) => void }) {
+  const { t } = useT();
   return (
     <Input
       className="col-emoji-input h-[30px] w-10 shrink-0 px-0 text-center"
-      aria-label="Emoji"
+      aria-label={t("columns.emoji")}
       placeholder="·"
-      title={EMOJI_TITLE}
+      title={t("columns.emojiHint")}
       value={value ?? ""}
       onChange={(e) => onChange(e.target.value)}
     />
@@ -60,6 +61,7 @@ type RowProps = {
 };
 
 function SortableColumnRow({ col, skills, skillsLoading, cardCount, reducedMotion, onPatch, onRemove }: RowProps) {
+  const { t } = useT();
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: col.key });
   const [open, setOpen] = useState(false);
   const isSkill = col.type === "skill";
@@ -78,7 +80,7 @@ function SortableColumnRow({ col, skills, skillsLoading, cardCount, reducedMotio
         <div className="col-editor-row flex flex-wrap items-center gap-2 px-2 py-1.5">
           <IconButton
             ref={setActivatorNodeRef}
-            label={`Réordonner la colonne ${col.name}`}
+            label={t("columns.reorder", { name: col.name })}
             className="cursor-grab touch-none text-muted-foreground active:cursor-grabbing"
             {...attributes}
             {...listeners}
@@ -89,14 +91,19 @@ function SortableColumnRow({ col, skills, skillsLoading, cardCount, reducedMotio
             <ColumnGlyph col={col} />
           </span>
           <EmojiInput value={col.emoji} onChange={(v) => onPatch({ emoji: v })} />
-          <Input aria-label="Nom" className="min-w-32 flex-1" value={col.name} onChange={(e) => onPatch({ name: e.target.value })} />
+          <Input
+            aria-label={t("columns.name")}
+            className="min-w-32 flex-1"
+            value={col.name}
+            onChange={(e) => onPatch({ name: e.target.value })}
+          />
           <Select value={col.type} onValueChange={(v) => onPatch({ type: v as Column["type"] })}>
-            <SelectTrigger aria-label="Type" className="w-24">
+            <SelectTrigger aria-label={t("columns.type")} className="w-24">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="inert">Inerte</SelectItem>
-              <SelectItem value="skill">Skill</SelectItem>
+              <SelectItem value="inert">{t("columns.typeInert")}</SelectItem>
+              <SelectItem value="skill">{t("columns.typeSkill")}</SelectItem>
             </SelectContent>
           </Select>
           {isSkill &&
@@ -104,18 +111,18 @@ function SortableColumnRow({ col, skills, skillsLoading, cardCount, reducedMotio
               <Skeleton className="h-[30px] w-40" />
             ) : (
               <Select value={col.skill || NO_SKILL} onValueChange={(v) => onPatch({ skill: v === NO_SKILL ? "" : v })}>
-                <SelectTrigger aria-label="Skill" className="w-44">
+                <SelectTrigger aria-label={t("columns.skill")} className="w-44">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={NO_SKILL}>— choisir un skill —</SelectItem>
-                  {col.skill && !skill && <SelectItem value={col.skill}>{col.skill} (introuvable)</SelectItem>}
+                  <SelectItem value={NO_SKILL}>{t("columns.chooseSkill")}</SelectItem>
+                  {col.skill && !skill && <SelectItem value={col.skill}>{t("columns.skillMissing", { name: col.skill })}</SelectItem>}
                   {(["project", "user"] as const).map((scope) => {
                     const scoped = skills.filter((s) => s.scope === scope);
                     if (scoped.length === 0) return null;
                     return (
                       <SelectGroup key={scope}>
-                        <SelectLabel>{scope === "project" ? "Skills du projet" : "Skills utilisateur"}</SelectLabel>
+                        <SelectLabel>{scope === "project" ? t("columns.projectSkills") : t("columns.userSkills")}</SelectLabel>
                         {scoped.map((s) => (
                           <SelectItem key={s.name} value={s.name}>
                             {s.name}
@@ -130,8 +137,8 @@ function SortableColumnRow({ col, skills, skillsLoading, cardCount, reducedMotio
           {isSkill && (
             <Input
               type="number"
-              aria-label="Agents en parallèle"
-              title="Agents en parallèle dans cette colonne. Vide = 1. Le plafond global des réglages s'applique toujours."
+              aria-label={t("columns.parallel")}
+              title={t("columns.parallelHint")}
               className="w-20"
               min={1}
               max={MAX_PARALLEL}
@@ -144,14 +151,14 @@ function SortableColumnRow({ col, skills, skillsLoading, cardCount, reducedMotio
           <div className="ml-auto flex items-center gap-0.5">
             {isSkill && (
               <CollapsibleTrigger asChild>
-                <Button type="button" variant="ghost" size="sm" aria-label="Détails" aria-expanded={open}>
-                  Détails
+                <Button type="button" variant="ghost" size="sm" aria-label={t("columns.details")} aria-expanded={open}>
+                  {t("columns.details")}
                   <ChevronDown className={`transition-transform duration-150 ${open ? "rotate-180" : ""}`} aria-hidden="true" />
                 </Button>
               </CollapsibleTrigger>
             )}
             <IconButton
-              label={cardCount > 0 ? "Videz la colonne avant de la supprimer" : "Supprimer"}
+              label={cardCount > 0 ? t("columns.emptyBeforeDelete") : t("common.delete")}
               disabled={cardCount > 0}
               onClick={onRemove}
             >
@@ -164,22 +171,22 @@ function SortableColumnRow({ col, skills, skillsLoading, cardCount, reducedMotio
             <div className="grid gap-3 border-t px-3 py-3 sm:grid-cols-2">
               {skill?.description && <p className="text-xs text-muted-foreground sm:col-span-2">{skill.description}</p>}
               <div className="grid gap-1.5">
-                <Label htmlFor={`model-${col.key}`}>Modèle</Label>
+                <Label htmlFor={`model-${col.key}`}>{t("columns.model")}</Label>
                 <Input
                   id={`model-${col.key}`}
                   list="column-models"
-                  placeholder="Réglage global"
+                  placeholder={t("columns.modelPlaceholder")}
                   value={col.model ?? ""}
                   onChange={(e) => onPatch({ model: e.target.value })}
                 />
-                <p className="text-xs text-muted-foreground">Vide = modèle des réglages globaux.</p>
+                <p className="text-xs text-muted-foreground">{t("columns.modelHint")}</p>
               </div>
               <div className="grid gap-1.5 sm:col-span-2">
-                <Label htmlFor={`instructions-${col.key}`}>Instructions</Label>
+                <Label htmlFor={`instructions-${col.key}`}>{t("columns.instructions")}</Label>
                 <Textarea
                   id={`instructions-${col.key}`}
                   className="instructions min-h-20"
-                  placeholder="Instructions additionnelles pour l'agent (optionnel)…"
+                  placeholder={t("columns.instructionsPlaceholder")}
                   value={col.instructions ?? ""}
                   onChange={(e) => onPatch({ instructions: e.target.value })}
                 />
@@ -193,6 +200,7 @@ function SortableColumnRow({ col, skills, skillsLoading, cardCount, reducedMotio
 }
 
 function LockedDoneRow({ col, onPatch }: { col: Draft; onPatch: (p: Partial<Column>) => void }) {
+  const { t } = useT();
   return (
     <li className="locked rounded-md border bg-secondary">
       <div className="col-editor-row flex items-center gap-2 px-2 py-1.5">
@@ -201,13 +209,14 @@ function LockedDoneRow({ col, onPatch }: { col: Draft; onPatch: (p: Partial<Colu
         </span>
         <EmojiInput value={col.emoji} onChange={(v) => onPatch({ emoji: v })} />
         <span className="locked-name flex-1 text-[13px] font-medium">Done</span>
-        <span className="locked-label text-xs text-muted-foreground">Colonne système</span>
+        <span className="locked-label text-xs text-muted-foreground">{t("columns.systemColumn")}</span>
       </div>
     </li>
   );
 }
 
 export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClose: () => void }) {
+  const { t } = useT();
   const [name, setName] = useState(snap.board.name);
   const [cols, setCols] = useState<Draft[]>(() => ensureDoneColumn(snap.board.columns).map((c) => ({ ...c, key: c.id })));
   const [skills, setSkills] = useState<SkillInfo[]>([]);
@@ -262,8 +271,8 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
   return (
     <AppDialog
       size="lg"
-      title="Colonnes du kanban"
-      description="Ordonnez les colonnes, choisissez leur type et le skill exécuté."
+      title={t("columns.title")}
+      description={t("columns.description")}
       onClose={onClose}
       onEscapeKeyDown={(e) => {
         if (dragging.current) e.preventDefault();
@@ -277,31 +286,29 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
             onClick={() =>
               setCols((cs) => [
                 ...cs.slice(0, -1),
-                { id: "", key: crypto.randomUUID(), name: "Nouvelle colonne", type: "inert" },
+                { id: "", key: crypto.randomUUID(), name: t("columns.newName"), type: "inert" },
                 cs[cs.length - 1],
               ])
             }
           >
-            <Plus aria-hidden="true" /> Colonne
+            <Plus aria-hidden="true" /> {t("columns.add")}
           </Button>
           <Button type="button" variant="ghost" onClick={onClose}>
-            Annuler
+            {t("common.cancel")}
           </Button>
           <Button type="button" disabled={saving} onClick={save}>
-            Enregistrer
+            {t("common.save")}
           </Button>
         </>
       }
     >
       <div className="grid gap-4">
         <div className="board-name grid gap-1.5">
-          <Label htmlFor="board-name">Nom du kanban</Label>
+          <Label htmlFor="board-name">{t("columns.boardName")}</Label>
           <Input id="board-name" value={name} onChange={(e) => setName(e.target.value)} />
         </div>
         <p className="hint text-xs text-muted-foreground">
-          Une colonne <strong>skill</strong> exécute le skill choisi sur chaque fiche qui y arrive. Chaque colonne skill a sa propre limite
-          d'agents en parallèle (1 par défaut), sous le plafond global des réglages. Le skill peut modifier la fiche puis l'envoyer à la
-          colonne suivante. Le champ emoji (optionnel) remplace l'icône de type de la colonne.
+          {t("columns.hintBefore")} <strong>{t("columns.hintSkill")}</strong> {t("columns.hintAfter")}
         </p>
         <DndContext
           sensors={sensors}
@@ -315,18 +322,17 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
           }}
           accessibility={{
             screenReaderInstructions: {
-              draggable:
-                "Pour réordonner une colonne, appuyez sur Espace, déplacez-la avec les flèches haut et bas, puis appuyez sur Espace pour la déposer ou sur Échap pour annuler.",
+              draggable: t("columns.dnd.instructions"),
             },
             announcements: {
-              onDragStart: ({ active }) => `Colonne ${nameOf(cols, active.id)} saisie`,
+              onDragStart: ({ active }) => t("columns.dnd.start", { name: nameOf(cols, active.id) }),
               onDragOver: ({ active, over }) =>
-                over ? `Colonne ${nameOf(cols, active.id)} au-dessus de ${nameOf(cols, over.id)}` : undefined,
+                over ? t("columns.dnd.over", { name: nameOf(cols, active.id), target: nameOf(cols, over.id) }) : undefined,
               onDragEnd: ({ active, over }) =>
                 over
-                  ? `Colonne ${nameOf(cols, active.id)} déposée à la place de ${nameOf(cols, over.id)}`
-                  : `Colonne ${nameOf(cols, active.id)} déposée`,
-              onDragCancel: ({ active }) => `Déplacement de la colonne ${nameOf(cols, active.id)} annulé`,
+                  ? t("columns.dnd.dropOn", { name: nameOf(cols, active.id), target: nameOf(cols, over.id) })
+                  : t("columns.dnd.drop", { name: nameOf(cols, active.id) }),
+              onDragCancel: ({ active }) => t("columns.dnd.cancel", { name: nameOf(cols, active.id) }),
             },
           }}
         >

@@ -1,9 +1,17 @@
 import { useState } from "react";
-import { type CommandAction, commandLabel, type CommandGroup as Group, type PaletteCommand, paletteFilter } from "./commands.ts";
+import {
+  type CommandAction,
+  commandLabel,
+  GROUP_LABEL_KEYS,
+  type CommandGroup as Group,
+  type PaletteCommand,
+  paletteFilter,
+} from "./commands.ts";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "./components/ui/command.tsx";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./components/ui/dialog.tsx";
+import { useT } from "./i18n/index.ts";
 
-const GROUPS: Group[] = ["Cartes", "Actions", "Navigation", "Projets"];
+const GROUPS: Group[] = ["cards", "actions", "navigation", "projects"];
 
 /** ⌘K palette: cards by title or #number, actions, navigation, recent projects. Runs nothing itself, it reports the chosen action. */
 export function CommandPalette({
@@ -16,6 +24,7 @@ export function CommandPalette({
   onRun: (action: CommandAction, search: string) => void;
   onClose: () => void;
 }) {
+  const { t } = useT();
   const [search, setSearch] = useState("");
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
@@ -30,21 +39,21 @@ export function CommandPalette({
         }}
       >
         <DialogHeader className="sr-only">
-          <DialogTitle>Palette de commandes</DialogTitle>
-          <DialogDescription>Rechercher une carte par titre ou #numéro, ou lancer une action</DialogDescription>
+          <DialogTitle>{t("palette.title")}</DialogTitle>
+          <DialogDescription>{t("palette.description")}</DialogDescription>
         </DialogHeader>
         <Command
           filter={paletteFilter}
           className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group]]:px-1"
         >
-          <CommandInput value={search} onValueChange={setSearch} placeholder="Rechercher une carte, une action…" />
+          <CommandInput value={search} onValueChange={setSearch} placeholder={t("palette.placeholder")} />
           <CommandList>
-            <CommandEmpty>Aucun résultat.</CommandEmpty>
+            <CommandEmpty>{t("palette.empty")}</CommandEmpty>
             {GROUPS.map((group) => {
               const items = commands.filter((c) => c.group === group);
               if (items.length === 0) return null;
               return (
-                <CommandGroup key={group} heading={group}>
+                <CommandGroup key={group} heading={t(GROUP_LABEL_KEYS[group])}>
                   {items.map((c) => (
                     <CommandItem
                       key={c.id}

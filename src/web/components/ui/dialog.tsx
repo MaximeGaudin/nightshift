@@ -3,6 +3,7 @@ import { XIcon } from "lucide-react";
 import type * as React from "react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { useT } from "../../i18n/index.ts";
 
 function Dialog(props: React.ComponentProps<typeof DialogPrimitive.Root>) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />;
@@ -39,6 +40,7 @@ function DialogContent({
   showCloseButton = true,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & { showCloseButton?: boolean }) {
+  const { t } = useT();
   return (
     <DialogPortal>
       <DialogOverlay />
@@ -56,13 +58,13 @@ function DialogContent({
             <TooltipTrigger asChild>
               <DialogPrimitive.Close
                 data-slot="dialog-close"
-                aria-label="Fermer"
+                aria-label={t("common.close")}
                 className="absolute top-3 right-3 inline-flex size-6 items-center justify-center rounded-sm text-muted-foreground transition-colors duration-150 outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring [&_svg]:size-3.5"
               >
                 <XIcon />
               </DialogPrimitive.Close>
             </TooltipTrigger>
-            <TooltipContent>Fermer</TooltipContent>
+            <TooltipContent>{t("common.close")}</TooltipContent>
           </Tooltip>
         )}
       </DialogPrimitive.Content>
