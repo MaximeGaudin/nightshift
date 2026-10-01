@@ -29,6 +29,10 @@ Development scripts: `bun run lint` (Biome), `bun run format`, `bun run typechec
 - **Progression**: a running card shows live progress (step N/M and a label). Agents emit a line `[nightshift-progress] N/M label` at each step (a numbered `## Progress` section in the card sets numbering and total); until a marker is seen, the agent's TodoWrite list is used instead. Last value wins, it resets at each (re)start of the agent and is never saved in `nightshift.json`.
 - Skills are read from `<project>/.claude/skills` (project, committable) and `~/.claude/skills` (user). Project skills shadow user skills. New skills are created in the project.
 
+## Mode séquentiel
+
+Un bouton lecture/pause du tableau fait avancer les cartes une par une : « lecture » déplace la première carte de la première colonne (le backlog) dans la deuxième, saute les colonnes inertes (hors Done), puis lance la suivante quand la carte arrive dans Done. « Pause » laisse la carte en cours finir mais ne lance pas la suivante. La séquence s'arrête (avec un message) si le backlog est vide, si la carte est supprimée ou ramenée dans le backlog, ou si son run échoue, est annulé ou laisse la carte sur place ; une question en attente ne l'arrête pas. Un nouvel appui sur lecture reprend la carte arrêtée. L'état est en mémoire (jamais dans `nightshift.json`) ; routes `POST /api/sequence/play` et `/api/sequence/pause` (`{project}`), refusées (409) sur une instance sans agents.
+
 ## Files
 
 - `<project>/nightshift.json`: columns and cards. Commit it in your projects. This repository ignores it (`.gitignore`): it is the dogfooding board of Nightshift itself. External edits (e.g. `git pull`) are picked up live.
