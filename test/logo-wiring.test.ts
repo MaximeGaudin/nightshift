@@ -29,7 +29,7 @@ test("logo-sources-agree", () => {
   expect(component.length).toBeGreaterThan(0);
   expect(faviconPairs()).toEqual(component);
 
-  const readme = read("README.md").match(/<img src="(docs\/logo\/variant-\d+\.svg)"/);
+  const readme = read("README.md").match(/<img src="(docs\/logo\/logo\.svg)"/);
   expect(readme).not.toBeNull();
   const src = readme?.[1] ?? "";
   expect(existsSync(join(root, src))).toBe(true);

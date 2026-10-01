@@ -1,4 +1,4 @@
-<p align="center"><img src="docs/logo/variant-1.svg" width="64" height="64" alt="Nightshift"></p>
+<p align="center"><img src="docs/logo/logo.svg" width="64" height="64" alt="Nightshift"></p>
 
 # Nightshift
 
