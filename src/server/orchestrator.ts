@@ -17,6 +17,7 @@ import type {
   Settings,
 } from "../shared/types.ts";
 import { canSendFeedback, cardRef, columnMaxParallel, isDoneColumn } from "../shared/types.ts";
+import { safeHttpUrl } from "../shared/urls.ts";
 import { parseProgressMarker, progressFromTodos } from "./progress.ts";
 import { persistScreenshots } from "./screenshots.ts";
 import { getSettings, NIGHTSHIFT_HOME, onSettingsChange, rememberProject } from "./settings.ts";
@@ -803,7 +804,9 @@ export class Orchestrator {
       if (typeof out.title === "string" && out.title.trim()) card.title = out.title.trim();
       if (typeof out.description === "string") card.description = persistScreenshots(card.id, out.description);
       if (out.test && typeof out.test.command === "string" && out.test.command.trim()) {
-        card.test = { command: out.test.command.trim(), ...(out.test.url?.trim() ? { url: out.test.url.trim() } : {}) };
+        // A url from the agent is only kept when it is a plain http(s) URL (it ends up in a link).
+        const testUrl = typeof out.test.url === "string" ? safeHttpUrl(out.test.url.trim()) : null;
+        card.test = { command: out.test.command.trim(), ...(testUrl ? { url: testUrl } : {}) };
       }
       card.updatedAt = now;
       if (status === "question") {

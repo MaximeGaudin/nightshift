@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Card, LogLine } from "../shared/types.ts";
+import { safeHttpUrl } from "../shared/urls.ts";
 import { api, useServerEvents } from "./api.ts";
 
 /** Runs the card's test command (set by an agent, editable here) and streams its output. */
@@ -14,6 +15,7 @@ export function TestPanel({
   running: boolean;
   onError: (message: string) => void;
 }) {
+  const linkUrl = safeHttpUrl(card.test?.url);
   const [editing, setEditing] = useState(false);
   const [command, setCommand] = useState(card.test?.command ?? "");
   const [url, setUrl] = useState(card.test?.url ?? "");
@@ -108,9 +110,9 @@ export function TestPanel({
         )}
       </div>
       <pre className="test-command">{card.test!.command}</pre>
-      {card.test!.url && (
-        <a href={card.test!.url} target="_blank" rel="noreferrer">
-          {card.test!.url}
+      {linkUrl && (
+        <a href={linkUrl} target="_blank" rel="noreferrer">
+          {linkUrl}
         </a>
       )}
       {lines.length > 0 && (

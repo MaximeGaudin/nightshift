@@ -12,6 +12,7 @@ import {
   normalizeColumnParallel,
   type ServerEvent,
 } from "../shared/types.ts";
+import { safeHttpUrl } from "../shared/urls.ts";
 import index from "../web/index.html";
 import { checkRequest } from "./guard.ts";
 import { Orchestrator } from "./orchestrator.ts";
@@ -214,7 +215,10 @@ export function startServer({ port, development, agents = true }: { port: number
             const card = p.card(req.params.id!);
             if (!card) throw new Error("Unknown card");
             const command = String(b.command ?? "").trim();
-            const testUrl = String(b.url ?? "").trim();
+            if (b.url != null && typeof b.url !== "string") throw new Error("url must be a string");
+            const rawUrl = (b.url ?? "").trim();
+            const testUrl = rawUrl ? safeHttpUrl(rawUrl) : "";
+            if (testUrl === null) throw new Error("url must be an absolute http(s) URL");
             if (command) card.test = { command, ...(testUrl ? { url: testUrl } : {}) };
             else delete card.test;
           });
