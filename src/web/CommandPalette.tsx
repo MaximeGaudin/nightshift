@@ -4,6 +4,7 @@ import {
   commandLabel,
   GROUP_LABEL_KEYS,
   type CommandGroup as Group,
+  orderGroups,
   type PaletteCommand,
   paletteFilter,
 } from "./commands.ts";
@@ -49,7 +50,7 @@ export function CommandPalette({
           <CommandInput value={search} onValueChange={setSearch} placeholder={t("palette.placeholder")} />
           <CommandList>
             <CommandEmpty>{t("palette.empty")}</CommandEmpty>
-            {GROUPS.map((group) => {
+            {orderGroups(GROUPS, commands, search).map((group) => {
               const items = commands.filter((c) => c.group === group);
               if (items.length === 0) return null;
               return (

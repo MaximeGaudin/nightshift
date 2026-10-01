@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { ProjectSnapshot, SkillInfo } from "../src/shared/types.ts";
-import { buildCommands, commandLabel, paletteFilter, quickRunInstruction } from "../src/web/commands.ts";
+import { buildCommands, commandLabel, orderGroups, paletteFilter, quickRunInstruction } from "../src/web/commands.ts";
 import { setLocale } from "../src/web/i18n/index.ts";
 
 const columns = [
@@ -111,4 +111,14 @@ test("palette-instruction", () => {
   for (const search of ["deploy-prod v1.4", "depl", "lancer"]) expect(paletteFilter(c.value, search, c.keywords)).toBe(1);
   expect(commandLabel(c, "deploy-prod v1.4")).toContain("“v1.4”");
   expect(commandLabel(c, "depl")).toBe("deploy-prod");
+});
+
+test("palette-skill-before-create", () => {
+  const groups = ["cards", "actions", "skills", "navigation", "projects"] as const;
+  const cmds = buildCommands(skillCtx());
+  // A skill typed with an instruction beats the "create a card" item, so Enter runs it.
+  expect(orderGroups([...groups], cmds, "deploy-prod v1.4")[0]).toBe("skills");
+  // Disabled skills do not move up; the order is unchanged without a search.
+  expect(orderGroups([...groups], buildCommands(skillCtx({ agentsDisabled: true })), "deploy-prod v1.4")[0]).not.toBe("skills");
+  expect(orderGroups([...groups], cmds, "")).toEqual([...groups]);
 });

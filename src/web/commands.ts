@@ -169,6 +169,21 @@ export function isFreeText(search: string): boolean {
   return term !== "" && !term.startsWith("#");
 }
 
+/**
+ * Groups in display order for `search`. cmdk sorts the items of a group but not the groups, and selects the first
+ * item: the group holding the best enabled match comes first, so Enter on "deploy-prod v1.4" runs the skill instead
+ * of the low-score "create a card" item. Equal scores keep the given order.
+ */
+export function orderGroups(groups: CommandGroup[], commands: PaletteCommand[], search: string): CommandGroup[] {
+  if (!search.trim()) return groups;
+  const best = new Map<CommandGroup, number>();
+  for (const c of commands) {
+    if (c.disabled) continue;
+    best.set(c.group, Math.max(best.get(c.group) ?? 0, paletteFilter(c.value, search, c.keywords)));
+  }
+  return [...groups].sort((a, b) => (best.get(b) ?? 0) - (best.get(a) ?? 0));
+}
+
 /** Label shown in the palette for `search`: the "create" item quotes the typed text. */
 export function commandLabel(c: PaletteCommand, search: string): string {
   return c.searchLabel && isFreeText(search) ? c.searchLabel(search.trim()) : c.label;
