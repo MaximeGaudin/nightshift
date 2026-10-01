@@ -1,4 +1,4 @@
-import { Columns3, Info, Moon, Pause, Play, Settings as SettingsIcon, Sparkles, TriangleAlert } from "lucide-react";
+import { Columns3, Info, Pause, Play, Settings as SettingsIcon, Sparkles, TriangleAlert } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { sequenceLabel } from "../shared/sequence.ts";
 import type { ProjectSnapshot } from "../shared/types.ts";
@@ -14,6 +14,7 @@ import { Alert } from "./components/ui/alert.tsx";
 import { Button } from "./components/ui/button.tsx";
 import { Kbd } from "./components/ui/kbd.tsx";
 import { Skeleton } from "./components/ui/skeleton.tsx";
+import { Logo } from "./Logo.tsx";
 import { NewCardDialog } from "./NewCardDialog.tsx";
 import { notifyError } from "./notify.ts";
 import { ProjectPicker } from "./ProjectPicker.tsx";
@@ -197,7 +198,7 @@ export function App() {
     <div className="flex h-full flex-col">
       <header className="flex min-h-11 shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-b bg-card px-4 py-1.5">
         <div className="flex min-w-0 items-center gap-2">
-          <Moon className="size-[18px] shrink-0 text-primary" aria-hidden="true" />
+          <Logo size={18} className="shrink-0" />
           <div className="flex min-w-0 items-baseline gap-2">
             <h1 className="truncate text-[15px] font-semibold tracking-tight">{snap.board.name}</h1>
             <button

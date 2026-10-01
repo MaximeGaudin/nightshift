@@ -1,8 +1,9 @@
-import { ChevronUp, Folder, FolderOpen, Moon } from "lucide-react";
+import { ChevronUp, Folder, FolderOpen } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "./api.ts";
 import { Button } from "./components/ui/button.tsx";
 import { Input } from "./components/ui/input.tsx";
+import { Logo } from "./Logo.tsx";
 
 export function ProjectPicker({
   recent,
@@ -44,7 +45,7 @@ export function ProjectPicker({
       {!embedded && (
         <header className="flex flex-col gap-1.5">
           <h1 className="flex items-center gap-2 text-lg font-semibold tracking-tight">
-            <Moon className="size-5 text-primary" aria-hidden="true" />
+            <Logo size={20} />
             Nightshift
           </h1>
           <p className="text-[13px] text-muted-foreground">
