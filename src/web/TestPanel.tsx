@@ -81,7 +81,9 @@ export function TestPanel({
       >
         <strong className="text-[13px] font-semibold">Commande de test</strong>
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="test-command">Commande (lancée avec sh -c depuis le dossier du projet)</Label>
+          <Label htmlFor="test-command" className="self-start">
+            Commande (lancée avec sh -c depuis le dossier du projet)
+          </Label>
           <Textarea
             id="test-command"
             className="code min-h-[60px] font-mono"
@@ -91,7 +93,9 @@ export function TestPanel({
           />
         </div>
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="test-url">URL (optionnel)</Label>
+          <Label htmlFor="test-url" className="self-start">
+            URL (optionnel)
+          </Label>
           <Input id="test-url" value={url} placeholder="http://localhost:4546" onChange={(e) => setUrl(e.target.value)} />
         </div>
         <div className="flex items-center justify-end gap-2">

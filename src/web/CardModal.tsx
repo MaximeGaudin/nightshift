@@ -271,7 +271,9 @@ export function CardModalContent({
     <div className="card-modal grid h-[calc(100dvh-13rem)] min-h-[440px] min-w-0 grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] gap-6 max-[800px]:h-auto max-[800px]:grid-cols-[minmax(0,1fr)]">
       <div className="card-edit flex min-h-0 min-w-0 flex-col gap-3">
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="card-title">Titre</Label>
+          <Label htmlFor="card-title" className="self-start">
+            Titre
+          </Label>
           <Input id="card-title" value={title} onChange={(e) => setTitle(e.target.value)} />
         </div>
         <div className="card-desc flex min-h-[220px] min-w-0 flex-1 flex-col gap-1.5">
