@@ -186,6 +186,56 @@ export function ensureDoneColumn(columns: Column[]): Column[] {
   return [...columns.filter((c) => !isDoneColumn(c)), done];
 }
 
+export const BACKLOG_COLUMN_ID = "col_backlog";
+export const BACKLOG_COLUMN_NAME = "Backlog";
+
+/** The canonical Backlog column. */
+export function backlogColumn(): Column {
+  return { id: BACKLOG_COLUMN_ID, name: BACKLOG_COLUMN_NAME, type: "inert" };
+}
+
+export function isBacklogColumn(colOrId: Pick<Column, "id"> | string): boolean {
+  return (typeof colOrId === "string" ? colOrId : colOrId.id) === BACKLOG_COLUMN_ID;
+}
+
+/** Backlog or Done: columns the user cannot rename, retype, remove or move. */
+export function isSystemColumn(colOrId: Pick<Column, "id"> | string): boolean {
+  return isBacklogColumn(colOrId) || isDoneColumn(colOrId);
+}
+
+/**
+ * Returns columns with exactly one Backlog column, first. Pure and idempotent.
+ * 1. A `col_backlog` exists: the first one is kept (others dropped) and moved first.
+ * 2. Else the first non-Done column, when inert, becomes the Backlog (`renamedFrom` = its old id).
+ * 3. Else a fresh Backlog is inserted first.
+ * Unknown fields and emoji of the existing column are kept; skill fields are dropped.
+ */
+export function ensureBacklogColumn(columns: Column[]): { columns: Column[]; renamedFrom?: string } {
+  const existing = columns.find(isBacklogColumn);
+  let source: Column | undefined = existing;
+  let renamedFrom: string | undefined;
+  if (!existing) {
+    const first = columns.find((c) => !isDoneColumn(c));
+    if (first && first.type === "inert") {
+      source = first;
+      renamedFrom = first.id;
+    }
+  }
+  const backlog: Column = { ...(source ?? {}), ...backlogColumn() };
+  delete backlog.skill;
+  delete backlog.instructions;
+  delete backlog.model;
+  delete backlog.maxParallel;
+  const rest = columns.filter((c) => c !== source && !isBacklogColumn(c));
+  return { columns: [backlog, ...rest], ...(renamedFrom !== undefined ? { renamedFrom } : {}) };
+}
+
+/** Backlog first, Done last. Every caller uses this, never the two ensure functions separately. */
+export function ensureSystemColumns(columns: Column[]): { columns: Column[]; renamedFrom?: string } {
+  const b = ensureBacklogColumn(columns);
+  return { ...b, columns: ensureDoneColumn(b.columns) };
+}
+
 /** Values accepted by `claude --permission-mode`. */
 export const PERMISSION_MODES = ["auto", "acceptEdits", "dontAsk", "bypassPermissions", "manual", "plan"] as const;
 export type PermissionMode = (typeof PERMISSION_MODES)[number];
