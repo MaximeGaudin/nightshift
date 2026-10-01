@@ -25,6 +25,7 @@ import { AddCard, skipOptions } from "./AddCard.tsx";
 import { isSequential } from "./App.tsx";
 import { api } from "./api.ts";
 import {
+  applyDrop,
   cardsByColumn,
   type DropOver,
   type LocalOrder,
@@ -206,11 +207,14 @@ export function Board({
       clearLocal();
       return;
     }
-    const drop = resolveDrop(columns, localCards(columns, cards, local, id), id, target, start);
+    const flat = localCards(columns, cards, local, id);
+    const drop = resolveDrop(columns, flat, id, target, start);
     if (!drop) {
       clearLocal();
       return;
     }
+    // Show the card where it was dropped (same-column reorders included) until the server answers.
+    setLocal(applyDrop(snapshotOrder(columns, flat), id, drop));
     api
       .moveCard(snap.path, id, drop.columnId, drop.index)
       .catch((e) => notifyError(e instanceof Error ? e.message : String(e)))

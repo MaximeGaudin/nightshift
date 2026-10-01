@@ -106,3 +106,13 @@ export function moveLocal(local: LocalOrder, activeId: string, columnId: string,
 export function localColumnOf(local: LocalOrder, cardId: string): string | undefined {
   return Object.keys(local).find((id) => local[id]?.includes(cardId));
 }
+
+/** Local order once the drop is applied (shown until the server answers): `drop.index` counts without the card, no index = end. */
+export function applyDrop(local: LocalOrder, activeId: string, drop: DropTarget): LocalOrder {
+  const next: LocalOrder = {};
+  for (const [id, ids] of Object.entries(local)) next[id] = ids.filter((c) => c !== activeId);
+  const target = next[drop.columnId] ?? [];
+  target.splice(Math.min(drop.index ?? target.length, target.length), 0, activeId);
+  next[drop.columnId] = target;
+  return next;
+}

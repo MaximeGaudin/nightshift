@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { Card, Column } from "../src/shared/types.ts";
-import { cardsByColumn, localCards, localColumnOf, moveLocal, resolveDrop, snapshotOrder } from "../src/web/boardDnd.ts";
+import { applyDrop, cardsByColumn, localCards, localColumnOf, moveLocal, resolveDrop, snapshotOrder } from "../src/web/boardDnd.ts";
 
 const col = (id: string, type: Column["type"] = "inert"): Column => ({ id, name: id, type }) as Column;
 const columns = [col("X"), col("Y"), col("Z"), col("col_done")];
@@ -72,4 +72,15 @@ test("board-dnd-stale-local-cards-follow-snapshot", () => {
     columnId: "Y",
     index: 1,
   });
+});
+
+test("board-dnd-apply-drop", () => {
+  const order = snapshotOrder(columns, cards);
+  expect(applyDrop(order, "A", { columnId: "X", index: 2 }).X).toEqual(["B", "C", "A"]);
+  expect(applyDrop(order, "C", { columnId: "X", index: 0 }).X).toEqual(["C", "A", "B"]);
+  const cross = applyDrop(order, "A", { columnId: "Y", index: 1 });
+  expect(cross.X).toEqual(["B", "C"]);
+  expect(cross.Y).toEqual(["D", "A", "E"]);
+  expect(applyDrop(order, "A", { columnId: "col_done" }).col_done).toEqual(["F", "A"]);
+  expect(applyDrop(order, "A", { columnId: "Z", index: 0 }).Z).toEqual(["A"]);
 });
