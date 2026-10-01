@@ -246,7 +246,7 @@ export function CardModalContent({
     void api
       .log(project, card.id)
       .then(setLog)
-      .catch(() => {})
+      .catch((e) => notifyError(e instanceof Error ? e.message : String(e)))
       .finally(() => setLogLoaded(true));
   }, [project, card.id]);
   useServerEvents((e) => {

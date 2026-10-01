@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import type { Card, LogLine } from "../shared/types.ts";
 import { safeHttpUrl } from "../shared/urls.ts";
 import { api, useServerEvents } from "./api.ts";
+import { notifyError } from "./notify.ts";
 
 /** Runs the card's test command (set by an agent, editable here) and streams its output. */
 export function TestPanel({
@@ -41,7 +42,7 @@ export function TestPanel({
       void api
         .testLog(project, card.id)
         .then(setLines)
-        .catch(() => {}),
+        .catch((e) => notifyError(e instanceof Error ? e.message : String(e))),
     [project, card.id],
   );
   useServerEvents((e) => {
