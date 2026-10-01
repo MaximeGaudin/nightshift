@@ -14,6 +14,7 @@ export function CardTile({
   onDragStart,
   onDragEnd,
   next,
+  skipped,
   onSendNext,
   sending,
 }: {
@@ -26,6 +27,7 @@ export function CardTile({
   onDragStart: () => void;
   onDragEnd: () => void;
   next?: { name: string };
+  skipped?: string[];
   onSendNext?: () => void;
   sending?: boolean;
 }) {
@@ -59,6 +61,16 @@ export function CardTile({
       <CardThumbnail project={project} card={card} />
       <div className="card-ref">
         {cardRef(card)}
+        {skipped && skipped.length > 0 && (
+          <span
+            className="card-skipped"
+            title={`Colonnes sautées : ${skipped.join(", ")}`}
+            role="img"
+            aria-label={`Colonnes sautées : ${skipped.join(", ")}`}
+          >
+            <Icon name="skip" size={12} />
+          </span>
+        )}
         {next && (
           <button
             type="button"
