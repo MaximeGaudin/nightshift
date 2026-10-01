@@ -1,15 +1,21 @@
 # Nightshift
 
-A kanban board that orchestrates Claude Code agents. One folder = one board; the whole board state lives in a single committable file, `nightshift.json`, at the folder root.
+A kanban board that orchestrates Claude Code agents. One folder = one board; the whole board state lives in a single file, `nightshift.json`, at the folder root (commit it in your projects; this repository ignores its own, see Files).
 
 ## Run
 
 ```sh
 bun install
-bun start [project-dir] [--port 4545] [--no-open]   # defaults to the current directory
-bun run dev                                          # same, with hot reload
+bun start [project-dir] [--port 4545] [--no-open] [--no-agents]   # defaults to the current directory
+bun run dev                                                        # same as start (development mode: HMR and browser console echo unless NODE_ENV=production)
 bun test
 ```
+
+Options: `--port <n>` / `-p <n>` (0..65535, also read from the `PORT` environment variable, default 4545), `--no-open` (do not open the browser), `--no-agents` (never start agents), `--help`. Environment: `NIGHTSHIFT_HOME` (data directory, default `~/.nightshift`), `NIGHTSHIFT_USER_SKILLS` (user skills directory, default `~/.claude/skills`), `NIGHTSHIFT_NO_OPEN` (same as `--no-open`).
+
+The server listens on `127.0.0.1` only, and rejects requests whose `Host` or `Origin` is not local or whose body is not `application/json`.
+
+Development scripts: `bun run lint` (Biome), `bun run format`, `bun run typecheck`, `bun test`, `bun run test:coverage`, and `bun run check` (lint + typecheck + tests, run it before committing). Code is formatted and linted with [Biome](https://biomejs.dev).
 
 ## Concepts
 
@@ -25,9 +31,11 @@ bun test
 
 ## Files
 
-- `<project>/nightshift.json`: columns and cards (commit it). External edits (e.g. `git pull`) are picked up live.
+- `<project>/nightshift.json`: columns and cards. Commit it in your projects. This repository ignores it (`.gitignore`): it is the dogfooding board of Nightshift itself. External edits (e.g. `git pull`) are picked up live.
 - `~/.nightshift/settings.json`: global settings (global cap on parallel agents, permission mode, model, extra `claude` args, recent projects).
-- `~/.nightshift/logs/`: last agent log per card.
+- `~/.nightshift/logs/`: last agent log per card (removed with the card).
+- `~/.nightshift/screenshots/`: card screenshots.
+- `~/.nightshift/locks/`: one lock per open project folder.
 
 ## Permissions
 
