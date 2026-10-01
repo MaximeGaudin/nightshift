@@ -21,6 +21,8 @@ export interface PaletteCommand {
   /** Secondary text (column name for a card, path for a project). */
   subtitle?: string;
   disabled?: boolean;
+  /** Label to show instead of `label` once some text is typed (the "create" item quotes it). */
+  searchLabel?: (text: string) => string;
   action: CommandAction;
 }
 
@@ -29,6 +31,9 @@ export interface CommandContext {
   /** Recent projects; the current one (snap.path) is left out. */
   recentProjects: string[];
 }
+
+/** Start of the "create a card" item value; paletteFilter keeps that item for any free text. */
+const NEW_CARD_PREFIX = "Créer une carte";
 
 export function buildCommands({ snap, recentProjects }: CommandContext): PaletteCommand[] {
   const { columns, cards } = snap.board;
@@ -49,13 +54,14 @@ export function buildCommands({ snap, recentProjects }: CommandContext): Palette
 
   const first = columns[0];
   if (first) {
-    const label = `Créer une carte dans ${first.name}`;
+    const label = `${NEW_CARD_PREFIX} dans ${first.name}`;
     out.push({
       id: "new-card",
       group: "Actions",
       label,
       value: label,
       keywords: ["nouvelle", "ajouter", "fiche"],
+      searchLabel: (text) => `Créer « ${text} » dans ${first.name}`,
       action: { type: "newCard" },
     });
   }
@@ -109,12 +115,27 @@ const normalize = (s: string) =>
     .replace(/\p{Diacritic}/gu, "")
     .toLowerCase();
 
-/** cmdk filter: "#<digits>" is an exact card number; otherwise a case and accent insensitive substring of value + keywords. */
+/** True when typed text is free text (not a "#<ref>" search): it can become a new card title. */
+export function isFreeText(search: string): boolean {
+  const term = search.trim();
+  return term !== "" && !term.startsWith("#");
+}
+
+/** Label shown in the palette for `search`: the "create" item quotes the typed text. */
+export function commandLabel(c: PaletteCommand, search: string): string {
+  return c.searchLabel && isFreeText(search) ? c.searchLabel(search.trim()) : c.label;
+}
+
+/**
+ * cmdk filter: "#<digits>" is an exact card number; otherwise a case and accent insensitive substring of value + keywords.
+ * The "create a card" item always matches free text (low score, so it comes after real matches).
+ */
 export function paletteFilter(value: string, search: string, keywords?: string[]): number {
   const term = search.trim();
   if (!term) return 1;
   const ref = /^#(\d+)$/.exec(term);
   if (ref) return new RegExp(`^#${ref[1]}(\\s|$)`).test(value) ? 1 : 0;
   const hay = normalize([value, ...(keywords ?? [])].join(" "));
-  return hay.includes(normalize(term)) ? 1 : 0;
+  if (hay.includes(normalize(term))) return 1;
+  return isFreeText(term) && normalize(value).startsWith(normalize(NEW_CARD_PREFIX)) ? 0.01 : 0;
 }

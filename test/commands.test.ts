@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { ProjectSnapshot } from "../src/shared/types.ts";
-import { buildCommands, paletteFilter } from "../src/web/commands.ts";
+import { buildCommands, commandLabel, paletteFilter } from "../src/web/commands.ts";
 
 const columns = [
   { id: "col_a", name: "Idées", type: "inert" },
@@ -40,4 +40,25 @@ test("palette-filter-ref", () => {
   expect(hits("déploi")).toEqual(["#19 Deploiement"]);
   expect(hits("DEPLOI")).toEqual(["#19 Deploiement"]);
   expect(hits("idees")).toHaveLength(3);
+});
+
+test("palette-create-free-text", () => {
+  const cmds = buildCommands(ctx());
+  const create = cmds.find((c) => c.id === "new-card");
+  if (!create) throw new Error("missing create item");
+  const shown = (search: string) => paletteFilter(create.value, search, create.keywords) > 0;
+  // Arbitrary text keeps the create item, so Enter prefills the new card dialog.
+  expect(shown("Refaire le logo")).toBe(true);
+  expect(commandLabel(create, "  Refaire le logo ")).toBe("Créer « Refaire le logo » dans Idées");
+  // Real matches rank above it.
+  const card = cmds.find((c) => c.group === "Cartes" && c.label === "Douze");
+  if (!card) throw new Error("missing card");
+  expect(paletteFilter(card.value, "douze", card.keywords)).toBeGreaterThan(paletteFilter(create.value, "douze", create.keywords));
+  // Empty and "#<ref>" searches: plain label, and a ref search hides it.
+  expect(commandLabel(create, "")).toBe("Créer une carte dans Idées");
+  expect(shown("#12")).toBe(false);
+  expect(commandLabel(create, "#12")).toBe("Créer une carte dans Idées");
+  // Other commands do not get the free-text fallback.
+  const cols = cmds.find((c) => c.id === "open:columns");
+  expect(cols && paletteFilter(cols.value, "Refaire le logo", cols.keywords)).toBe(0);
 });

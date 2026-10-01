@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { type CommandAction, type CommandGroup as Group, type PaletteCommand, paletteFilter } from "./commands.ts";
+import { type CommandAction, commandLabel, type CommandGroup as Group, type PaletteCommand, paletteFilter } from "./commands.ts";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "./components/ui/command.tsx";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./components/ui/dialog.tsx";
 
@@ -53,7 +53,7 @@ export function CommandPalette({
                       disabled={c.disabled}
                       onSelect={() => onRun(c.action, search.trim())}
                     >
-                      <span className="truncate">{c.label}</span>
+                      <span className="truncate">{commandLabel(c, search)}</span>
                       {c.subtitle && <span className="ml-auto truncate pl-3 text-xs text-muted-foreground">{c.subtitle}</span>}
                     </CommandItem>
                   ))}
