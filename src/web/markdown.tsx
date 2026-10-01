@@ -278,6 +278,7 @@ const isSpace = (ch: string | undefined) => ch === undefined || /\s/.test(ch);
 /** Only http, https and mailto links are allowed. The source string is kept as href. */
 function safeHref(raw: string): string | null {
   const url = raw.trim();
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: control characters are exactly what is rejected in a link
   if (!url || /[\s\u0000-\u001f\u007f]/.test(url)) return null;
   if (!/^(https?:\/\/|mailto:)/i.test(url)) return null;
   try {
@@ -507,6 +508,8 @@ function renderInline(nodes: Inline[], ri?: RenderImage): ReactNode[] {
             {renderInline(n.c, ri)}
           </a>
         );
+      default:
+        return null;
     }
   });
 }
@@ -598,6 +601,8 @@ function renderBlocks(blocks: Block[], ri?: RenderImage): ReactNode[] {
           </div>
         );
       }
+      default:
+        return null;
     }
   });
 }

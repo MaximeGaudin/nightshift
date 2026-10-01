@@ -26,11 +26,7 @@
       "recommended": true,
       "suspicious": {
         "noExplicitAny": "off",
-        "noArrayIndexKey": "off",
-        "noAssignInExpressions": "off",
-        "noImplicitAnyLet": "off",
-        "useIterableCallbackReturn": "off",
-        "noControlCharactersInRegex": "off"
+        "noArrayIndexKey": "off"
       },
       "style": {
         "noNonNullAssertion": "off"

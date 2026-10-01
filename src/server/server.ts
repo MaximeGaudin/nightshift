@@ -36,7 +36,8 @@ export function startServer({ port, development, agents = true }: { port: number
   }
   const { orch, sockets } = g.__nightshift;
   // Projects opened through POST /api/projects/open: the only ones other routes may address.
-  const opened = (g.__nightshift.opened ??= new Set());
+  if (!g.__nightshift.opened) g.__nightshift.opened = new Set();
+  const opened = g.__nightshift.opened;
 
   const json = (data: unknown, status = 200) => Response.json(data, { status });
   /** HttpError keeps its status, any other Error is a bad request (400), anything else is a server fault (500). */

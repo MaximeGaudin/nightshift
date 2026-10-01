@@ -18,10 +18,9 @@ export const DEFAULT_SETTINGS: Settings = {
 };
 
 // Kept on globalThis so modules re-evaluated by `bun --hot` share the state seen by the long-lived orchestrator.
-const shared = ((globalThis as any).__nightshiftSettings ??= {
-  current: null as Settings | null,
-  listeners: new Set<(s: Settings) => void>(),
-});
+const globals = globalThis as { __nightshiftSettings?: { current: Settings | null; listeners: Set<(s: Settings) => void> } };
+if (!globals.__nightshiftSettings) globals.__nightshiftSettings = { current: null, listeners: new Set() };
+const shared = globals.__nightshiftSettings;
 const listeners: Set<(s: Settings) => void> = shared.listeners;
 
 const KEYS = Object.keys(DEFAULT_SETTINGS) as (keyof Settings)[];

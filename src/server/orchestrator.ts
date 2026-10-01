@@ -192,8 +192,7 @@ Rules:
 export function splitArgs(s: string): string[] {
   const out: string[] = [];
   const re = /"([^"]*)"|'([^']*)'|(\S+)/g;
-  let m;
-  while ((m = re.exec(s))) out.push(m[1] ?? m[2] ?? m[3]!);
+  for (let m = re.exec(s); m; m = re.exec(s)) out.push(m[1] ?? m[2] ?? m[3] ?? "");
   return out;
 }
 
@@ -725,8 +724,7 @@ export class Orchestrator {
       let buf = "";
       for await (const chunk of proc.stdout) {
         buf += decoder.decode(chunk, { stream: true });
-        let nl;
-        while ((nl = buf.indexOf("\n")) >= 0) {
+        for (let nl = buf.indexOf("\n"); nl >= 0; nl = buf.indexOf("\n")) {
           const line = buf.slice(0, nl).trim();
           buf = buf.slice(nl + 1);
           if (!line) continue;
@@ -835,7 +833,9 @@ export class Orchestrator {
       }
       card.updatedAt = now;
       if (status === "question") {
-        out.questions.forEach((q: string, i: number) => this.log(p, job.cardId, "info", `Question ${i + 1}: ${q}`));
+        out.questions.forEach((q: string, i: number) => {
+          this.log(p, job.cardId, "info", `Question ${i + 1}: ${q}`);
+        });
         return;
       }
       this.log(p, job.cardId, "info", `Done: ${out.summary ?? ""}`);

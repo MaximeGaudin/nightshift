@@ -1368,9 +1368,8 @@ test("history cap keeps the time in timeBase", async () => {
   const dir = tempDir("ns-cap-");
   const p = new Project(dir);
   const [a, b] = p.board.columns.filter((c) => c.type === "inert");
-  const card =
-    p.board.cards[0] ??
-    (p.mutate((bd) =>
+  const seed = () => {
+    p.mutate((bd) => {
       bd.cards.push({
         id: "k",
         number: 1,
@@ -1381,9 +1380,11 @@ test("history cap keeps the time in timeBase", async () => {
         updatedAt: "2026-01-01T00:00:00.000Z",
         enteredColumnAt: "2026-01-01T00:00:00.000Z",
         history: [],
-      }),
-    ),
-    p.card("k")!);
+      });
+    });
+    return p.card("k")!;
+  };
+  const card = p.board.cards[0] ?? seed();
   const t0 = Date.parse("2026-01-01T00:00:00.000Z");
   const at = (i: number) => new Date(t0 + i * 60_000).toISOString();
   const full: any[] = [{ at: at(0), kind: "created", text: `Created in ${a!.name}`, columnId: a!.id }];
