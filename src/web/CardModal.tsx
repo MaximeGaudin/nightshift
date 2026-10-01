@@ -4,6 +4,7 @@ import { api, useServerEvents } from "./api.ts";
 import { StatusIcon } from "./icons.tsx";
 import { Markdown } from "./markdown.tsx";
 import { TestPanel } from "./TestPanel.tsx";
+import { TimePanel } from "./TimePanel.tsx";
 import { ErrorBanner, Modal, timeAgo } from "./ui.tsx";
 
 export function CardModal({
@@ -25,7 +26,7 @@ export function CardModal({
   const [description, setDescription] = useState(card.description);
   const [log, setLog] = useState<LogLine[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<"log" | "history">("log");
+  const [tab, setTab] = useState<"log" | "history" | "time">("log");
   const [answers, setAnswers] = useState<string[]>([]);
   const logRef = useRef<HTMLDivElement>(null);
   // Description shows rendered markdown by default; an empty one opens straight in the editor.
@@ -229,6 +230,9 @@ export function CardModal({
             <button role="tab" aria-selected={tab === "history"} onClick={() => setTab("history")}>
               Historique
             </button>
+            <button role="tab" aria-selected={tab === "time"} onClick={() => setTab("time")}>
+              Temps
+            </button>
           </div>
           <div className="log" ref={logRef}>
             {tab === "log" ? (
@@ -242,6 +246,8 @@ export function CardModal({
               ) : (
                 <p className="muted">Aucun run pour cette fiche.</p>
               )
+            ) : tab === "time" ? (
+              <TimePanel card={card} board={board} />
             ) : (
               [...card.history].reverse().map((h, i) => (
                 <div key={i} className={`log-line ${h.kind}`}>
