@@ -1,7 +1,10 @@
 import { expect, test } from "bun:test";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { normalizeBoard } from "../src/server/store.ts";
 import { normalizeSkipColumnIds, resolveNextColumn, skippedColumns } from "../src/shared/skip.ts";
 import { type Column, DONE_COLUMN_ID } from "../src/shared/types.ts";
+import { SkipColumnsPicker } from "../src/web/SkipColumnsPicker.tsx";
 import { must } from "./helpers.ts";
 
 const names = ["Backlog", "Grill", "Plan", "Implement", "Review", "To Test", "Merge"];
@@ -61,4 +64,18 @@ test("normalizeBoard: old card has no skip key; stored value is canonicalized; e
   expect("skipColumnIds" in must(old)).toBe(false);
   expect(withSkip?.skipColumnIds).toEqual(["col_b", "col_c"]);
   expect("skipColumnIds" in must(empty)).toBe(false);
+});
+
+test("SkipColumnsPicker: collapsed, counts checked, emits ids in column order, null when empty", () => {
+  const html = renderToStaticMarkup(
+    createElement(SkipColumnsPicker, { columns: cols.slice(1, 4), value: [id("Plan")], onChange: () => {} }),
+  );
+  expect(html).toContain("<details");
+  expect(html).not.toContain("open");
+  expect(html).toContain("Sauter des colonnes (1)");
+  expect(html.match(/type="checkbox"/g)?.length).toBe(3);
+  expect(renderToStaticMarkup(createElement(SkipColumnsPicker, { columns: [], value: [], onChange: () => {} }))).toBe("");
+  expect(renderToStaticMarkup(createElement(SkipColumnsPicker, { columns: cols.slice(1, 3), value: [], onChange: () => {} }))).toContain(
+    ">Sauter des colonnes<",
+  );
 });
