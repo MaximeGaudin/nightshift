@@ -11,6 +11,7 @@ import {
   type RunProgress as RunProgressData,
 } from "../shared/types.ts";
 import { api, useServerEvents } from "./api.ts";
+import { SequenceBadge } from "./CardTile.tsx";
 import { attempt, deleteThenClose, sendThenClear } from "./cardActions.ts";
 import { FeedbackForm } from "./FeedbackForm.tsx";
 import { StatusIcon } from "./icons.tsx";
@@ -53,6 +54,7 @@ export function CardModal({
   live,
   progress,
   testing,
+  sequential,
   onClose,
   onError,
 }: {
@@ -62,6 +64,8 @@ export function CardModal({
   live?: LiveStatus;
   progress?: RunProgressData;
   testing: boolean;
+  /** The sequential mode is working on this card. */
+  sequential?: boolean;
   onClose: () => void;
   /** Receives errors that happen after the card is closed (a failed save), to show them in the application banner. */
   onError: (message: string) => void;
@@ -144,7 +148,7 @@ export function CardModal({
       wide
       title={
         <span>
-          Fiche <CopyRef card={card} />{" "}
+          Fiche <CopyRef card={card} /> {sequential && <SequenceBadge />}{" "}
           <span className="muted">
             · {column && columnEmoji(column) ? `${columnEmoji(column)} ` : ""}
             {column?.name}

@@ -4,6 +4,10 @@ import { Icon, StatusIcon } from "./icons.tsx";
 import { toPlainText } from "./markdown.tsx";
 import { RunProgress } from "./RunProgress.tsx";
 
+export function SequenceBadge() {
+  return <span className="sequence-badge">séquentiel</span>;
+}
+
 export function CardTile({
   project,
   card,
@@ -17,6 +21,7 @@ export function CardTile({
   skipped,
   onSendNext,
   sending,
+  sequential,
 }: {
   project: string;
   card: Card;
@@ -30,6 +35,8 @@ export function CardTile({
   skipped?: string[];
   onSendNext?: () => void;
   sending?: boolean;
+  /** The sequential mode is working on this card. */
+  sequential?: boolean;
 }) {
   const lr = card.lastRun?.columnId === card.columnId ? card.lastRun : undefined;
   const status = live ?? lr?.status;
@@ -61,6 +68,7 @@ export function CardTile({
       <CardThumbnail project={project} card={card} />
       <div className="card-ref">
         {cardRef(card)}
+        {sequential && <SequenceBadge />}
         {skipped && skipped.length > 0 && (
           <span
             className="card-skipped"
