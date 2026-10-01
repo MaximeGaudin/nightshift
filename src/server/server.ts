@@ -2,6 +2,7 @@ import { readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type { Server, ServerWebSocket } from "bun";
+import { normalizeSkipColumnIds, skippedColumns } from "../shared/skip.ts";
 import {
   type Card,
   type Column,
@@ -91,6 +92,13 @@ export function startServer({ port, development, agents = true }: { port: number
     const v = b[key];
     if (v == null) return undefined;
     if (typeof v !== "string") throw new Error(`${key} must be a string`);
+    return v;
+  };
+  /** Optional skipColumnIds: undefined when absent, an error unless it is an array of strings. */
+  const optSkipIds = (b: Raw): string[] | undefined => {
+    const v = b.skipColumnIds;
+    if (v == null) return undefined;
+    if (!Array.isArray(v) || v.some((x) => typeof x !== "string")) throw new Error("skipColumnIds must be an array of strings");
     return v;
   };
   const reqString = (b: Raw, key: string): string => {
@@ -198,6 +206,11 @@ export function startServer({ port, development, agents = true }: { port: number
               const orphan = board.cards.find((c) => !ids.has(c.columnId));
               if (orphan) throw new Error(`Column still holds cards (e.g. "${orphan.title}"): move them first`);
               board.columns = cols;
+              for (const card of board.cards) {
+                const skip = normalizeSkipColumnIds(cols, card.skipColumnIds);
+                if (skip) card.skipColumnIds = skip;
+                else delete card.skipColumnIds;
+              }
             }
           });
           return orch.snapshot(p);
@@ -211,7 +224,9 @@ export function startServer({ port, development, agents = true }: { port: number
           const title = optString(b, "title");
           const description = optString(b, "description");
           const columnId = optString(b, "columnId") ?? p.board.columns[0]?.id;
+          const skipInput = optSkipIds(b);
           if (!p.column(columnId)) throw new Error("Unknown column");
+          const skipColumnIds = normalizeSkipColumnIds(p.board.columns, skipInput);
           const id = newId("card");
           const number = p.mutate((board) => {
             const card: Card = {
@@ -220,6 +235,7 @@ export function startServer({ port, development, agents = true }: { port: number
               title: (title || "Untitled").trim(),
               description: description ?? "",
               columnId,
+              ...(skipColumnIds ? { skipColumnIds } : {}),
               createdAt: now,
               updatedAt: now,
               enteredColumnAt: now,
@@ -239,13 +255,24 @@ export function startServer({ port, development, agents = true }: { port: number
           const p = project(b, url);
           const title = optString(b, "title");
           const description = optString(b, "description");
-          p.mutate(() => {
+          const skipInput = optSkipIds(b);
+          p.mutate((board) => {
             const card = p.card(req.params.id);
             if (!card) throw new HttpError(404, "Unknown card");
             if (title !== undefined) card.title = title;
             if (description !== undefined) card.description = description;
             card.updatedAt = new Date().toISOString();
-            p.addHistory(card, "edited", "Edited by user");
+            if (title !== undefined || description !== undefined || skipInput === undefined) p.addHistory(card, "edited", "Edited by user");
+            if (skipInput !== undefined) {
+              const skip = normalizeSkipColumnIds(board.columns, skipInput);
+              const before = (card.skipColumnIds ?? []).join("\n");
+              if ((skip ?? []).join("\n") !== before) {
+                if (skip) card.skipColumnIds = skip;
+                else delete card.skipColumnIds;
+                const names = skippedColumns(board.columns, card).map((c) => c.name);
+                p.addHistory(card, "edited", names.length > 0 ? `Skipped columns: ${names.join(", ")}` : "Skipped columns cleared");
+              }
+            }
           });
         }),
         DELETE: h((b, url, req) => {

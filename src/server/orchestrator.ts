@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Subprocess } from "bun";
+import { resolveNextColumn } from "../shared/skip.ts";
 import type {
   AttentionKind,
   Board,
@@ -96,7 +97,8 @@ export const RESULT_SCHEMA = {
     },
     move: {
       type: "string",
-      description: 'Where the card goes next: "next" (following column), "stay" (keep it here), or an explicit column id.',
+      description:
+        'Where the card goes next: "next" (the next column for this card, which skips the card\'s skipped columns), "stay" (keep it here), or an explicit column id.',
     },
     summary: { type: "string", description: "One or two sentences describing what you did." },
     test: {
@@ -132,8 +134,7 @@ function formatColumns(board: Board): string {
 }
 
 export function buildPrompt(board: Board, card: Card, column: Column, skillPath: string | undefined): string {
-  const idx = board.columns.findIndex((c) => c.id === column.id);
-  const next = board.columns[idx + 1];
+  const next = resolveNextColumn(board.columns, { columnId: column.id, skipColumnIds: card.skipColumnIds });
   const columns = formatColumns(board);
   return `You are an automated worker driven by Nightshift, a kanban board that orchestrates AI agents.
 A card has landed in the column "${column.name}". Your job is to process this card by applying the skill "${column.skill}".
@@ -174,8 +175,7 @@ export function buildFeedbackPrompt(
   skill: string | undefined,
   skillPath: string | undefined,
 ): string {
-  const idx = board.columns.findIndex((c) => c.id === column.id);
-  const next = board.columns[idx + 1];
+  const next = resolveNextColumn(board.columns, { columnId: column.id, skipColumnIds: card.skipColumnIds });
   const skillName = skill ? `the skill "${skill}"` : "the skill you applied earlier in this session";
   return `You are an automated worker driven by Nightshift, a kanban board that orchestrates AI agents.
 The user sent you feedback on the work you did earlier in this session:
