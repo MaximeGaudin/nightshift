@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { cardRef, columnMaxParallel, isDoneColumn, DONE_COLUMN_ID, type Card, type Column, type LiveStatus, type ProjectSnapshot } from "../shared/types.ts";
 import { api, useServerEvents, useSettings } from "./api.ts";
 import { CardModal } from "./CardModal.tsx";
+import { CardThumbnail } from "./CardThumbnail.tsx";
 import { CompactColumnBand, compactColumnTitle, isCompactColumn } from "./compactColumn.tsx";
 import { DoneColumn } from "./DoneColumn.tsx";
 import { readDoneCollapsed, writeDoneCollapsed } from "./doneColumn.ts";
@@ -201,6 +202,7 @@ function Board({
   };
   const tile = (card: Card) => (
     <CardTile
+      project={snap.path}
       card={card}
       live={snap.live[card.id]}
       dragging={drag === card.id}
@@ -295,6 +297,7 @@ function Board({
                   <div key={card.id}>
                     {drop?.col === col.id && drop.index === i && <div className="drop-indicator" />}
                     <CardTile
+                      project={snap.path}
                       card={card}
                       live={snap.live[card.id]}
                       dragging={drag === card.id}
@@ -330,6 +333,7 @@ function Board({
 }
 
 function CardTile({
+  project,
   card,
   live,
   dragging,
@@ -337,6 +341,7 @@ function CardTile({
   onDragStart,
   onDragEnd,
 }: {
+  project: string;
   card: Card;
   live?: LiveStatus;
   dragging: boolean;
@@ -370,6 +375,7 @@ function CardTile({
       tabIndex={0}
       onKeyDown={(e) => e.key === "Enter" && onOpen()}
     >
+      <CardThumbnail project={project} card={card} />
       <div className="card-ref">{cardRef(card)}</div>
       <h3>{card.title}</h3>
       {excerpt && <p className="excerpt">{excerpt}</p>}

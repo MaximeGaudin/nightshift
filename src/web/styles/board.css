@@ -173,3 +173,12 @@ button.add-card:hover:not(:disabled) { color: var(--text); }
 }
 .done-head { cursor: pointer; }
 .done-chevron { display: inline-block; width: 1em; color: var(--muted, inherit); }
+
+/* ---------- Card thumbnail ---------- */
+/* Flush with the card edges: cancel the card padding (and 1px border) on top/sides. */
+.card .card-thumb {
+  display: block; width: calc(100% + 2 * var(--sp-4)); max-height: 120px;
+  margin: calc(-1 * (var(--sp-1) + var(--sp-2))) calc(-1 * var(--sp-4)) var(--sp-2);
+  object-fit: cover; object-position: top;
+  border-radius: calc(var(--radius) - 1px) calc(var(--radius) - 1px) 0 0;
+}
