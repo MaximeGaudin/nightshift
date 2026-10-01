@@ -1,16 +1,17 @@
 // Command palette entries: pure data built from the snapshot, executed by the App.
 
-import { cardRef, type ProjectSnapshot } from "../shared/types.ts";
+import { cardRef, type ProjectSnapshot, type SkillInfo } from "../shared/types.ts";
 import { type MessageKey, t } from "./i18n/index.ts";
 
-export type CommandGroup = "cards" | "actions" | "navigation" | "projects";
+export type CommandGroup = "cards" | "actions" | "skills" | "navigation" | "projects";
 
 export type CommandAction =
   | { type: "openCard"; cardId: string }
   | { type: "newCard" }
   | { type: "openModal"; modal: "columns" | "skills" | "settings" }
   | { type: "openProject"; path: string }
-  | { type: "sequence"; play: boolean };
+  | { type: "sequence"; play: boolean }
+  | { type: "quickRun"; skill: string };
 
 export interface PaletteCommand {
   id: string;
@@ -31,15 +32,21 @@ export interface CommandContext {
   snap: ProjectSnapshot;
   /** Recent projects; the current one (snap.path) is left out. */
   recentProjects: string[];
+  /** Skills available to the project; only the favorite ones become entries. */
+  skills: SkillInfo[];
 }
 
 /** Heading of each palette group, resolved at render so it follows the language. */
 export const GROUP_LABEL_KEYS: Record<CommandGroup, MessageKey> = {
   cards: "palette.group.cards",
   actions: "palette.group.actions",
+  skills: "palette.group.skills",
   navigation: "palette.group.navigation",
   projects: "palette.group.projects",
 };
+
+/** Stable, untranslated start of a skill entry value. */
+const SKILL_PREFIX = "skill:";
 
 /** Search words stored as one comma separated message. */
 const words = (key: MessageKey) => t(key).split(",");
@@ -47,7 +54,7 @@ const words = (key: MessageKey) => t(key).split(",");
 /** Start of the "create a card" item value in the active language; paletteFilter keeps that item for any free text. */
 const newCardPrefix = () => t("palette.newCardPrefix");
 
-export function buildCommands({ snap, recentProjects }: CommandContext): PaletteCommand[] {
+export function buildCommands({ snap, recentProjects, skills }: CommandContext): PaletteCommand[] {
   const { columns, cards } = snap.board;
   const columnName = (id: string) => columns.find((c) => c.id === id)?.name ?? "";
   const out: PaletteCommand[] = [];
@@ -90,6 +97,25 @@ export function buildCommands({ snap, recentProjects }: CommandContext): Palette
     action: { type: "sequence", play: !active },
   });
 
+  const favorites = new Set(snap.board.favoriteSkills ?? []);
+  const favoriteSkills = skills.filter((s) => favorites.has(s.name)).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  for (const skill of favoriteSkills) {
+    out.push({
+      id: `skill:${skill.name}`,
+      group: "skills",
+      label: skill.name,
+      value: `${SKILL_PREFIX}${skill.name} ${skill.description}`,
+      keywords: words("palette.keywords.skill"),
+      subtitle: skill.description,
+      disabled: !!snap.agentsDisabled || !!snap.lockedBy,
+      searchLabel: (text) => {
+        const instruction = quickRunInstruction(skill.name, text);
+        return instruction ? t("palette.runSkillWith", { name: skill.name, instruction }) : skill.name;
+      },
+      action: { type: "quickRun", skill: skill.name },
+    });
+  }
+
   for (const [modal, labelKey, keywordsKey] of [
     ["columns", "palette.open.columns", "palette.keywords.columns"],
     ["skills", "palette.open.skills", "palette.keywords.skills"],
@@ -128,6 +154,15 @@ const normalize = (s: string) =>
     .replace(/\p{Diacritic}/gu, "")
     .toLowerCase();
 
+/** Instruction typed after the skill name ("deploy-prod v1.4" gives "v1.4"); "" when the text is not that skill followed by words. */
+export function quickRunInstruction(name: string, search: string): string {
+  const text = normalize(search.trim());
+  const n = normalize(name);
+  if (text === n) return "";
+  if (!text.startsWith(n) || !/\s/.test(text.charAt(n.length))) return "";
+  return search.trim().slice(name.length).trim();
+}
+
 /** True when typed text is free text (not a "#<ref>" search): it can become a new card title. */
 export function isFreeText(search: string): boolean {
   const term = search.trim();
@@ -150,5 +185,9 @@ export function paletteFilter(value: string, search: string, keywords?: string[]
   if (ref) return new RegExp(`^#${ref[1]}(\\s|$)`).test(value) ? 1 : 0;
   const hay = normalize([value, ...(keywords ?? [])].join(" "));
   if (hay.includes(normalize(term))) return 1;
+  if (value.startsWith(SKILL_PREFIX)) {
+    const name = value.slice(SKILL_PREFIX.length).split(" ")[0] ?? "";
+    if (quickRunInstruction(name, term) !== "") return 1;
+  }
   return isFreeText(term) && normalize(value).startsWith(normalize(newCardPrefix())) ? 0.01 : 0;
 }

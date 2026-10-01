@@ -2,13 +2,13 @@ import { Columns3, Info, Pause, Play, Settings as SettingsIcon, Sparkles, Triang
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { type SequenceNotice as Notice, sequenceLabel } from "../shared/sequence.ts";
-import type { ProjectSnapshot } from "../shared/types.ts";
+import type { ProjectSnapshot, SkillInfo } from "../shared/types.ts";
 import { api, useServerEvents, useSettings } from "./api.ts";
 import { Board } from "./Board.tsx";
 import { CardModal } from "./CardModal.tsx";
 import { ColumnsEditor } from "./ColumnsEditor.tsx";
 import { CommandPalette } from "./CommandPalette.tsx";
-import { buildCommands, type CommandAction } from "./commands.ts";
+import { buildCommands, type CommandAction, quickRunInstruction } from "./commands.ts";
 import { AppDialog } from "./components/app-dialog.tsx";
 import { IconButton } from "./components/icon-button.tsx";
 import { Alert } from "./components/ui/alert.tsx";
@@ -137,6 +137,24 @@ export function App() {
 
   const guard = useCallback((p: Promise<unknown>) => p.catch((e) => notifyError(e.message)), []);
 
+  // Skills offered by the palette, reloaded on each open; empty until answered or if the request fails.
+  const [paletteSkills, setPaletteSkills] = useState<SkillInfo[]>([]);
+  const snapPath = snap?.path;
+  useEffect(() => {
+    if (!palette || !snapPath) return;
+    let stale = false;
+    setPaletteSkills([]);
+    api
+      .skills(snapPath)
+      .then((list) => {
+        if (!stale) setPaletteSkills(list);
+      })
+      .catch(() => {});
+    return () => {
+      stale = true;
+    };
+  }, [palette, snapPath]);
+
   const card = openCard ? snap?.board.cards.find((c) => c.id === openCard) : undefined;
   // The open card was deleted: forget it so it does not reopen nor count as a dialog.
   useEffect(() => {
@@ -181,6 +199,9 @@ export function App() {
         break;
       case "sequence":
         guard(action.play ? api.sequencePlay(snap.path) : api.sequencePause(snap.path));
+        break;
+      case "quickRun":
+        guard(api.startQuickRun(snap.path, action.skill, quickRunInstruction(action.skill, search)));
         break;
     }
   };
@@ -311,7 +332,7 @@ export function App() {
       )}
       {palette && (
         <CommandPalette
-          commands={buildCommands({ snap, recentProjects: settings?.recentProjects ?? [] })}
+          commands={buildCommands({ snap, recentProjects: settings?.recentProjects ?? [], skills: paletteSkills })}
           onRun={runAction}
           onClose={() => setPalette(false)}
         />
