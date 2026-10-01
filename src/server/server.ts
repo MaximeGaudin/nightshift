@@ -293,6 +293,20 @@ export function startServer({ port, development, agents = true }: { port: number
           p.mutate((board) => p.moveCard(board, req.params.id, columnId, index as number | undefined, "Moved by user"));
         }),
       },
+      "/api/sequence/play": {
+        POST: h((b, url) => {
+          const p = project(b, url);
+          orch.sequence.play(p);
+          return { sequence: orch.sequence.get(p) };
+        }),
+      },
+      "/api/sequence/pause": {
+        POST: h((b, url) => {
+          const p = project(b, url);
+          orch.sequence.pause(p);
+          return { sequence: orch.sequence.get(p) };
+        }),
+      },
       "/api/cards/:id/retry": {
         POST: h((b, url, req) => orch.retry(project(b, url), req.params.id)),
       },

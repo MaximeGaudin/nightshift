@@ -22,6 +22,7 @@ import { safeHttpUrl } from "../shared/urls.ts";
 import { HttpError } from "./guard.ts";
 import { parseProgressMarker, progressFromTodos } from "./progress.ts";
 import { persistScreenshots } from "./screenshots.ts";
+import { SequenceController } from "./sequence.ts";
 import { getSettings, NIGHTSHIFT_HOME, onSettingsChange, rememberProject } from "./settings.ts";
 import { findSkill } from "./skills.ts";
 import { isRaw, needsRun, Project, type Raw } from "./store.ts";
@@ -249,6 +250,13 @@ export class Orchestrator {
   /** Projects whose agents are run by another live Nightshift process: path -> its pid. */
   private lockedBy = new Map<string, number>();
   private lockTimer: ReturnType<typeof setInterval>;
+  /** Sequential mode state, per project. */
+  readonly sequence = new SequenceController({
+    isRunning: (p, cardId) => this.jobs.has(this.key(p, cardId)),
+    canRunAgents: (p) => this.agents && !this.lockedBy.has(p.path),
+    onState: (p) => this.broadcast({ type: "board", project: p.path, snapshot: this.snapshot(p) }),
+    onAttention: (p, cardId) => this.broadcast({ type: "attention", project: p.path, cardId, kind: "error" }),
+  });
   private tests = new Map<string, { project: Project; cardId: string; proc: ChildProcess; lines: LogLine[] }>();
   private lastTestLines = new Map<string, LogLine[]>();
 
@@ -319,6 +327,7 @@ export class Orchestrator {
       this.cancelStaleJobs(p);
       this.broadcast({ type: "board", project: path, snapshot: this.snapshot(p) });
       this.scheduleTick();
+      this.sequence.schedule(p);
     });
     rememberProject(path);
     this.scheduleTick();
@@ -349,7 +358,7 @@ export class Orchestrator {
       live,
       testing,
       progress,
-      sequence: { status: "stopped" },
+      sequence: this.sequence.get(p),
       ...(lockedBy ? { lockedBy } : {}),
       ...(this.agents ? {} : { agentsDisabled: true }),
     };
@@ -621,6 +630,7 @@ export class Orchestrator {
         this.jobs.delete(job.key);
         this.broadcast({ type: "board", project: p.path, snapshot: this.snapshot(p) });
         this.scheduleTick();
+        this.sequence.schedule(p);
       });
   }
 
