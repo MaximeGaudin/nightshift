@@ -1,6 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { setLocale } from "../src/web/i18n/index.ts";
 
 // Safety net for every test file: settings.ts reads NIGHTSHIFT_HOME at import, so a file that forgets to set it
 // would write into the real ~/.nightshift. Files that need their own home set it before importing the server
@@ -17,3 +18,6 @@ process.env.NIGHTSHIFT_USER_SKILLS ??= fresh("ns-test-skills-");
 process.on("exit", () => {
   for (const dir of created) rmSync(dir, { recursive: true, force: true });
 });
+
+// UI tests assert the French strings; the app itself resolves the locale from the browser or the setting.
+setLocale("fr");
