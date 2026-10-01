@@ -25,6 +25,9 @@ if (!CHILD) {
       "run-progress-todo-fallback",
       "run-progress-ignores-subagents",
       "prompt-mentions-marker",
+      "run-progress-activity-fallback",
+      "run-progress-marker-beats-activity",
+      "run-progress-activity-ignores-subagents",
     ]) {
       expect(out + err).toContain(`(pass) ${name}`);
     }
@@ -121,6 +124,34 @@ if (!CHILD) {
     await quiet(200); // subagent events must not override the main agent progress
     const s = await getProject(dir);
     expect(stripAt(s.progress[id])).toEqual({ step: 1, total: 2, label: "Principal", source: "marker" });
+    await waitFor(async () => (await getProject(dir)).live[id] === undefined);
+  });
+
+  test("run-progress-activity-fallback: tool calls alone give source activity", async () => {
+    const { dir, id } = await setup("progress-none");
+    await waitFor(async () => (await getProject(dir)).progress?.[id]?.label === "Run the tests");
+    const s = await getProject(dir);
+    expect(stripAt(s.progress[id])).toEqual({ source: "activity", step: 0, total: 0, label: "Run the tests" });
+    await waitFor(async () => (await getProject(dir)).live[id] === undefined);
+  });
+
+  test("run-progress-marker-beats-activity: a later tool call does not revert a marker", async () => {
+    const { dir, id } = await setup("progress-marker-after-tool");
+    await waitFor(async () => (await getProject(dir)).progress?.[id]?.label === "First tool");
+    expect((await getProject(dir)).progress[id].source).toBe("activity");
+    await waitFor(async () => (await getProject(dir)).progress?.[id]?.source === "marker");
+    await quiet(900); // the last tool call has been emitted by now
+    const s = await getProject(dir);
+    expect(stripAt(s.progress[id])).toEqual({ step: 1, total: 3, label: "A", source: "marker" });
+    await waitFor(async () => (await getProject(dir)).live[id] === undefined);
+  });
+
+  test("run-progress-activity-ignores-subagents: subagent tool calls leave progress unchanged", async () => {
+    const { dir, id } = await setup("progress-activity-subagent");
+    await waitFor(async () => (await getProject(dir)).progress?.[id]?.label === "Main tool");
+    await quiet(800);
+    const s = await getProject(dir);
+    expect(stripAt(s.progress[id])).toEqual({ source: "activity", step: 0, total: 0, label: "Main tool" });
     await waitFor(async () => (await getProject(dir)).live[id] === undefined);
   });
 

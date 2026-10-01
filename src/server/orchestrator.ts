@@ -72,6 +72,8 @@ interface Job {
   progress?: RunProgress;
   /** A valid marker was seen in the current process: TodoWrite no longer counts. */
   markerSeen?: boolean;
+  /** A TodoWrite was seen in the current process: tool activity no longer overwrites it. */
+  todoSeen?: boolean;
 }
 
 const MAX_LOG_LINES = 3000;
@@ -135,12 +137,11 @@ export const RESULT_SCHEMA = {
   additionalProperties: false,
 };
 
-const PROGRESS_MARKER = "[nightshift-progress]";
-
 /** Sent when resuming a session that stopped before returning its structured result. */
 export const RECOVER_PROMPT = `Your previous run in this session stopped before returning Nightshift's structured output (it may have been interrupted, or it only returned interim results while background work was running).
 Check the actual state of your work first (worktrees, branches, commits, background tasks). If work remains, finish it. Then return the structured output exactly once, describing the final state.
-Progress: on resume, emit the progress marker again (a line \`${PROGRESS_MARKER} N/M label\`) at the start of the step you are on, and at each following step.`;
+${PROGRESS_RULE}
+When resuming, re-emit the marker of the step currently in progress before anything else.`;
 
 function formatColumns(board: Board): string {
   return board.columns
@@ -170,7 +171,7 @@ Rules:
 - Work autonomously and pick sensible defaults. Do not use the AskUserQuestion tool.
 - If you truly cannot continue without human decisions, first explore everything you can on your own, then return the structured output with "questions" (and move "stay"); the answers will be sent back to you in this same session.
 - Each round-trip with the user is slow: put EVERY question you need answered in that single list (self-contained, one decision per question, suggest a default when you have one). Never ask one question now and keep others for later.
-- Progress: at the start, split your work into steps. At the start of each step, write a line on its own, exactly \`${PROGRESS_MARKER} N/M label\` (N = current step, M = total steps, label = short description). If the card description has a numbered \`## Progress\` section, use its numbering and total.
+${PROGRESS_RULE}
 - Never edit nightshift.json yourself; the board is updated from your structured output.
 - Never kill processes by name or pattern (pkill -f, killall, kill $(pgrep …)): other agents run on this machine and their processes can match. Only kill PIDs you started yourself.
 - Return the structured output exactly once, at the very end. If you started background work (subagents, background shells), wait until all of it has finished first. Never return an interim or "in progress" result.
@@ -217,6 +218,8 @@ Rules:
 - Work autonomously and pick sensible defaults. Do not use the AskUserQuestion tool.
 - If you truly cannot continue without human decisions, first explore everything you can on your own, then return the structured output with "questions" (and move "stay"); the answers will be sent back to you in this same session.
 - Each round-trip with the user is slow: put EVERY question you need answered in that single list (self-contained, one decision per question, suggest a default when you have one). Never ask one question now and keep others for later.
+${PROGRESS_RULE}
+When resuming, re-emit the marker of the step currently in progress before anything else.
 - Never edit nightshift.json yourself; the board is updated from your structured output.
 - Never kill processes by name or pattern (pkill -f, killall, kill $(pgrep …)): other agents run on this machine and their processes can match. Only kill PIDs you started yourself.
 - Return the structured output exactly once, at the very end. If you started background work (subagents, background shells), wait until all of it has finished first. Never return an interim or "in progress" result.
@@ -226,6 +229,18 @@ Rules:
   - summary: a short summary of what you did.
   - questions: only when you need the user's input (see above).
   - test: optional, a command (and url) a human can run to try what you produced.`;
+}
+
+/** Prompt resuming a session with the user's answers to its questions. */
+export function buildAnswerPrompt(title: string, skillRef: string, answerText: string): string {
+  return `The user answered your questions:
+
+${answerText}
+
+${PROGRESS_RULE}
+When resuming, re-emit the marker of the step currently in progress before anything else.
+
+Continue processing the card "${title}" with ${skillRef}, then return the structured output as before (title, description, move, summary). Only ask new questions if the answers raise new blocking decisions, and then ask them all at once.`;
 }
 
 /** Splits a shell-like argument string, honouring single and double quotes. */
@@ -240,6 +255,13 @@ function summarizeToolInput(name: string, input: unknown): string {
   if (!isRaw(input)) return name;
   const v = input.command ?? input.file_path ?? input.pattern ?? input.skill ?? input.url ?? input.description ?? input.query;
   return v ? `${name}: ${String(v).slice(0, 200)}` : name;
+}
+
+/** One-line label of a tool call for the activity progress: its description, else a summary of its input. */
+export function activityLabel(name: string, input: unknown): string {
+  const d = isRaw(input) ? input.description : undefined;
+  const raw = typeof d === "string" && d.trim() ? d : summarizeToolInput(name, input);
+  return raw.replace(/\s+/g, " ").trim().slice(0, 120);
 }
 
 // Column model wins over the global setting; neither means no --model (CLI default).
@@ -681,7 +703,7 @@ export class Orchestrator {
         ? RECOVER_PROMPT
         : answer.kind === "feedback"
           ? buildFeedbackPrompt(p.board, card, column, job.skill, skill?.path)
-          : `The user answered your questions:\n\n${answer.text}\n\nRe-emit the progress marker (\`${PROGRESS_MARKER} N/M label\`) as you resume and at each step. Continue processing the card "${card.title}" with ${skillRef}, then return the structured output as before (title, description, move, summary). Only ask new questions if the answers raise new blocking decisions, and then ask them all at once.`;
+          : buildAnswerPrompt(card.title, skillRef, answer.text);
     if (answer?.kind === "feedback") this.log(p, card.id, "info", `Retour utilisateur : ${answer.text}`);
     else if (answer && answer.kind !== "resume") this.log(p, card.id, "info", `User answer: ${answer.text}`);
     let resumeId = answer?.sessionId;
@@ -743,6 +765,7 @@ export class Orchestrator {
     const p = job.project;
     job.progress = undefined;
     job.markerSeen = false;
+    job.todoSeen = false;
     const settings = getSettings();
     const model = resolveModel(column, settings);
     // The prompt holds the card text. Passed as an argument it would show in every process list, and an
@@ -831,9 +854,16 @@ export class Orchestrator {
           }
         } else if (block.type === "tool_use" && block.name !== "StructuredOutput") {
           this.log(p, cardId, "tool", summarizeToolInput(block.name ?? "tool", block.input));
-          if (own && block.name === "TodoWrite" && !job.markerSeen) {
+          if (!own) continue;
+          if (block.name === "TodoWrite") {
+            if (job.markerSeen) continue;
             const t = progressFromTodos(block.input);
-            if (t) this.setProgress(job, t, "todo");
+            if (t) {
+              job.todoSeen = true;
+              this.setProgress(job, t, "todo");
+            }
+          } else if (!job.markerSeen && !job.todoSeen) {
+            this.setProgress(job, { step: 0, total: 0, label: activityLabel(block.name ?? "tool", block.input) }, "activity");
           }
         }
       }
@@ -846,7 +876,7 @@ export class Orchestrator {
   /** Stores a new progress value and broadcasts the board, unless nothing changed. */
   private setProgress(job: Job, v: { step: number; total: number; label: string }, source: RunProgress["source"]) {
     const cur = job.progress;
-    if (cur && cur.step === v.step && cur.total === v.total && cur.label === v.label) return;
+    if (cur && cur.step === v.step && cur.total === v.total && cur.label === v.label && cur.source === source) return;
     job.progress = { step: v.step, total: v.total, label: v.label, source, at: new Date().toISOString() };
     this.broadcast({ type: "board", project: job.project.path, snapshot: this.snapshot(job.project) });
   }
