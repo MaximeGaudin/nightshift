@@ -1,22 +1,19 @@
 import { afterAll, expect, test } from "bun:test";
-import { existsSync, linkSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, linkSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { removeTempDirs, tempDir } from "./helpers.ts";
 
 // Private module instance (query string = distinct cache key) bound to our own user-skills dir, so other test
 // files that set NIGHTSHIFT_USER_SKILLS before importing skills.ts are unaffected.
 const previousUserSkills = process.env.NIGHTSHIFT_USER_SKILLS;
-process.env.NIGHTSHIFT_USER_SKILLS = mkdtempSync(join(tmpdir(), "ns-skills-user-"));
+process.env.NIGHTSHIFT_USER_SKILLS = tempDir("ns-skills-user-");
 const { createSkill, listSkills, parseFrontmatter, saveSkill, skillsDir } = await import("../src/server/skills.ts?skills-test");
 if (previousUserSkills === undefined) delete process.env.NIGHTSHIFT_USER_SKILLS;
 else process.env.NIGHTSHIFT_USER_SKILLS = previousUserSkills;
 
-const userCreated: string[] = [];
-afterAll(() => {
-  for (const dir of userCreated) rmSync(dir, { recursive: true, force: true });
-});
+afterAll(removeTempDirs);
 
-const tmp = () => mkdtempSync(join(tmpdir(), "ns-skills-"));
+const tmp = () => tempDir("ns-skills-");
 
 function writeSkill(root: string, name: string, content: string) {
   mkdirSync(join(root, name), { recursive: true });
@@ -64,7 +61,6 @@ test("skills-project-shadows-user", () => {
   const userDir = skillsDir("user", project);
   const unique = `user-only-${Date.now()}`;
   const shared = `shared-${Date.now()}`;
-  userCreated.push(join(userDir, shared), join(userDir, unique));
   writeSkill(userDir, shared, "---\ndescription: user version\n---\n");
   writeSkill(userDir, unique, "---\ndescription: user only\n---\n");
   writeSkill(skillsDir("project", project), shared, "---\ndescription: project version\n---\n");
