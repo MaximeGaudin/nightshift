@@ -1,5 +1,7 @@
 // Global keyboard shortcuts: pure decision, the App owns the single listener.
 
+import { t } from "./i18n/index.ts";
+
 export type Shortcut = "palette" | "newCard" | "help";
 
 export interface ShortcutEvent {
@@ -38,4 +40,16 @@ export function shortcutFor(e: ShortcutEvent, ctx: { dialogOpen: boolean }): Sho
   if (e.key === "c" || e.key === "C") return "newCard";
   if (e.key === "?") return "help";
   return null;
+}
+
+/** Rows of the help dialog, resolved at call time so they follow the language. */
+export function shortcutHelpRows(): { keys: string[]; label: string }[] {
+  return [
+    { keys: ["⌘ K", "Ctrl K"], label: t("shortcuts.palette") },
+    { keys: ["C"], label: t("shortcuts.newCard") },
+    { keys: ["?"], label: t("shortcuts.help") },
+    { keys: [t("shortcuts.keyEscape")], label: t("shortcuts.close") },
+    { keys: [t("shortcuts.keySpace")], label: t("shortcuts.drag") },
+    { keys: ["↑", "↓", "←", "→"], label: t("shortcuts.move") },
+  ];
 }

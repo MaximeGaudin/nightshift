@@ -1,3 +1,30 @@
-import type { palette as enpalette } from "../en/palette.ts";
+import type { palette as enPalette } from "../en/palette.ts";
 
-export const palette: Record<keyof typeof enpalette, string> = {};
+export const palette: Record<keyof typeof enPalette, string> = {
+  "palette.title": "Palette de commandes",
+  "palette.description": "Rechercher une carte par titre ou #numéro, ou lancer une action",
+  "palette.dialogDescription": "Rechercher une commande ou une carte",
+  "palette.placeholder": "Rechercher une carte, une action…",
+  "palette.empty": "Aucun résultat.",
+  "palette.group.cards": "Cartes",
+  "palette.group.actions": "Actions",
+  "palette.group.navigation": "Navigation",
+  "palette.group.projects": "Projets",
+  "palette.newCardPrefix": "Créer une carte",
+  "palette.newCard": "Créer une carte dans {column}",
+  "palette.newCardNamed": "Créer « {text} » dans {column}",
+  "palette.sequenceStart": "Lancer le mode séquentiel",
+  "palette.sequencePause": "Mettre en pause",
+  "palette.sequencePauseValue": "Mettre en pause le mode séquentiel",
+  "palette.open.columns": "Colonnes",
+  "palette.open.skills": "Skills",
+  "palette.open.settings": "Réglages",
+  "palette.openValue": "Ouvrir {label}",
+  "palette.projectValue": "Projet {name} {path}",
+  "palette.keywords.newCard": "nouvelle,ajouter,fiche",
+  "palette.keywords.sequence": "séquence,pause,play,agents",
+  "palette.keywords.columns": "éditer,kanban",
+  "palette.keywords.skills": "compétences,agents",
+  "palette.keywords.settings": "paramètres,préférences,options",
+  "palette.keywords.project": "projet,changer",
+};

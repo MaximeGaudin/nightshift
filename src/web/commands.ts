@@ -1,8 +1,9 @@
 // Command palette entries: pure data built from the snapshot, executed by the App.
 
 import { cardRef, type ProjectSnapshot } from "../shared/types.ts";
+import { type MessageKey, t } from "./i18n/index.ts";
 
-export type CommandGroup = "Cartes" | "Actions" | "Navigation" | "Projets";
+export type CommandGroup = "cards" | "actions" | "navigation" | "projects";
 
 export type CommandAction =
   | { type: "openCard"; cardId: string }
@@ -32,8 +33,19 @@ export interface CommandContext {
   recentProjects: string[];
 }
 
-/** Start of the "create a card" item value; paletteFilter keeps that item for any free text. */
-const NEW_CARD_PREFIX = "Créer une carte";
+/** Heading of each palette group, resolved at render so it follows the language. */
+export const GROUP_LABEL_KEYS: Record<CommandGroup, MessageKey> = {
+  cards: "palette.group.cards",
+  actions: "palette.group.actions",
+  navigation: "palette.group.navigation",
+  projects: "palette.group.projects",
+};
+
+/** Search words stored as one comma separated message. */
+const words = (key: MessageKey) => t(key).split(",");
+
+/** Start of the "create a card" item value in the active language; paletteFilter keeps that item for any free text. */
+const newCardPrefix = () => t("palette.newCardPrefix");
 
 export function buildCommands({ snap, recentProjects }: CommandContext): PaletteCommand[] {
   const { columns, cards } = snap.board;
@@ -43,7 +55,7 @@ export function buildCommands({ snap, recentProjects }: CommandContext): Palette
   for (const card of cards) {
     out.push({
       id: `card:${card.id}`,
-      group: "Cartes",
+      group: "cards",
       label: card.title,
       value: `${cardRef(card)} ${card.title}`,
       keywords: [columnName(card.columnId)],
@@ -54,41 +66,42 @@ export function buildCommands({ snap, recentProjects }: CommandContext): Palette
 
   const first = columns[0];
   if (first) {
-    const label = `${NEW_CARD_PREFIX} dans ${first.name}`;
+    const label = t("palette.newCard", { column: first.name });
     out.push({
       id: "new-card",
-      group: "Actions",
+      group: "actions",
       label,
       value: label,
-      keywords: ["nouvelle", "ajouter", "fiche"],
-      searchLabel: (text) => `Créer « ${text} » dans ${first.name}`,
+      keywords: words("palette.keywords.newCard"),
+      searchLabel: (text) => t("palette.newCardNamed", { text, column: first.name }),
       action: { type: "newCard" },
     });
   }
 
   const active = snap.sequence.status === "active";
-  const seqLabel = active ? "Mettre en pause le mode séquentiel" : "Lancer le mode séquentiel";
+  const seqLabel = active ? t("palette.sequencePauseValue") : t("palette.sequenceStart");
   out.push({
     id: "sequence",
-    group: "Actions",
-    label: active ? "Mettre en pause" : "Lancer le mode séquentiel",
+    group: "actions",
+    label: active ? t("palette.sequencePause") : t("palette.sequenceStart"),
     value: seqLabel,
-    keywords: ["séquence", "pause", "play", "agents"],
+    keywords: words("palette.keywords.sequence"),
     disabled: !!snap.agentsDisabled || !!snap.lockedBy,
     action: { type: "sequence", play: !active },
   });
 
-  for (const [modal, label, keywords] of [
-    ["columns", "Colonnes", ["éditer", "kanban"]],
-    ["skills", "Skills", ["compétences", "agents"]],
-    ["settings", "Réglages", ["paramètres", "préférences", "options"]],
+  for (const [modal, labelKey, keywordsKey] of [
+    ["columns", "palette.open.columns", "palette.keywords.columns"],
+    ["skills", "palette.open.skills", "palette.keywords.skills"],
+    ["settings", "palette.open.settings", "palette.keywords.settings"],
   ] as const) {
+    const label = t(labelKey);
     out.push({
       id: `open:${modal}`,
-      group: "Navigation",
+      group: "navigation",
       label,
-      value: `Ouvrir ${label}`,
-      keywords: [...keywords],
+      value: t("palette.openValue", { label }),
+      keywords: words(keywordsKey),
       action: { type: "openModal", modal },
     });
   }
@@ -98,10 +111,10 @@ export function buildCommands({ snap, recentProjects }: CommandContext): Palette
     const name = path.split("/").pop() || path;
     out.push({
       id: `project:${path}`,
-      group: "Projets",
+      group: "projects",
       label: name,
-      value: `Projet ${name} ${path}`,
-      keywords: ["projet", "changer", path],
+      value: t("palette.projectValue", { name, path }),
+      keywords: [...words("palette.keywords.project"), path],
       subtitle: path,
       action: { type: "openProject", path },
     });
@@ -137,5 +150,5 @@ export function paletteFilter(value: string, search: string, keywords?: string[]
   if (ref) return new RegExp(`^#${ref[1]}(\\s|$)`).test(value) ? 1 : 0;
   const hay = normalize([value, ...(keywords ?? [])].join(" "));
   if (hay.includes(normalize(term))) return 1;
-  return isFreeText(term) && normalize(value).startsWith(normalize(NEW_CARD_PREFIX)) ? 0.01 : 0;
+  return isFreeText(term) && normalize(value).startsWith(normalize(newCardPrefix())) ? 0.01 : 0;
 }
