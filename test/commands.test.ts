@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import type { ProjectSnapshot } from "../src/shared/types.ts";
-import { buildCommands, commandLabel, paletteFilter } from "../src/web/commands.ts";
+import type { ProjectSnapshot, SkillInfo } from "../src/shared/types.ts";
+import { buildCommands, commandLabel, paletteFilter, quickRunInstruction } from "../src/web/commands.ts";
 import { setLocale } from "../src/web/i18n/index.ts";
 
 const columns = [
@@ -16,7 +16,11 @@ const snap = (extra: object = {}) =>
     sequence: { status: "stopped" },
     ...extra,
   }) as unknown as ProjectSnapshot;
-const ctx = (extra: object = {}, recentProjects = ["/p/current", "/p/other"]) => ({ snap: snap(extra), recentProjects });
+const ctx = (extra: object = {}, recentProjects = ["/p/current", "/p/other"]) => ({
+  snap: snap(extra),
+  recentProjects,
+  skills: [] as SkillInfo[],
+});
 
 test("commands-build", () => {
   const cmds = buildCommands(ctx());
@@ -76,4 +80,35 @@ test("palette-follows-locale", () => {
   } finally {
     setLocale("fr");
   }
+});
+
+const skillInfo = (name: string, description = `${name} desc`): SkillInfo => ({ name, description, scope: "project", path: `/s/${name}` });
+const skillCtx = (extra: object = {}) => ({
+  ...ctx({ ...extra, board: { name: "b", columns, cards: [], favoriteSkills: ["deploy-prod", "ghost"] } }),
+  skills: [skillInfo("lint"), skillInfo("deploy-prod")],
+});
+
+test("palette-skills-group", () => {
+  const cmds = buildCommands(skillCtx());
+  const skills = cmds.filter((c) => c.group === "skills");
+  expect(skills.map((c) => c.action)).toEqual([{ type: "quickRun", skill: "deploy-prod" }]);
+  expect(skills[0]?.value).toBe("skill:deploy-prod deploy-prod desc");
+  expect(skills[0]?.disabled).toBe(false);
+  const order = cmds.map((c) => c.group);
+  expect(order.lastIndexOf("actions")).toBeLessThan(order.indexOf("skills"));
+  expect(order.indexOf("skills")).toBeLessThan(order.indexOf("navigation"));
+  expect(buildCommands(skillCtx({ agentsDisabled: true })).find((c) => c.group === "skills")?.disabled).toBe(true);
+  expect(buildCommands(skillCtx({ lockedBy: 2 })).find((c) => c.group === "skills")?.disabled).toBe(true);
+});
+
+test("palette-instruction", () => {
+  expect(quickRunInstruction("deploy-prod", "Deploy-Prod v1.4")).toBe("v1.4");
+  expect(quickRunInstruction("deploy-prod", "depl")).toBe("");
+  expect(quickRunInstruction("deploy-prod", "deploy-prod")).toBe("");
+  expect(quickRunInstruction("deploy-prod", "deploy-production x")).toBe("");
+  const c = buildCommands(skillCtx()).find((x) => x.group === "skills");
+  if (!c) throw new Error("missing skill entry");
+  for (const search of ["deploy-prod v1.4", "depl", "lancer"]) expect(paletteFilter(c.value, search, c.keywords)).toBe(1);
+  expect(commandLabel(c, "deploy-prod v1.4")).toContain("“v1.4”");
+  expect(commandLabel(c, "depl")).toBe("deploy-prod");
 });

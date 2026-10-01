@@ -11,7 +11,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./components/ui/dialog.tsx";
 import { useT } from "./i18n/index.ts";
 
-const GROUPS: Group[] = ["cards", "actions", "navigation", "projects"];
+const GROUPS: Group[] = ["cards", "actions", "skills", "navigation", "projects"];
 
 /** ⌘K palette: cards by title or #number, actions, navigation, recent projects. Runs nothing itself, it reports the chosen action. */
 export function CommandPalette({
