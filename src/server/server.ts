@@ -1,13 +1,15 @@
-import { readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import type { Server, ServerWebSocket } from "bun";
 import { normalizeSkipColumnIds, skippedColumns } from "../shared/skip.ts";
 import {
   BACKLOG_COLUMN_ID,
+  BACKLOG_COLUMN_NAME,
   type Card,
   type Column,
   type ColumnType,
+  cardRef,
   ensureSystemColumns,
   isDoneColumn,
   normalizeColumnEmoji,
@@ -21,7 +23,7 @@ import { Orchestrator } from "./orchestrator.ts";
 import { removeScreenshots, resolveScreenshot } from "./screenshots.ts";
 import { getSettings, updateSettings } from "./settings.ts";
 import { createSkill, listSkills, readSkill, saveSkill } from "./skills.ts";
-import { COLUMN_KEYS, isRaw, newId, type Project, type Raw, remapColumnId, unknownFields } from "./store.ts";
+import { BOARD_FILE, COLUMN_KEYS, isRaw, newId, type Project, type Raw, remapColumnId, unknownFields } from "./store.ts";
 
 export function startServer({ port, development, agents = true }: { port: number; development?: boolean; agents?: boolean }) {
   // `bun --hot` re-runs this module on every change. Reuse the orchestrator from the previous run:
@@ -265,6 +267,34 @@ export function startServer({ port, development, agents = true }: { port: number
             skipInput: optSkipIds(b),
           });
           return { id: card.id, number: card.number };
+        }),
+      },
+      "/api/backlog": {
+        POST: h((b) => {
+          const raw = b.project;
+          if (typeof raw !== "string" || !raw) throw new Error("project is required");
+          if (!isAbsolute(raw)) throw new Error("project must be an absolute path");
+          const title = reqString(b, "title").trim();
+          if (!title) throw new Error("title must not be empty");
+          const description = optString(b, "description") ?? "";
+          const skipInput = optSkipIds(b);
+          const source = optString(b, "source")?.trim() ?? "";
+          if (source.length > 100) throw new Error("source must be at most 100 characters");
+          const path = resolve(raw);
+          let p: Project;
+          if (opened.has(path)) p = orch.get(path);
+          else if (existsSync(join(path, BOARD_FILE))) {
+            p = orch.open(path);
+            opened.add(p.path);
+          } else throw new HttpError(404, "Unknown project");
+          const card = createCard(p, {
+            title,
+            description,
+            columnId: BACKLOG_COLUMN_ID,
+            skipInput,
+            historyText: source ? `Created in ${BACKLOG_COLUMN_NAME} by ${source}` : `Created in ${BACKLOG_COLUMN_NAME}`,
+          });
+          return json({ id: card.id, number: card.number, ref: cardRef(card) }, 201);
         }),
       },
       "/api/cards/:id": {
