@@ -14,3 +14,14 @@ test("column-order-done-locked", () => {
   expect(reorderColumns(cols, "a", "a")).toBe(cols);
   expect(reorderColumns(cols, "x", "a")).toBe(cols);
 });
+
+const Backlog = { id: "col_backlog", key: "col_backlog", name: "Backlog", type: "inert" as const };
+
+test("column-order-backlog-pinned", () => {
+  const cols = [Backlog, A, B, Done];
+  expect(names(reorderColumns(cols, "a", "col_backlog"))).toEqual(["col_backlog", "a", "b", "col_done"]);
+  expect(names(reorderColumns(cols, "b", "col_backlog"))).toEqual(["col_backlog", "b", "a", "col_done"]);
+  expect(reorderColumns(cols, "col_backlog", "b")).toBe(cols);
+  expect(reorderColumns(cols, "col_backlog", "col_done")).toBe(cols);
+  expect(names(reorderColumns(cols, "a", "col_done"))).toEqual(["col_backlog", "b", "a", "col_done"]);
+});
