@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "./api.ts";
 import { Icon } from "./icons.tsx";
 
@@ -17,16 +17,19 @@ export function ProjectPicker({
   const [browse, setBrowse] = useState<{ dir: string; parent: string | null; dirs: string[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const go = (dir?: string) =>
-    api
-      .fs(dir)
-      .then((b) => {
-        setBrowse(b);
-        setPath(b.dir);
-        setError(null);
-      })
-      .catch((e) => setError(e.message));
-  useEffect(() => void go(current), []);
+  const go = useCallback(
+    (dir?: string) =>
+      api
+        .fs(dir)
+        .then((b) => {
+          setBrowse(b);
+          setPath(b.dir);
+          setError(null);
+        })
+        .catch((e) => setError(e.message)),
+    [],
+  );
+  useEffect(() => void go(current), [go, current]);
 
   return (
     <div className="picker">

@@ -56,10 +56,14 @@ export function CardModal({
   // so agent updates are pulled into an untouched form instead of being mistaken for user edits.
   const [base, setBase] = useState({ title: card.title, description: card.description });
   const dirty = title !== base.title || description !== base.description;
+  // Read by the effect below without being one of its triggers (see there).
+  const dirtyRef = useRef(dirty);
+  dirtyRef.current = dirty;
   const column = board.columns.find((c) => c.id === card.columnId);
 
+  // Re-runs only when the card changes on the server: edits in progress are kept, so `dirty` is read through a ref.
   useEffect(() => {
-    if (dirty) return;
+    if (dirtyRef.current) return;
     setTitle(card.title);
     setDescription(card.description);
     setBase({ title: card.title, description: card.description });
@@ -81,13 +85,14 @@ export function CardModal({
         .log(project, card.id)
         .then(setLog)
         .catch(() => {}),
-    [card.id],
+    [project, card.id],
   );
   useServerEvents((e) => {
     if (e.type !== "log" || e.project !== project || e.cardId !== card.id) return;
     // A new run resets the log on the server: mirror that.
     setLog((l) => (e.line.text.startsWith("Starting skill") ? [e.line] : [...l, e.line]));
   });
+  // biome-ignore lint/correctness/useExhaustiveDependencies: log.length is the trigger (scroll to the new line); the effect only reads the DOM
   useEffect(() => {
     const el = logRef.current;
     if (el && tab !== "time") el.scrollTop = el.scrollHeight;

@@ -23,8 +23,11 @@ export function TestPanel({
   const [showOutput, setShowOutput] = useState(running);
   const outRef = useRef<HTMLDivElement>(null);
 
+  // Re-runs only when the test changes on the server: a form being edited is kept, so `editing` is read through a ref.
+  const editingRef = useRef(editing);
+  editingRef.current = editing;
   useEffect(() => {
-    if (editing) return;
+    if (editingRef.current) return;
     setCommand(card.test?.command ?? "");
     setUrl(card.test?.url ?? "");
   }, [card.test?.command, card.test?.url]);
@@ -34,12 +37,13 @@ export function TestPanel({
         .testLog(project, card.id)
         .then(setLines)
         .catch(() => {}),
-    [card.id],
+    [project, card.id],
   );
   useServerEvents((e) => {
     if (e.type !== "testlog" || e.project !== project || e.cardId !== card.id) return;
     setLines((l) => (e.line.text.startsWith("$ ") ? [e.line] : [...l, e.line]));
   });
+  // biome-ignore lint/correctness/useExhaustiveDependencies: new lines and the output being shown are the triggers (scroll to the end); the effect only reads the DOM
   useEffect(() => {
     const el = outRef.current;
     if (el) el.scrollTop = el.scrollHeight;

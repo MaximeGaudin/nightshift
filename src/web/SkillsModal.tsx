@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { SkillInfo } from "../shared/types.ts";
 import { api } from "./api.ts";
 import { Icon } from "./icons.tsx";
@@ -21,12 +21,15 @@ export function SkillsModal({ project, onClose }: { project: string; onClose: ()
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", description: "", body: TEMPLATE });
 
-  const reload = () =>
-    api
-      .skills(project)
-      .then(setSkills)
-      .catch((e) => setError(e.message));
-  useEffect(() => void reload(), []);
+  const reload = useCallback(
+    () =>
+      api
+        .skills(project)
+        .then(setSkills)
+        .catch((e) => setError(e.message)),
+    [project],
+  );
+  useEffect(() => void reload(), [reload]);
   useEffect(() => {
     if (!selected) return;
     api
@@ -36,7 +39,7 @@ export function SkillsModal({ project, onClose }: { project: string; onClose: ()
         setOriginal(s.content);
       })
       .catch((e) => setError(e.message));
-  }, [selected]);
+  }, [project, selected]);
 
   const current = skills.find((s) => s.name === selected);
   const dirty = content !== original;

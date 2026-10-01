@@ -63,7 +63,7 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
         .skills(snap.path)
         .then(setSkills)
         .catch((e) => setError(e.message)),
-    [],
+    [snap.path],
   );
 
   const count = (id: string) => snap.board.cards.filter((c) => c.columnId === id).length;

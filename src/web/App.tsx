@@ -15,18 +15,20 @@ import { SkillsModal } from "./SkillsModal.tsx";
 import { installAudioUnlock, notifyAttention } from "./sound.ts";
 import { ErrorBanner } from "./ui.tsx";
 
+const readProjectParam = () => new URLSearchParams(location.search).get("project");
+
 function useProjectParam(): [string | null, (p: string | null) => void] {
-  const read = () => new URLSearchParams(location.search).get("project");
-  const [project, setProject] = useState(read);
+  const [project, setProject] = useState(readProjectParam);
   useEffect(() => {
-    const onPop = () => setProject(read());
+    const onPop = () => setProject(readProjectParam());
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
-  const set = (p: string | null) => {
+  // Stable: it is a dependency of the effect that opens the project.
+  const set = useCallback((p: string | null) => {
     history.pushState(null, "", p ? `/?project=${encodeURIComponent(p)}` : "/");
     setProject(p);
-  };
+  }, []);
   return [project, set];
 }
 
@@ -56,7 +58,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [project]);
+  }, [project, setProject]);
 
   useEffect(() => installAudioUnlock(), []);
 
@@ -70,9 +72,10 @@ export function App() {
     if (e.type === "board" && snap && e.project === snap.path) setSnap(e.snapshot);
   });
 
+  const boardName = snap?.board.name;
   useEffect(() => {
-    document.title = snap ? `${snap.board.name} · Nightshift` : "Nightshift";
-  }, [snap?.board.name]);
+    document.title = boardName ? `${boardName} · Nightshift` : "Nightshift";
+  }, [boardName]);
 
   const guard = useCallback((p: Promise<unknown>) => p.catch((e) => setError(e.message)), []);
 
