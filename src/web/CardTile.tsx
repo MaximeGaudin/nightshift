@@ -77,7 +77,8 @@ export function CardTile({
       tabIndex={0}
       onKeyDown={(e: KeyboardEvent<HTMLElement>) => {
         dndProps?.onKeyDown?.(e);
-        if (e.key === "Enter") onOpen();
+        // Enter opens the card, except while it is being dragged with the keyboard.
+        if (e.key === "Enter" && !dragging) onOpen();
       }}
     >
       <CardThumbnail project={project} card={card} />
