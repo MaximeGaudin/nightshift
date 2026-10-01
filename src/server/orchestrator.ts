@@ -5,6 +5,7 @@ import type { Subprocess } from "bun";
 import { spawn, type ChildProcess } from "node:child_process";
 import type { AttentionKind, Board, Card, Column, LiveStatus, LogLine, ProjectSnapshot, RunStatus, ServerEvent, Settings } from "../shared/types.ts";
 import { cardRef, columnMaxParallel, isDoneColumn } from "../shared/types.ts";
+import { persistScreenshots } from "./screenshots.ts";
 import { getSettings, NIGHTSHIFT_HOME, onSettingsChange, rememberProject } from "./settings.ts";
 import { needsRun, Project } from "./store.ts";
 import { findSkill } from "./skills.ts";
@@ -544,7 +545,7 @@ export class Orchestrator {
       );
       if ((status !== "success" && status !== "question") || !out) return;
       if (typeof out.title === "string" && out.title.trim()) card.title = out.title.trim();
-      if (typeof out.description === "string") card.description = out.description;
+      if (typeof out.description === "string") card.description = persistScreenshots(card.id, out.description);
       if (out.test && typeof out.test.command === "string" && out.test.command.trim()) {
         card.test = { command: out.test.command.trim(), ...(out.test.url?.trim() ? { url: out.test.url.trim() } : {}) };
       }
