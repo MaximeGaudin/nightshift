@@ -123,8 +123,16 @@ export function App() {
 
   const guard = useCallback((p: Promise<unknown>) => p.catch((e) => notifyError(e.message)), []);
 
+  const card = openCard ? snap?.board.cards.find((c) => c.id === openCard) : undefined;
+  // The open card was deleted: forget it so it does not reopen nor count as a dialog.
+  useEffect(() => {
+    if (openCard && snap && !card) setOpenCard(null);
+  }, [openCard, snap, card]);
+
   // Single global keyboard listener; it reads the latest state through a ref.
-  const dialogOpen = !!(modal || openCard || palette || help || newCard);
+  // Counts what is rendered, not the raw state (settings modal waits for settings).
+  const modalShown = modal === "settings" ? !!settings : !!modal;
+  const dialogOpen = !!(modalShown || card || palette || help || newCard);
   const keyState = useRef({ dialogOpen, ready: false });
   keyState.current = { dialogOpen, ready: !!snap };
   useEffect(() => {
@@ -184,7 +192,6 @@ export function App() {
   const questions = snap.board.cards.filter(
     (c) => !snap.live[c.id] && c.lastRun?.status === "question" && c.lastRun.columnId === c.columnId,
   ).length;
-  const card = openCard ? snap.board.cards.find((c) => c.id === openCard) : undefined;
 
   return (
     <div className="flex h-full flex-col">
