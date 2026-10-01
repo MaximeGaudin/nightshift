@@ -9,7 +9,8 @@
     "noEmit": true,
     "allowImportingTsExtensions": true,
     "lib": ["ESNext", "DOM"],
-    "types": ["bun"]
+    "types": ["bun"],
+    "paths": { "@/*": ["./src/web/*"] }
   },
-  "include": ["src", "bin"]
+  "include": ["src", "bin", "scripts"]
 }
