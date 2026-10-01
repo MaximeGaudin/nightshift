@@ -10,12 +10,17 @@ import {
   KeyboardSensor,
   PointerSensor,
   pointerWithin,
-  useDraggable,
   useDroppable,
   useSensor,
   useSensors,
 } from "@dnd-kit/core";
-import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import {
+  SortableContext,
+  type SortingStrategy,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -40,7 +45,7 @@ import { CardTile } from "./CardTile.tsx";
 import { CompactColumnBand, compactColumnTitle, DROP_TARGET, isCompactColumn, STRIP_COLUMN, WIDE_COLUMN } from "./compactColumn.tsx";
 import { Badge } from "./components/ui/badge.tsx";
 import { DoneColumn } from "./DoneColumn.tsx";
-import { readDoneCollapsed, writeDoneCollapsed } from "./doneColumn.ts";
+import { readDoneCollapsed, sortDoneCards, writeDoneCollapsed } from "./doneColumn.ts";
 import { usePrefersReducedMotion } from "./hooks/use-reduced-motion.ts";
 import { ColumnGlyph } from "./icons.tsx";
 import { cn } from "./lib/utils.ts";
@@ -86,14 +91,8 @@ function SortableCard({ card, render }: { card: Card; render: (card: Card, extra
   );
 }
 
-/** Cards of Done are ordered by date: they can be dragged out but never reordered. */
-function DraggableCard({ card, render }: { card: Card; render: (card: Card, extra: TileExtra) => ReactNode }) {
-  const { attributes, listeners, setActivatorNodeRef, isDragging } = useDraggable({
-    id: card.id,
-    data: { type: "card", columnId: card.columnId },
-  });
-  return render(card, { dragging: isDragging, dndProps: { ...attributes, ...listeners }, tileRef: setActivatorNodeRef });
-}
+/** Done is ordered by date: its cards are sortable (so the keyboard can move them out) but never shift to make room. */
+const noReorder: SortingStrategy = () => null;
 
 export function Board({
   snap,
@@ -308,7 +307,7 @@ export function Board({
                 dropActive={activeId !== null && overColumn === col.id}
                 collapsed={doneCollapsed}
                 onToggle={toggleDone}
-                renderCard={(card) => <DraggableCard card={card} render={tile} />}
+                renderCard={(card) => <SortableCard card={card} render={tile} />}
               />
             );
           const compact = compactIds.has(col.id);
@@ -436,5 +435,9 @@ function DoneZone(props: {
 }) {
   const { columnId, ...rest } = props;
   const { setNodeRef } = useDroppable({ id: columnDropId(columnId), data: { type: "column-empty", columnId } });
-  return <DoneColumn {...rest} dropRef={setNodeRef} />;
+  return (
+    <SortableContext items={sortDoneCards(props.cards).map((c) => c.id)} strategy={noReorder}>
+      <DoneColumn {...rest} dropRef={setNodeRef} />
+    </SortableContext>
+  );
 }
