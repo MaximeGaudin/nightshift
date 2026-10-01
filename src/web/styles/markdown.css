@@ -115,13 +115,13 @@
   font-family: var(--font-mono);
   font-size: 12px;
   padding: 0.1em 4px;
-  background: var(--ui-muted);
+  background: var(--muted);
   border: 1px solid var(--border);
   border-radius: 4px;
 }
 .md pre {
   padding: 8px 12px;
-  background: var(--ui-muted);
+  background: var(--muted);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow-x: auto;
@@ -176,7 +176,7 @@
 }
 .md th {
   font-weight: 600;
-  background: var(--ui-muted);
+  background: var(--muted);
 }
 
 /* Fullscreen capture viewer (portal on body). */
@@ -233,7 +233,7 @@
   padding: 16px 12px;
   border: 1px dashed var(--input);
   border-radius: 4px;
-  background: var(--ui-muted);
+  background: var(--muted);
   color: var(--muted-foreground);
   font-size: 12px;
 }
