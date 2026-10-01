@@ -9,13 +9,13 @@ import { Button } from "./components/ui/button.tsx";
 import { Input } from "./components/ui/input.tsx";
 import { Skeleton } from "./components/ui/skeleton.tsx";
 import { Textarea } from "./components/ui/textarea.tsx";
+import { useT } from "./i18n/index.ts";
 import { notifyError } from "./notify.ts";
-
-const DISCARD = "Abandonner les modifications non enregistrées ?";
 
 const norm = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 
 export function SkillsModal({ project, onClose }: { project: string; onClose: () => void }) {
+  const { t } = useT();
   const [skills, setSkills] = useState<SkillInfo[] | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [content, setContent] = useState("");
@@ -51,7 +51,7 @@ export function SkillsModal({ project, onClose }: { project: string; onClose: ()
   const query = norm(filter.trim());
   const shown = (skills ?? []).filter((s) => norm(`${s.name} ${s.description}`).includes(query));
 
-  const confirmDiscard = () => !dirty || confirm(DISCARD);
+  const confirmDiscard = () => !dirty || confirm(t("skills.discardChanges"));
 
   const pick = (name: string) => {
     if (name === selected || !confirmDiscard()) return;
@@ -73,8 +73,8 @@ export function SkillsModal({ project, onClose }: { project: string; onClose: ()
     <>
       <AppDialog
         size="xl"
-        title="Skills"
-        description="Instructions réutilisables que les colonnes confient aux agents."
+        title={t("skills.title")}
+        description={t("skills.description")}
         onClose={() => {
           if (confirmDiscard()) onClose();
         }}
@@ -91,12 +91,12 @@ export function SkillsModal({ project, onClose }: { project: string; onClose: ()
                 setCreating(true);
               }}
             >
-              <Plus /> Nouveau skill (projet)
+              <Plus /> {t("skills.new")}
             </Button>
             <div className="flex-1" />
             {selected && (
               <Button type="button" disabled={!dirty} onClick={save}>
-                Enregistrer
+                {t("common.save")}
               </Button>
             )}
           </>
@@ -107,9 +107,9 @@ export function SkillsModal({ project, onClose }: { project: string; onClose: ()
             <div className="relative">
               <Search className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
-                aria-label="Rechercher un skill"
+                aria-label={t("skills.searchLabel")}
                 className="pl-7"
-                placeholder="Rechercher…"
+                placeholder={t("skills.searchPlaceholder")}
                 value={filter}
                 onChange={(e) => setFilter(e.target.value)}
               />
@@ -124,9 +124,7 @@ export function SkillsModal({ project, onClose }: { project: string; onClose: ()
                 ))
               ) : shown.length === 0 ? (
                 <li className="skills-empty px-2 py-6 text-center text-xs text-muted-foreground">
-                  {skills.length === 0
-                    ? "Aucun skill pour le moment. Créez-en un avec « Nouveau skill »."
-                    : "Aucun skill ne correspond à la recherche."}
+                  {skills.length === 0 ? t("skills.empty") : t("skills.noMatch")}
                 </li>
               ) : (
                 shown.map((s) => (
@@ -141,7 +139,7 @@ export function SkillsModal({ project, onClose }: { project: string; onClose: ()
                         <Zap className="size-3.5 shrink-0 text-primary" />
                         <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{s.name}</span>
                         <Badge variant={s.scope === "project" ? "default" : "secondary"}>
-                          {s.scope === "project" ? "projet" : "utilisateur"}
+                          {s.scope === "project" ? t("skills.scopeProject") : t("skills.scopeUser")}
                         </Badge>
                       </span>
                       <span className="line-clamp-2 text-xs text-muted-foreground">{s.description}</span>
@@ -156,10 +154,10 @@ export function SkillsModal({ project, onClose }: { project: string; onClose: ()
               <>
                 <p className="text-xs text-muted-foreground">
                   <code>{current.path}</code>
-                  {current.scope === "user" && " · skill utilisateur, partagé par tous vos projets"}
+                  {current.scope === "user" && t("skills.userScopeNote")}
                 </p>
                 <Textarea
-                  aria-label={`Contenu du skill ${current.name}`}
+                  aria-label={t("skills.contentLabel", { name: current.name })}
                   className="min-h-0 flex-1 resize-none font-mono text-xs"
                   value={content}
                   onChange={(e) => setContent(e.target.value)}
@@ -168,7 +166,7 @@ export function SkillsModal({ project, onClose }: { project: string; onClose: ()
               </>
             ) : (
               <div className="flex flex-1 items-center justify-center rounded-md border border-dashed">
-                <p className="text-xs text-muted-foreground">Choisissez un skill à éditer, ou créez-en un nouveau.</p>
+                <p className="text-xs text-muted-foreground">{t("skills.pick")}</p>
               </div>
             )}
           </div>

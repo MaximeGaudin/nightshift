@@ -1,6 +1,6 @@
 import { TriangleAlert } from "lucide-react";
 import { type ReactNode, useState } from "react";
-import { MAX_PARALLEL, type Settings } from "../shared/types.ts";
+import { type LanguageSetting, MAX_PARALLEL, type Settings } from "../shared/types.ts";
 import { api } from "./api.ts";
 import { AppDialog } from "./components/app-dialog.tsx";
 import { Alert } from "./components/ui/alert.tsx";
@@ -10,15 +10,25 @@ import { Input } from "./components/ui/input.tsx";
 import { Label } from "./components/ui/label.tsx";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select.tsx";
 import { Switch } from "./components/ui/switch.tsx";
+import { type MessageKey, t, useT } from "./i18n/index.ts";
 import { notifyError } from "./notify.ts";
 
-const PERMISSION_OPTIONS: { value: Settings["permissionMode"]; label: string }[] = [
-  { value: "auto", label: "auto — un classifieur autorise ou refuse chaque action (recommandé)" },
-  { value: "acceptEdits", label: "acceptEdits — édite les fichiers, refuse les commandes non autorisées" },
-  { value: "dontAsk", label: "dontAsk — refuse tout ce qui n'est pas pré-autorisé" },
-  { value: "bypassPermissions", label: "bypassPermissions — tout autorisé (risqué)" },
-  { value: "plan", label: "plan — lecture seule" },
+const PERMISSION_OPTIONS: { value: Settings["permissionMode"]; label: MessageKey }[] = [
+  { value: "auto", label: "settings.permission.auto" },
+  { value: "acceptEdits", label: "settings.permission.acceptEdits" },
+  { value: "dontAsk", label: "settings.permission.dontAsk" },
+  { value: "bypassPermissions", label: "settings.permission.bypassPermissions" },
+  { value: "plan", label: "settings.permission.plan" },
 ];
+
+/** Language choices; the language names stay in their own language, only "Auto" is translated. */
+export function languageOptions(): { value: LanguageSetting; label: string }[] {
+  return [
+    { value: "auto", label: t("settings.language.auto") },
+    { value: "en", label: "English" },
+    { value: "fr", label: "Français" },
+  ];
+}
 
 function Section({ title, description, children }: { title: string; description: string; children: ReactNode }) {
   return (
@@ -56,14 +66,29 @@ export function SettingsContent({
   onOpenProject?: (path: string) => void;
 }) {
   const s = value;
+  const { t } = useT();
+  const languages = languageOptions();
   return (
     <div className="flex flex-col gap-6">
-      <Section title="Agents" description="Combien d'agents peuvent tourner en même temps, et comment vous êtes prévenu.">
-        <Row
-          id="set-max-parallel"
-          label="Plafond global d'agents en parallèle"
-          help="Tous projets confondus. La limite se règle par colonne ; ce plafond empêche seulement d'en lancer trop au total."
-        >
+      <Section title={t("settings.interface.title")} description={t("settings.interface.description")}>
+        <Row id="set-language" label={t("settings.language.label")} help={t("settings.language.help")}>
+          <Select value={s.language} onValueChange={(v) => onChange({ ...s, language: v as LanguageSetting })}>
+            <SelectTrigger id="set-language" className="w-full">
+              <SelectValue>{languages.find((o) => o.value === s.language)?.label}</SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {languages.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Row>
+      </Section>
+
+      <Section title={t("settings.agents.title")} description={t("settings.agents.description")}>
+        <Row id="set-max-parallel" label={t("settings.maxParallel.label")} help={t("settings.maxParallel.help")}>
           <Input
             id="set-max-parallel"
             type="number"
@@ -73,21 +98,13 @@ export function SettingsContent({
             onChange={(e) => onChange({ ...s, maxParallel: Number(e.target.value) })}
           />
         </Row>
-        <Row
-          id="set-sound"
-          label="Sons de notification"
-          help="Joue un son quand une carte a besoin de vous (colonne inerte, question, erreur). Le navigateur exige un premier clic sur la page."
-        >
+        <Row id="set-sound" label={t("settings.sound.label")} help={t("settings.sound.help")}>
           <Switch id="set-sound" checked={s.soundNotifications} onCheckedChange={(v) => onChange({ ...s, soundNotifications: v })} />
         </Row>
       </Section>
 
-      <Section title="Claude" description="Comment Claude Code est lancé pour chaque carte.">
-        <Row
-          id="set-permission"
-          label="Mode de permission de Claude Code"
-          help="Contrôle ce que les agents ont le droit de faire sans confirmation."
-        >
+      <Section title={t("settings.claude.title")} description={t("settings.claude.description")}>
+        <Row id="set-permission" label={t("settings.permission.label")} help={t("settings.permission.help")}>
           <div className="flex flex-col gap-2">
             <Select value={s.permissionMode} onValueChange={(v) => onChange({ ...s, permissionMode: v as Settings["permissionMode"] })}>
               <SelectTrigger id="set-permission" className="w-full">
@@ -96,7 +113,7 @@ export function SettingsContent({
               <SelectContent>
                 {PERMISSION_OPTIONS.map((o) => (
                   <SelectItem key={o.value} value={o.value}>
-                    {o.label}
+                    {t(o.label)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -104,35 +121,35 @@ export function SettingsContent({
             {s.permissionMode === "bypassPermissions" && (
               <Alert variant="warn">
                 <TriangleAlert />
-                <div>Les agents pourront exécuter n'importe quelle commande dans le dossier du projet sans confirmation.</div>
+                <div>{t("settings.permission.bypassWarning")}</div>
               </Alert>
             )}
           </div>
         </Row>
-        <Row id="set-model" label="Modèle par défaut" help="S'applique aux colonnes sans modèle propre. Vide = défaut du CLI claude.">
+        <Row id="set-model" label={t("settings.model.label")} help={t("settings.model.help")}>
           <Input
             id="set-model"
             value={s.model}
-            placeholder="ex. sonnet, opus"
+            placeholder={t("settings.model.placeholder")}
             onChange={(e) => onChange({ ...s, model: e.target.value })}
           />
         </Row>
-        <Row id="set-claude-path" label="Commande claude">
+        <Row id="set-claude-path" label={t("settings.claudePath.label")}>
           <Input id="set-claude-path" value={s.claudePath} onChange={(e) => onChange({ ...s, claudePath: e.target.value })} />
         </Row>
-        <Row id="set-extra-args" label="Arguments supplémentaires">
+        <Row id="set-extra-args" label={t("settings.extraArgs.label")}>
           <Input
             id="set-extra-args"
             value={s.extraArgs}
-            placeholder={'ex. --allowedTools "Bash(git *)" --max-budget-usd 2'}
+            placeholder={t("settings.extraArgs.placeholder")}
             onChange={(e) => onChange({ ...s, extraArgs: e.target.value })}
           />
         </Row>
       </Section>
 
-      <Section title="Projets récents" description="Projets ouverts récemment. Ouvrir l'un d'eux remplace le tableau affiché.">
+      <Section title={t("settings.recent.title")} description={t("settings.recent.description")}>
         {s.recentProjects.length === 0 ? (
-          <p className="recent-empty px-3 py-4 text-center text-xs text-muted-foreground">Aucun projet récent pour le moment.</p>
+          <p className="recent-empty px-3 py-4 text-center text-xs text-muted-foreground">{t("settings.recent.empty")}</p>
         ) : (
           <ul>
             {s.recentProjects.map((path) => (
@@ -140,9 +157,9 @@ export function SettingsContent({
                 <span className="min-w-0 flex-1 truncate font-mono text-xs" title={path}>
                   {path}
                 </span>
-                {path === currentProject && <Badge variant="secondary">Projet courant</Badge>}
+                {path === currentProject && <Badge variant="secondary">{t("settings.recent.current")}</Badge>}
                 <Button type="button" size="sm" variant="outline" disabled={path === currentProject} onClick={() => onOpenProject?.(path)}>
-                  Ouvrir
+                  {t("settings.recent.open")}
                 </Button>
               </li>
             ))}
@@ -150,14 +167,12 @@ export function SettingsContent({
         )}
       </Section>
 
-      <p className="text-xs text-muted-foreground">Réglages globaux, stockés dans ~/.nightshift/settings.json.</p>
+      <p className="text-xs text-muted-foreground">{t("settings.footnote")}</p>
     </div>
   );
 }
 
-const DISCARD = "Abandonner les modifications non enregistrées ?";
-
-const EDITABLE = ["maxParallel", "claudePath", "permissionMode", "model", "extraArgs", "soundNotifications"] as const;
+const EDITABLE = ["maxParallel", "claudePath", "permissionMode", "model", "extraArgs", "soundNotifications", "language"] as const;
 
 /** True when the form differs from the saved settings on any editable field. */
 export function settingsDirty(saved: Settings, draft: Settings): boolean {
@@ -176,6 +191,7 @@ export function SettingsModal({
   currentProject?: string;
   onOpenProject?: (path: string) => void;
 }) {
+  const { t } = useT();
   const [s, setS] = useState(settings);
   const save = () =>
     api
@@ -186,6 +202,7 @@ export function SettingsModal({
         model: s.model,
         extraArgs: s.extraArgs,
         soundNotifications: s.soundNotifications,
+        language: s.language,
       })
       .then(onClose)
       .catch((e) => notifyError(e.message));
@@ -193,16 +210,16 @@ export function SettingsModal({
   return (
     <AppDialog
       size="lg"
-      title="Réglages"
-      description="Préférences globales, communes à tous vos projets."
+      title={t("settings.title")}
+      description={t("settings.description")}
       onClose={onClose}
       footer={
         <>
           <Button type="button" variant="outline" onClick={onClose}>
-            Annuler
+            {t("common.cancel")}
           </Button>
           <Button type="button" onClick={save}>
-            Enregistrer
+            {t("common.save")}
           </Button>
         </>
       }
@@ -214,7 +231,7 @@ export function SettingsModal({
         onOpenProject={
           onOpenProject &&
           ((path) => {
-            if (settingsDirty(settings, s) && !confirm(DISCARD)) return;
+            if (settingsDirty(settings, s) && !confirm(t("settings.discardChanges"))) return;
             onClose();
             onOpenProject(path);
           })
