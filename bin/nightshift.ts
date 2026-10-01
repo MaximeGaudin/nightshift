@@ -29,7 +29,8 @@ try {
 }
 console.log(`Nightshift running at ${url}`);
 // NIGHTSHIFT_NO_OPEN lets an agent start the app for screenshots without popping a browser for the human.
-if (open && !process.env.NIGHTSHIFT_NO_OPEN) Bun.spawn([process.platform === "darwin" ? "open" : "xdg-open", url], { stdout: "ignore", stderr: "ignore" });
+if (open && !process.env.NIGHTSHIFT_NO_OPEN)
+  Bun.spawn([process.platform === "darwin" ? "open" : "xdg-open", url], { stdout: "ignore", stderr: "ignore" });
 
 for (const sig of ["SIGINT", "SIGTERM"] as const) {
   process.on(sig, () => {

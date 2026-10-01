@@ -12,13 +12,19 @@ const done: Column = { id: DONE_COLUMN_ID, name: "Done", type: "inert" };
 const board = (cards: Card[]): Board => ({ version: 1, name: "t", columns: [backlog, plan, done], cards, nextCardNumber: 2 });
 
 const card = (history: Card["history"], columnId: string): Card => ({
-  id: "k1", number: 1, title: "T", description: "", columnId,
-  createdAt: iso(0), updatedAt: iso(0), enteredColumnAt: iso(0), history,
+  id: "k1",
+  number: 1,
+  title: "T",
+  description: "",
+  columnId,
+  createdAt: iso(0),
+  updatedAt: iso(0),
+  enteredColumnAt: iso(0),
+  history,
 });
 const created = (col: Column) => ({ at: iso(0), kind: "created" as const, text: `Created in ${col.name}`, columnId: col.id });
 
 const render = (c: Card, nowMs: number) => renderToStaticMarkup(<TimePanelView card={c} board={board([c])} nowMs={nowMs} />);
-
 
 test("empty tab: just created, or only in Done", () => {
   const c = card([created(backlog)], backlog.id);

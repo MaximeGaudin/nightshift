@@ -57,9 +57,7 @@ export function SettingsModal({ settings, onClose }: { settings: Settings; onClo
           </select>
         </label>
         {s.permissionMode === "bypassPermissions" && (
-          <p className="hint warn">
-            Les agents pourront exécuter n'importe quelle commande dans le dossier du projet sans confirmation.
-          </p>
+          <p className="hint warn">Les agents pourront exécuter n'importe quelle commande dans le dossier du projet sans confirmation.</p>
         )}
         <label>
           Modèle par défaut
@@ -88,8 +86,7 @@ export function SettingsModal({ settings, onClose }: { settings: Settings; onClo
           Sons de notification
         </label>
         <p className="hint small">
-          Joue un son quand une carte a besoin de vous (colonne inerte, question, erreur). Le navigateur exige un premier clic sur la
-          page.
+          Joue un son quand une carte a besoin de vous (colonne inerte, question, erreur). Le navigateur exige un premier clic sur la page.
         </p>
         <p className="hint small settings-note">Réglages globaux, stockés dans ~/.nightshift/settings.json.</p>
       </div>

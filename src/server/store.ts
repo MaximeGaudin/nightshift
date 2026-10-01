@@ -1,7 +1,18 @@
 import { existsSync, readFileSync, renameSync, statSync, watch, writeFileSync, type FSWatcher } from "node:fs";
 import { basename, join } from "node:path";
 import { replayHistory } from "../shared/timeline.ts";
-import { doneColumn, ensureDoneColumn, normalizeColumnEmoji, normalizeColumnParallel, type Board, type Card, type Column, type ColumnType, type HistoryEntry, type TimeState } from "../shared/types.ts";
+import {
+  doneColumn,
+  ensureDoneColumn,
+  normalizeColumnEmoji,
+  normalizeColumnParallel,
+  type Board,
+  type Card,
+  type Column,
+  type ColumnType,
+  type HistoryEntry,
+  type TimeState,
+} from "../shared/types.ts";
 
 export const BOARD_FILE = "nightshift.json";
 
@@ -26,10 +37,7 @@ export function defaultBoard(name: string): Board {
   return {
     version: 1,
     name,
-    columns: [
-      ...DEFAULT_COLUMNS.map((c) => ({ id: newId("col"), ...c })),
-      doneColumn(),
-    ],
+    columns: [...DEFAULT_COLUMNS.map((c) => ({ id: newId("col"), ...c })), doneColumn()],
     cards: [],
     nextCardNumber: 1,
   };
@@ -80,7 +88,21 @@ export function doneColumnChanged(raw: any, board: Board): boolean {
 }
 
 export const COLUMN_KEYS = ["id", "name", "type", "skill", "instructions", "model", "maxParallel", "emoji"];
-const CARD_KEYS = ["id", "number", "title", "description", "columnId", "createdAt", "updatedAt", "enteredColumnAt", "lastRun", "pendingAnswer", "test", "history", "timeBase"];
+const CARD_KEYS = [
+  "id",
+  "number",
+  "title",
+  "description",
+  "columnId",
+  "createdAt",
+  "updatedAt",
+  "enteredColumnAt",
+  "lastRun",
+  "pendingAnswer",
+  "test",
+  "history",
+  "timeBase",
+];
 const BOARD_KEYS = ["version", "name", "columns", "cards", "nextCardNumber"];
 
 /**
@@ -110,7 +132,10 @@ function normalizeTimeBase(raw: any): TimeState | undefined {
   if (!c || typeof c !== "object" || typeof c.at !== "string" || typeof c.columnName !== "string") return undefined;
   if (c.part !== null && !validPart(c.part)) return undefined;
   if (c.columnId !== undefined && typeof c.columnId !== "string") return undefined;
-  return { totals, cursor: { at: c.at, ...(c.columnId !== undefined ? { columnId: c.columnId } : {}), columnName: c.columnName, part: c.part } };
+  return {
+    totals,
+    cursor: { at: c.at, ...(c.columnId !== undefined ? { columnId: c.columnId } : {}), columnName: c.columnName, part: c.part },
+  };
 }
 
 /** Normalizes a parsed board so the rest of the code can trust its shape. */
@@ -145,25 +170,29 @@ export function normalizeBoard(raw: any, fallbackName: string): Board {
     // Entries cut by the cap are folded into the checkpoint first, so their time is not lost.
     if (rawHistory.length > 50) timeBase = replayHistory(timeBase, rawHistory.slice(0, -50), c.createdAt ?? now());
     return {
-    ...unknownFields(c, CARD_KEYS),
-    id: c.id,
-    number: 0,
-    title: String(c.title ?? ""),
-    description: String(c.description ?? ""),
-    columnId: colIds.has(c.columnId) ? c.columnId : columns[0]!.id,
-    createdAt: c.createdAt ?? now(),
-    updatedAt: c.updatedAt ?? now(),
-    enteredColumnAt: c.enteredColumnAt ?? c.updatedAt ?? now(),
-    ...(c.lastRun ? { lastRun: c.lastRun } : {}),
-    ...(c.pendingAnswer ? { pendingAnswer: c.pendingAnswer } : {}),
-    ...(c.test && typeof c.test.command === "string" && c.test.command.trim()
-      ? { test: { command: c.test.command, ...(c.test.url ? { url: String(c.test.url) } : {}) } }
-      : {}),
-    history: rawHistory.slice(-50),
-    ...(timeBase ? { timeBase } : {}),
-  };
+      ...unknownFields(c, CARD_KEYS),
+      id: c.id,
+      number: 0,
+      title: String(c.title ?? ""),
+      description: String(c.description ?? ""),
+      columnId: colIds.has(c.columnId) ? c.columnId : columns[0]!.id,
+      createdAt: c.createdAt ?? now(),
+      updatedAt: c.updatedAt ?? now(),
+      enteredColumnAt: c.enteredColumnAt ?? c.updatedAt ?? now(),
+      ...(c.lastRun ? { lastRun: c.lastRun } : {}),
+      ...(c.pendingAnswer ? { pendingAnswer: c.pendingAnswer } : {}),
+      ...(c.test && typeof c.test.command === "string" && c.test.command.trim()
+        ? { test: { command: c.test.command, ...(c.test.url ? { url: String(c.test.url) } : {}) } }
+        : {}),
+      history: rawHistory.slice(-50),
+      ...(timeBase ? { timeBase } : {}),
+    };
   });
-  const nextCardNumber = assignNumbers(cards, rawCards.map((c) => c.number), raw?.nextCardNumber);
+  const nextCardNumber = assignNumbers(
+    cards,
+    rawCards.map((c) => c.number),
+    raw?.nextCardNumber,
+  );
   return { ...unknownFields(raw, BOARD_KEYS), version: 1, name: String(raw?.name ?? fallbackName), columns, cards, nextCardNumber };
 }
 

@@ -10,8 +10,15 @@ const fakeStorage = () => {
 };
 
 const mk = (n: number, at: string): Card => ({
-  id: `c${n}`, number: n, title: `Titre ${n}`, description: "", columnId: "col_done",
-  createdAt: at, updatedAt: at, enteredColumnAt: at, history: [],
+  id: `c${n}`,
+  number: n,
+  title: `Titre ${n}`,
+  description: "",
+  columnId: "col_done",
+  createdAt: at,
+  updatedAt: at,
+  enteredColumnAt: at,
+  history: [],
 });
 const cards = [mk(1, "2026-01-01T00:00:00Z"), mk(2, "2026-03-01T00:00:00Z"), mk(3, "2026-02-01T00:00:00Z")];
 
@@ -21,7 +28,14 @@ test("done collapsed preference", () => {
   writeDoneCollapsed(s, "/a", false);
   expect(readDoneCollapsed(s, "/a")).toBe(false);
   expect(readDoneCollapsed(s, "/b")).toBe(true);
-  const bad = { getItem: () => { throw new Error("x"); }, setItem: () => { throw new Error("x"); } };
+  const bad = {
+    getItem: () => {
+      throw new Error("x");
+    },
+    setItem: () => {
+      throw new Error("x");
+    },
+  };
   expect(() => writeDoneCollapsed(bad, "/a", true)).not.toThrow();
   expect(readDoneCollapsed(bad, "/a")).toBe(true);
 });
@@ -33,8 +47,14 @@ test("sortDoneCards newest first", () => {
 
 test("DoneColumn renders collapsed and expanded", () => {
   const props = {
-    cards, dragging: false, dropActive: false, onDragOverDone() {}, onDragLeaveDone() {},
-    onDropDone() {}, onToggle() {}, renderCard: (c: Card) => <b>{c.title}</b>,
+    cards,
+    dragging: false,
+    dropActive: false,
+    onDragOverDone() {},
+    onDragLeaveDone() {},
+    onDropDone() {},
+    onToggle() {},
+    renderCard: (c: Card) => <b>{c.title}</b>,
   };
   const closed = renderToStaticMarkup(<DoneColumn {...props} collapsed />);
   expect(closed).toContain("Done");

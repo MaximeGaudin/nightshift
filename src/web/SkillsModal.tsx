@@ -21,7 +21,11 @@ export function SkillsModal({ project, onClose }: { project: string; onClose: ()
   const [error, setError] = useState<string | null>(null);
   const [form, setForm] = useState({ name: "", description: "", body: TEMPLATE });
 
-  const reload = () => api.skills(project).then(setSkills).catch((e) => setError(e.message));
+  const reload = () =>
+    api
+      .skills(project)
+      .then(setSkills)
+      .catch((e) => setError(e.message));
   useEffect(() => void reload(), []);
   useEffect(() => {
     if (!selected) return;

@@ -78,10 +78,24 @@ export function TimePanelView({ card, board, nowMs }: { card: Card; board: Board
 
   return (
     <div className="time-panel">
-      <svg className="time-pie" viewBox={`0 0 ${SIZE} ${SIZE}`} width={SIZE} height={SIZE} role="img" aria-label="Répartition du temps par colonne">
+      <svg
+        className="time-pie"
+        viewBox={`0 0 ${SIZE} ${SIZE}`}
+        width={SIZE}
+        height={SIZE}
+        role="img"
+        aria-label="Répartition du temps par colonne"
+      >
         <defs>
           {patternIdxs.map((idx) => (
-            <pattern key={patternId(idx)} id={patternId(idx)} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <pattern
+              key={patternId(idx)}
+              id={patternId(idx)}
+              width="6"
+              height="6"
+              patternUnits="userSpaceOnUse"
+              patternTransform="rotate(45)"
+            >
               <rect width="6" height="6" fill={baseColor(idx, 80)} />
               <rect width="3" height="6" fill={baseColor(idx, 52)} />
             </pattern>

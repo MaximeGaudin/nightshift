@@ -3,7 +3,19 @@ import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import type { Subprocess } from "bun";
 import { spawn, type ChildProcess } from "node:child_process";
-import type { AttentionKind, Board, Card, Column, LiveStatus, LogLine, ProjectSnapshot, RunProgress, RunStatus, ServerEvent, Settings } from "../shared/types.ts";
+import type {
+  AttentionKind,
+  Board,
+  Card,
+  Column,
+  LiveStatus,
+  LogLine,
+  ProjectSnapshot,
+  RunProgress,
+  RunStatus,
+  ServerEvent,
+  Settings,
+} from "../shared/types.ts";
 import { canSendFeedback, cardRef, columnMaxParallel, isDoneColumn } from "../shared/types.ts";
 import { persistScreenshots } from "./screenshots.ts";
 import { getSettings, NIGHTSHIFT_HOME, onSettingsChange, rememberProject } from "./settings.ts";
@@ -72,7 +84,7 @@ export const RESULT_SCHEMA = {
       type: "array",
       items: { type: "string" },
       description:
-        "Only when you cannot continue without human decisions: ALL the questions you need answered, in one go. Set move to \"stay\". The answers will resume this session.",
+        'Only when you cannot continue without human decisions: ALL the questions you need answered, in one go. Set move to "stay". The answers will resume this session.',
     },
   },
   required: ["move", "summary"],
@@ -128,7 +140,13 @@ Rules:
 }
 
 /** Prompt resuming a session with free feedback from the user, in whatever column the card is now. */
-export function buildFeedbackPrompt(board: Board, card: Card, column: Column, skill: string | undefined, skillPath: string | undefined): string {
+export function buildFeedbackPrompt(
+  board: Board,
+  card: Card,
+  column: Column,
+  skill: string | undefined,
+  skillPath: string | undefined,
+): string {
   const idx = board.columns.findIndex((c) => c.id === column.id);
   const next = board.columns[idx + 1];
   const skillName = skill ? `the skill "${skill}"` : "the skill you applied earlier in this session";
@@ -291,7 +309,15 @@ export class Orchestrator {
       const job = this.jobs.get(this.key(p, card.id));
       if (job?.progress && !job.done) progress[card.id] = job.progress;
     }
-    return { path: p.path, board: p.board, live, testing, progress, ...(lockedBy ? { lockedBy } : {}), ...(this.agents ? {} : { agentsDisabled: true }) };
+    return {
+      path: p.path,
+      board: p.board,
+      live,
+      testing,
+      progress,
+      ...(lockedBy ? { lockedBy } : {}),
+      ...(this.agents ? {} : { agentsDisabled: true }),
+    };
   }
 
   private key(p: Project, cardId: string) {
@@ -382,7 +408,12 @@ export class Orchestrator {
       if (job.project !== p || job.cancelled || job.done) continue;
       const card = p.card(job.cardId);
       const col = card && p.column(card.columnId);
-      if (!card || card.columnId !== job.columnId || card.enteredColumnAt !== job.enteredAt || (job.startedInSkillColumn && col?.type !== "skill")) {
+      if (
+        !card ||
+        card.columnId !== job.columnId ||
+        card.enteredColumnAt !== job.enteredAt ||
+        (job.startedInSkillColumn && col?.type !== "skill")
+      ) {
         this.log(p, job.cardId, "info", "Card moved or deleted during the run: stopping agent.");
         this.kill(job);
       }
@@ -472,7 +503,12 @@ export class Orchestrator {
       const lr = card?.lastRun;
       if (!card || !lr?.sessionId || lr.columnId !== card.columnId || lr.status === "success")
         throw new Error("This card has no interrupted session to resume");
-      card.pendingAnswer = { text: "Resume the interrupted session", sessionId: lr.sessionId, at: new Date().toISOString(), kind: "resume" };
+      card.pendingAnswer = {
+        text: "Resume the interrupted session",
+        sessionId: lr.sessionId,
+        at: new Date().toISOString(),
+        kind: "resume",
+      };
       p.addHistory(card, "edited", "Session resume requested by user");
       p.addQueued(card);
     });
@@ -519,7 +555,9 @@ export class Orchestrator {
   private async run(job: Job, card: Card, column: Column) {
     const p = job.project;
     if (this.recentRuns(card) >= LOOP_MAX_RUNS) {
-      return this.finish(job, "error", { error: `Stopped: ${LOOP_MAX_RUNS} agent runs in 10 minutes without user action (loop guard). Click retry to run again.` });
+      return this.finish(job, "error", {
+        error: `Stopped: ${LOOP_MAX_RUNS} agent runs in 10 minutes without user action (loop guard). Click retry to run again.`,
+      });
     }
     const answer = card.pendingAnswer;
     // A new run needs its column's skill; a resumed session only uses it to tell the agent where the definition lives.
@@ -552,9 +590,18 @@ export class Orchestrator {
       const sessionId: string | undefined = result?.session_id ?? job.sessionId;
       const out = result?.structured_output;
       if (result && !result.is_error && out) {
-        const questions = Array.isArray(out.questions) ? out.questions.map(String).map((q: string) => q.trim()).filter(Boolean) : [];
+        const questions = Array.isArray(out.questions)
+          ? out.questions
+              .map(String)
+              .map((q: string) => q.trim())
+              .filter(Boolean)
+          : [];
         out.questions = questions;
-        return this.finish(job, questions.length > 0 ? "question" : "success", { output: out, costUsd, ...(sessionId ? { sessionId } : {}) });
+        return this.finish(job, questions.length > 0 ? "question" : "success", {
+          output: out,
+          costUsd,
+          ...(sessionId ? { sessionId } : {}),
+        });
       }
       const reason = !result
         ? `Agent exited without a result (${r.exit}).${r.stderr.trim() ? ` ${r.stderr.trim()}` : ""}`
@@ -567,7 +614,11 @@ export class Orchestrator {
         resumeId = sessionId;
         continue;
       }
-      return this.finish(job, "error", { error: reason.slice(0, 2000), ...(costUsd ? { costUsd } : {}), ...(sessionId ? { sessionId } : {}) });
+      return this.finish(job, "error", {
+        error: reason.slice(0, 2000),
+        ...(costUsd ? { costUsd } : {}),
+        ...(sessionId ? { sessionId } : {}),
+      });
     }
   }
 
@@ -605,7 +656,12 @@ export class Orchestrator {
       ...(model ? ["--model", model] : []),
       ...splitArgs(settings.extraArgs),
     ];
-    this.log(p, card.id, "info", `${verb} ${job.skill ? `skill "${job.skill}"` : "session"} in "${column.name}" (permission mode: ${settings.permissionMode}, model: ${model ?? "default"}).`);
+    this.log(
+      p,
+      card.id,
+      "info",
+      `${verb} ${job.skill ? `skill "${job.skill}"` : "session"} in "${column.name}" (permission mode: ${settings.permissionMode}, model: ${model ?? "default"}).`,
+    );
 
     let result: any = null;
     let stderr = "";
@@ -685,11 +741,7 @@ export class Orchestrator {
     this.broadcast({ type: "board", project: job.project.path, snapshot: this.snapshot(job.project) });
   }
 
-  private finish(
-    job: Job,
-    status: RunStatus,
-    data: { output?: any; error?: string; costUsd?: number; sessionId?: string },
-  ) {
+  private finish(job: Job, status: RunStatus, data: { output?: any; error?: string; costUsd?: number; sessionId?: string }) {
     const p = job.project;
     job.done = true;
     const card = p.card(job.cardId);
@@ -699,14 +751,13 @@ export class Orchestrator {
     }
     if (data.error) this.log(p, job.cardId, "error", data.error);
     // Decided inside the mutation, broadcast only once it has been applied.
-    let attention: AttentionKind | undefined =
-      status === "error" ? "error" : status === "question" ? "question" : undefined;
+    let attention: AttentionKind | undefined = status === "error" ? "error" : status === "question" ? "question" : undefined;
     p.mutate((board) => {
       const now = new Date().toISOString();
       const out = data.output;
       // A resumed run that dies without a session id (cancelled, failed to start) keeps the session it resumed,
       // so feedback or answers can be sent again.
-      const sessionId = data.sessionId ?? (card.pendingAnswer ? job.sessionId ?? card.pendingAnswer.sessionId : undefined);
+      const sessionId = data.sessionId ?? (card.pendingAnswer ? (job.sessionId ?? card.pendingAnswer.sessionId) : undefined);
       delete card.pendingAnswer;
       card.lastRun = {
         columnId: job.columnId,
@@ -780,7 +831,10 @@ export class Orchestrator {
     const entry = { project: p, cardId, proc, lines };
     this.tests.set(key, entry);
     this.testLine(p, cardId, lines, "info", `$ ${card.test.command}`);
-    for (const [stream, kind] of [[proc.stdout, "text"], [proc.stderr, "error"]] as const) {
+    for (const [stream, kind] of [
+      [proc.stdout, "text"],
+      [proc.stderr, "error"],
+    ] as const) {
       let buf = "";
       stream?.on("data", (chunk: Buffer) => {
         buf += chunk.toString();

@@ -13,7 +13,7 @@ test("card-screenshot-renders-endpoint", () => {
   expect(html).toContain(`<img src="/api/cards/card_a/screenshot?project=%2Fp&amp;file=${encodeURIComponent(shot)}"`);
   expect(html).toContain("<figcaption>Vue finale</figcaption>");
   expect(html).toContain("![ext](https://example.com/x.png)");
-  expect(html).not.toContain("example.com/x.png\"");
+  expect(html).not.toContain('example.com/x.png"');
 });
 
 test("test-panel-no-screenshots", () => {

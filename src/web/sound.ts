@@ -45,9 +45,7 @@ export function installAudioUnlock(): void {
     window.removeEventListener("keydown", unlock, true);
     try {
       if (!ctx) {
-        const Ctor =
-          window.AudioContext ??
-          (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        const Ctor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
         if (!Ctor) return;
         ctx = new Ctor();
       }

@@ -36,7 +36,12 @@ test("next-column-click-order", async () => {
   expect(calls).toEqual([["before"], ["move", "p", "card1", "x2"]]);
 
   calls.length = 0;
-  await sendToNext({ ...base, beforeMove: async () => { throw new Error("boom"); } });
+  await sendToNext({
+    ...base,
+    beforeMove: async () => {
+      throw new Error("boom");
+    },
+  });
   expect(calls).toEqual([]);
   expect(errors).toEqual(["boom"]);
 });

@@ -3,7 +3,16 @@ import { dirname, join, resolve } from "node:path";
 import { homedir } from "node:os";
 import type { ServerWebSocket } from "bun";
 import index from "../web/index.html";
-import { ensureDoneColumn, isDoneColumn, normalizeColumnEmoji, normalizeColumnParallel, type Card, type Column, type ColumnType, type ServerEvent } from "../shared/types.ts";
+import {
+  ensureDoneColumn,
+  isDoneColumn,
+  normalizeColumnEmoji,
+  normalizeColumnParallel,
+  type Card,
+  type Column,
+  type ColumnType,
+  type ServerEvent,
+} from "../shared/types.ts";
 import { Orchestrator } from "./orchestrator.ts";
 import { getSettings, updateSettings } from "./settings.ts";
 import { COLUMN_KEYS, newId, unknownFields } from "./store.ts";

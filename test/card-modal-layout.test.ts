@@ -38,7 +38,7 @@ test("card-modal-grid-tracks-shrink", () => {
 });
 
 test("card-modal-mobile-track-shrinks", () => {
-  expect(mobileBlock()).toContain(".card-modal { grid-template-columns: minmax(0, 1fr); }");
+  expect(mobileBlock().replace(/\s+/g, " ")).toContain(".card-modal { grid-template-columns: minmax(0, 1fr); }");
 });
 
 test("card-modal-children-min-width", () => {

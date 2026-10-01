@@ -13,12 +13,11 @@ test("shared-is-card-screenshot", () => {
 });
 
 test("shared-is-card-screenshot cardScreenshots and screenshotUrl", () => {
-  const d = "![One](/w/nightshift-screenshots/1.png) x ![](/h/screenshots/card_a/2.png) ![N](https://x/3.png) ![O](/h/screenshots/card_b/4.png)";
+  const d =
+    "![One](/w/nightshift-screenshots/1.png) x ![](/h/screenshots/card_a/2.png) ![N](https://x/3.png) ![O](/h/screenshots/card_b/4.png)";
   expect(cardScreenshots(d, "card_a")).toEqual([
     { alt: "One", file: "/w/nightshift-screenshots/1.png" },
     { alt: "Capture", file: "/h/screenshots/card_a/2.png" },
   ]);
-  expect(screenshotUrl("my proj", "card_a", "/a b/1.png")).toBe(
-    "/api/cards/card_a/screenshot?project=my%20proj&file=%2Fa%20b%2F1.png",
-  );
+  expect(screenshotUrl("my proj", "card_a", "/a b/1.png")).toBe("/api/cards/card_a/screenshot?project=my%20proj&file=%2Fa%20b%2F1.png");
 });

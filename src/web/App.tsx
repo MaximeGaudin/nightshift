@@ -67,10 +67,7 @@ export function App() {
     document.title = snap ? `${snap.board.name} · Nightshift` : "Nightshift";
   }, [snap?.board.name]);
 
-  const guard = useCallback(
-    (p: Promise<unknown>) => p.catch((e) => setError(e.message)),
-    [],
-  );
+  const guard = useCallback((p: Promise<unknown>) => p.catch((e) => setError(e.message)), []);
 
   if (!project || (!snap && error)) {
     return (
@@ -139,13 +136,23 @@ export function App() {
       )}
       {snap.lockedBy && (
         <div className="lock-banner" role="status">
-          Un autre processus Nightshift (pid {snap.lockedBy}) exécute déjà les agents de ce projet. Cette fenêtre affiche et
-          édite le kanban mais ne lance aucun agent tant que l'autre processus tourne.
+          Un autre processus Nightshift (pid {snap.lockedBy}) exécute déjà les agents de ce projet. Cette fenêtre affiche et édite le kanban
+          mais ne lance aucun agent tant que l'autre processus tourne.
         </div>
       )}
       <Board snap={snap} onOpen={setOpenCard} guard={guard} />
 
-      {card && <CardModal project={snap.path} card={card} board={snap.board} live={snap.live[card.id]} progress={snap.progress?.[card.id]} testing={snap.testing?.includes(card.id) ?? false} onClose={() => setOpenCard(null)} />}
+      {card && (
+        <CardModal
+          project={snap.path}
+          card={card}
+          board={snap.board}
+          live={snap.live[card.id]}
+          progress={snap.progress?.[card.id]}
+          testing={snap.testing?.includes(card.id) ?? false}
+          onClose={() => setOpenCard(null)}
+        />
+      )}
       {modal === "columns" && <ColumnsEditor snap={snap} onClose={() => setModal(null)} />}
       {modal === "skills" && <SkillsModal project={snap.path} onClose={() => setModal(null)} />}
       {modal === "settings" && settings && <SettingsModal settings={settings} onClose={() => setModal(null)} />}
@@ -168,15 +175,7 @@ export function App() {
   );
 }
 
-function Board({
-  snap,
-  onOpen,
-  guard,
-}: {
-  snap: ProjectSnapshot;
-  onOpen: (id: string) => void;
-  guard: (p: Promise<unknown>) => void;
-}) {
+function Board({ snap, onOpen, guard }: { snap: ProjectSnapshot; onOpen: (id: string) => void; guard: (p: Promise<unknown>) => void }) {
   const [drag, setDrag] = useState<string | null>(null);
   const [drop, setDrop] = useState<{ col: string; index: number } | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -218,22 +217,22 @@ function Board({
   const tile = (card: Card) => {
     const next = nextColumn(snap.board.columns, card.columnId);
     return (
-    <CardTile
-      project={snap.path}
-      card={card}
-      live={snap.live[card.id]}
-      progress={snap.progress?.[card.id]}
-      dragging={drag === card.id}
-      next={next ? { name: next.name } : undefined}
-      onSendNext={next ? () => sendNext(card, next.id) : undefined}
-      sending={sending.has(card.id)}
-      onOpen={() => onOpen(card.id)}
-      onDragStart={() => setDrag(card.id)}
-      onDragEnd={() => {
-        setDrag(null);
-        setDrop(null);
-      }}
-    />
+      <CardTile
+        project={snap.path}
+        card={card}
+        live={snap.live[card.id]}
+        progress={snap.progress?.[card.id]}
+        dragging={drag === card.id}
+        next={next ? { name: next.name } : undefined}
+        onSendNext={next ? () => sendNext(card, next.id) : undefined}
+        sending={sending.has(card.id)}
+        onOpen={() => onOpen(card.id)}
+        onDragStart={() => setDrag(card.id)}
+        onDragEnd={() => {
+          setDrag(null);
+          setDrop(null);
+        }}
+      />
     );
   };
 
@@ -288,52 +287,52 @@ function Board({
               <CompactColumnBand col={col} onAdd={() => setExpanded(col.id)} />
             ) : (
               <>
-              <header className="column-head">
-                <div className="column-title">
-                  <ColumnGlyph col={col} />
-                  <h2>{col.name}</h2>
-                  <span className="count">{cards.length}</span>
-                  {col.type === "skill" && (
-                    <span className="column-parallel" title="agents actifs / limite de la colonne">
-                      {cards.filter((c) => snap.live[c.id] === "running").length} / {columnMaxParallel(col)}
-                    </span>
-                  )}
-                </div>
-                {col.type === "skill" ? (
-                  <div className="column-badges">
-                    <span className="badge skill" title={col.instructions || undefined}>
-                      {col.skill || "aucun skill"}
-                    </span>
-                    {col.model && (
-                      <span className="badge model" title={`Modèle : ${col.model}`}>
-                        {col.model}
+                <header className="column-head">
+                  <div className="column-title">
+                    <ColumnGlyph col={col} />
+                    <h2>{col.name}</h2>
+                    <span className="count">{cards.length}</span>
+                    {col.type === "skill" && (
+                      <span className="column-parallel" title="agents actifs / limite de la colonne">
+                        {cards.filter((c) => snap.live[c.id] === "running").length} / {columnMaxParallel(col)}
                       </span>
                     )}
                   </div>
+                  {col.type === "skill" ? (
+                    <div className="column-badges">
+                      <span className="badge skill" title={col.instructions || undefined}>
+                        {col.skill || "aucun skill"}
+                      </span>
+                      {col.model && (
+                        <span className="badge model" title={`Modèle : ${col.model}`}>
+                          {col.model}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="badge inert">inerte</span>
+                  )}
+                </header>
+                <div className="cards">
+                  {cards.map((card, i) => (
+                    <div key={card.id}>
+                      {drop?.col === col.id && drop.index === i && <div className="drop-indicator" />}
+                      {tile(card)}
+                    </div>
+                  ))}
+                  {drop?.col === col.id && drop.index === cards.length && <div className="drop-indicator" />}
+                </div>
+                {expanded === col.id ? (
+                  <AddCard
+                    key="expanded"
+                    initialOpen
+                    closeOnEmptyBlur
+                    onClose={() => setExpanded(null)}
+                    onAdd={(title) => guard(api.createCard(snap.path, col.id, title))}
+                  />
                 ) : (
-                  <span className="badge inert">inerte</span>
+                  <AddCard key="plain" onAdd={(title) => guard(api.createCard(snap.path, col.id, title))} />
                 )}
-              </header>
-              <div className="cards">
-                {cards.map((card, i) => (
-                  <div key={card.id}>
-                    {drop?.col === col.id && drop.index === i && <div className="drop-indicator" />}
-                    {tile(card)}
-                  </div>
-                ))}
-                {drop?.col === col.id && drop.index === cards.length && <div className="drop-indicator" />}
-              </div>
-              {expanded === col.id ? (
-                <AddCard
-                  key="expanded"
-                  initialOpen
-                  closeOnEmptyBlur
-                  onClose={() => setExpanded(null)}
-                  onAdd={(title) => guard(api.createCard(snap.path, col.id, title))}
-                />
-              ) : (
-                <AddCard key="plain" onAdd={(title) => guard(api.createCard(snap.path, col.id, title))} />
-              )}
               </>
             )}
           </section>

@@ -11,7 +11,12 @@ const grill: Column = { id: "grill", name: "Grill", type: "skill", skill: "g" };
 const plan: Column = { id: "plan", name: "Plan", type: "skill", skill: "p" };
 const columns: Column[] = [backlog, grill, plan, doneColumn()];
 
-const created = (t: number, col: Column): HistoryEntry => ({ at: at(t), kind: "created", text: `Created in ${col.name}`, columnId: col.id });
+const created = (t: number, col: Column): HistoryEntry => ({
+  at: at(t),
+  kind: "created",
+  text: `Created in ${col.name}`,
+  columnId: col.id,
+});
 const moved = (t: number, from: Column, to: Column): HistoryEntry => ({
   at: at(t),
   kind: "moved",
@@ -20,7 +25,12 @@ const moved = (t: number, from: Column, to: Column): HistoryEntry => ({
 });
 const oldMoved = (t: number, from: string, to: string): HistoryEntry => ({ at: at(t), kind: "moved", text: `Agent: ${from} → ${to}` });
 const queued = (t: number, col: Column): HistoryEntry => ({ at: at(t), kind: "queued", text: `Queued in ${col.name}`, columnId: col.id });
-const started = (t: number, col: Column): HistoryEntry => ({ at: at(t), kind: "started", text: `Agent started in ${col.name}`, columnId: col.id });
+const started = (t: number, col: Column): HistoryEntry => ({
+  at: at(t),
+  kind: "started",
+  text: `Agent started in ${col.name}`,
+  columnId: col.id,
+});
 const run = (t: number, col: Column): HistoryEntry => ({ at: at(t), kind: "run", text: `${col.name}: done` });
 const edited = (t: number): HistoryEntry => ({ at: at(t), kind: "edited", text: "Edited by user" });
 
@@ -42,7 +52,14 @@ function card(history: HistoryEntry[], extra: Partial<Card> = {}): Card {
 const view = (slices: ReturnType<typeof cardTimeSlices>) => slices.map((x) => `${x.columnName}/${x.part}/${x.ms}`);
 
 test("detailed replay splits inert, queued, running and human time", () => {
-  const h = [created(0, backlog), moved(10, backlog, plan), queued(10, plan), started(15, plan), run(25, plan), moved(40, plan, doneColumn())];
+  const h = [
+    created(0, backlog),
+    moved(10, backlog, plan),
+    queued(10, plan),
+    started(15, plan),
+    run(25, plan),
+    moved(40, plan, doneColumn()),
+  ];
   expect(view(cardTimeSlices(card(h), columns, T0 + s(100)))).toEqual([
     "Backlog/inert/10000",
     "Plan/queued/5000",
@@ -73,12 +90,17 @@ test("visits are merged into one row per column and part", () => {
 });
 
 test("a rerun stops human waiting at queued", () => {
-  const h = [created(0, plan), queued(0, plan), started(5, plan), run(10, plan), edited(20), queued(30, plan), started(32, plan), run(40, plan)];
-  expect(view(cardTimeSlices(card(h), columns, T0 + s(50)))).toEqual([
-    "Plan/queued/7000",
-    "Plan/running/13000",
-    "Plan/human/30000",
-  ]);
+  const h = [
+    created(0, plan),
+    queued(0, plan),
+    started(5, plan),
+    run(10, plan),
+    edited(20),
+    queued(30, plan),
+    started(32, plan),
+    run(40, plan),
+  ];
+  expect(view(cardTimeSlices(card(h), columns, T0 + s(50)))).toEqual(["Plan/queued/7000", "Plan/running/13000", "Plan/human/30000"]);
 });
 
 test("old cards give legacy slices for skill columns and inert for inert ones", () => {
@@ -90,11 +112,7 @@ test("old cards give legacy slices for skill columns and inert for inert ones", 
     oldMoved(30, "Plan", "Backlog"),
     oldMoved(40, "Backlog", "Done"),
   ];
-  expect(view(cardTimeSlices(card(h), columns, T0 + s(100)))).toEqual([
-    "Backlog/inert/20000",
-    "Grill/legacy/10000",
-    "Plan/legacy/10000",
-  ]);
+  expect(view(cardTimeSlices(card(h), columns, T0 + s(100)))).toEqual(["Backlog/inert/20000", "Grill/legacy/10000", "Plan/legacy/10000"]);
 });
 
 test("an already truncated history attributes the first interval to the source column", () => {
@@ -110,20 +128,19 @@ test("deleted column keeps its last parsed name after the board columns", () => 
     { at: at(20), kind: "moved", text: "Moved by user: Old name → Renamed", columnId: "gone" },
     moved(30, plan, plan),
   ];
-  expect(view(cardTimeSlices(card(gone), columns, T0 + s(40)))).toEqual([
-    "Backlog/inert/10000",
-    "Plan/inert/10000",
-    "Renamed/inert/20000",
-  ]);
+  expect(view(cardTimeSlices(card(gone), columns, T0 + s(40)))).toEqual(["Backlog/inert/10000", "Plan/inert/10000", "Renamed/inert/20000"]);
 });
 
 test("legacy cursor ignores detailed-only entries until the next move", () => {
-  const h = [oldMoved(10, "Backlog", "Plan"), queued(12, plan), started(14, plan), run(16, plan), moved(20, plan, grill), queued(20, grill)];
-  expect(view(cardTimeSlices(card(h), columns, T0 + s(30)))).toEqual([
-    "Backlog/inert/10000",
-    "Grill/queued/10000",
-    "Plan/legacy/10000",
-  ]);
+  const h = [
+    oldMoved(10, "Backlog", "Plan"),
+    queued(12, plan),
+    started(14, plan),
+    run(16, plan),
+    moved(20, plan, grill),
+    queued(20, grill),
+  ];
+  expect(view(cardTimeSlices(card(h), columns, T0 + s(30)))).toEqual(["Backlog/inert/10000", "Grill/queued/10000", "Plan/legacy/10000"]);
 });
 
 test("replay does not mutate its base", () => {

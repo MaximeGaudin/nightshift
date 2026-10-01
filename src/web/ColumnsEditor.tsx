@@ -57,7 +57,14 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => void api.skills(snap.path).then(setSkills).catch((e) => setError(e.message)), []);
+  useEffect(
+    () =>
+      void api
+        .skills(snap.path)
+        .then(setSkills)
+        .catch((e) => setError(e.message)),
+    [],
+  );
 
   const count = (id: string) => snap.board.cards.filter((c) => c.columnId === id).length;
   const patch = (i: number, p: Partial<Column>) => setCols((cs) => cs.map((c, j) => (j === i ? { ...c, ...p } : c)));
@@ -118,8 +125,9 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
         <input value={name} onChange={(e) => setName(e.target.value)} />
       </label>
       <p className="hint">
-        Une colonne <strong>skill</strong> exécute le skill choisi sur chaque fiche qui y arrive. Chaque colonne skill a sa propre
-        limite d'agents en parallèle (1 par défaut), sous le plafond global des réglages. Le skill peut modifier la fiche puis l'envoyer à la colonne suivante. Le champ emoji (optionnel) remplace l'icône de type de la colonne.
+        Une colonne <strong>skill</strong> exécute le skill choisi sur chaque fiche qui y arrive. Chaque colonne skill a sa propre limite
+        d'agents en parallèle (1 par défaut), sous le plafond global des réglages. Le skill peut modifier la fiche puis l'envoyer à la
+        colonne suivante. Le champ emoji (optionnel) remplace l'icône de type de la colonne.
       </p>
       <ol className="col-editor">
         {cols.map((c, i) =>
@@ -134,85 +142,85 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
               </div>
             </li>
           ) : (
-          <li key={c.key} className={c.type}>
-            <div className="col-editor-row">
-              <span className="order">{i + 1}</span>
-              <ColumnGlyph col={c} />
-              <EmojiInput value={c.emoji} onChange={(v) => patch(i, { emoji: v })} />
-              <input aria-label="Nom" value={c.name} onChange={(e) => patch(i, { name: e.target.value })} />
-              <select aria-label="Type" value={c.type} onChange={(e) => patch(i, { type: e.target.value as Column["type"] })}>
-                <option value="inert">Inerte</option>
-                <option value="skill">Skill</option>
-              </select>
-              {c.type === "skill" && (
-                <select aria-label="Skill" value={c.skill ?? ""} onChange={(e) => patch(i, { skill: e.target.value })}>
-                  <option value="">— choisir un skill —</option>
-                  {c.skill && !skills.some((s) => s.name === c.skill) && <option value={c.skill}>{c.skill} (introuvable)</option>}
-                  {(["project", "user"] as const).map((scope) => (
-                    <optgroup key={scope} label={scope === "project" ? "Skills du projet" : "Skills utilisateur"}>
-                      {skills
-                        .filter((s) => s.scope === scope)
-                        .map((s) => (
-                          <option key={s.name} value={s.name}>
-                            {s.name}
-                          </option>
-                        ))}
-                    </optgroup>
-                  ))}
+            <li key={c.key} className={c.type}>
+              <div className="col-editor-row">
+                <span className="order">{i + 1}</span>
+                <ColumnGlyph col={c} />
+                <EmojiInput value={c.emoji} onChange={(v) => patch(i, { emoji: v })} />
+                <input aria-label="Nom" value={c.name} onChange={(e) => patch(i, { name: e.target.value })} />
+                <select aria-label="Type" value={c.type} onChange={(e) => patch(i, { type: e.target.value as Column["type"] })}>
+                  <option value="inert">Inerte</option>
+                  <option value="skill">Skill</option>
                 </select>
+                {c.type === "skill" && (
+                  <select aria-label="Skill" value={c.skill ?? ""} onChange={(e) => patch(i, { skill: e.target.value })}>
+                    <option value="">— choisir un skill —</option>
+                    {c.skill && !skills.some((s) => s.name === c.skill) && <option value={c.skill}>{c.skill} (introuvable)</option>}
+                    {(["project", "user"] as const).map((scope) => (
+                      <optgroup key={scope} label={scope === "project" ? "Skills du projet" : "Skills utilisateur"}>
+                        {skills
+                          .filter((s) => s.scope === scope)
+                          .map((s) => (
+                            <option key={s.name} value={s.name}>
+                              {s.name}
+                            </option>
+                          ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                )}
+                <div className="spacer" />
+                <button className="icon-btn" disabled={i === 0} onClick={() => move(i, -1)} aria-label="Monter">
+                  <Chevron up />
+                </button>
+                <button className="icon-btn" disabled={i >= cols.length - 2} onClick={() => move(i, 1)} aria-label="Descendre">
+                  <Chevron />
+                </button>
+                <button
+                  className="icon-btn danger"
+                  disabled={!!c.id && count(c.id) > 0}
+                  title={c.id && count(c.id) > 0 ? "Videz la colonne avant de la supprimer" : "Supprimer"}
+                  onClick={() => setCols((cs) => cs.filter((_, j) => j !== i))}
+                  aria-label="Supprimer"
+                >
+                  <Icon name="trash" />
+                </button>
+              </div>
+              {c.type === "skill" && (
+                <>
+                  {c.skill && <p className="hint small">{skills.find((s) => s.name === c.skill)?.description}</p>}
+                  <label className="col-model">
+                    Modèle
+                    <input
+                      list="column-models"
+                      placeholder="Réglage global"
+                      value={c.model ?? ""}
+                      onChange={(e) => patch(i, { model: e.target.value })}
+                    />
+                  </label>
+                  <p className="hint small">Vide = modèle des réglages globaux.</p>
+                  <label className="col-model">
+                    Agents en parallèle dans cette colonne
+                    <input
+                      type="number"
+                      min={1}
+                      max={MAX_PARALLEL}
+                      step={1}
+                      placeholder="1 (défaut)"
+                      value={c.maxParallel ?? ""}
+                      onChange={(e) => patch(i, { maxParallel: clampParallel(e.target.value) })}
+                    />
+                  </label>
+                  <p className="hint small">Vide = 1. Le plafond global des réglages s'applique toujours.</p>
+                  <textarea
+                    className="instructions"
+                    placeholder="Instructions additionnelles pour l'agent (optionnel)…"
+                    value={c.instructions ?? ""}
+                    onChange={(e) => patch(i, { instructions: e.target.value })}
+                  />
+                </>
               )}
-              <div className="spacer" />
-              <button className="icon-btn" disabled={i === 0} onClick={() => move(i, -1)} aria-label="Monter">
-                <Chevron up />
-              </button>
-              <button className="icon-btn" disabled={i >= cols.length - 2} onClick={() => move(i, 1)} aria-label="Descendre">
-                <Chevron />
-              </button>
-              <button
-                className="icon-btn danger"
-                disabled={!!c.id && count(c.id) > 0}
-                title={c.id && count(c.id) > 0 ? "Videz la colonne avant de la supprimer" : "Supprimer"}
-                onClick={() => setCols((cs) => cs.filter((_, j) => j !== i))}
-                aria-label="Supprimer"
-              >
-                <Icon name="trash" />
-              </button>
-            </div>
-            {c.type === "skill" && (
-              <>
-                {c.skill && <p className="hint small">{skills.find((s) => s.name === c.skill)?.description}</p>}
-                <label className="col-model">
-                  Modèle
-                  <input
-                    list="column-models"
-                    placeholder="Réglage global"
-                    value={c.model ?? ""}
-                    onChange={(e) => patch(i, { model: e.target.value })}
-                  />
-                </label>
-                <p className="hint small">Vide = modèle des réglages globaux.</p>
-                <label className="col-model">
-                  Agents en parallèle dans cette colonne
-                  <input
-                    type="number"
-                    min={1}
-                    max={MAX_PARALLEL}
-                    step={1}
-                    placeholder="1 (défaut)"
-                    value={c.maxParallel ?? ""}
-                    onChange={(e) => patch(i, { maxParallel: clampParallel(e.target.value) })}
-                  />
-                </label>
-                <p className="hint small">Vide = 1. Le plafond global des réglages s'applique toujours.</p>
-                <textarea
-                  className="instructions"
-                  placeholder="Instructions additionnelles pour l'agent (optionnel)…"
-                  value={c.instructions ?? ""}
-                  onChange={(e) => patch(i, { instructions: e.target.value })}
-                />
-              </>
-            )}
-          </li>
+            </li>
           ),
         )}
       </ol>

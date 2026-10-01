@@ -5,8 +5,15 @@ import type { Card } from "../src/shared/types.ts";
 import { CardThumbnail } from "../src/web/CardThumbnail.tsx";
 
 const mk = (id: string, description: string): Card => ({
-  id, number: 1, title: "T", description, columnId: "c",
-  createdAt: "", updatedAt: "", enteredColumnAt: "", history: [],
+  id,
+  number: 1,
+  title: "T",
+  description,
+  columnId: "c",
+  createdAt: "",
+  updatedAt: "",
+  enteredColumnAt: "",
+  history: [],
 });
 
 test("thumbnail present/absent", () => {

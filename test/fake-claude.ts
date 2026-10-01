@@ -17,15 +17,36 @@ const modelAt = process.argv.indexOf("--model");
 if (process.env.FAKE_ARGS_LOG) {
   appendFileSync(
     process.env.FAKE_ARGS_LOG,
-    JSON.stringify({ title, resumed, model: modelAt >= 0 ? process.argv[modelAt + 1] : null, argvHasCard: process.argv.some((a) => a.includes("<card")) }) + "\n",
+    JSON.stringify({
+      title,
+      resumed,
+      model: modelAt >= 0 ? process.argv[modelAt + 1] : null,
+      argvHasCard: process.argv.some((a) => a.includes("<card")),
+    }) + "\n",
   );
 }
 const emit = (o: unknown) => console.log(JSON.stringify(o));
 emit({ type: "system", subtype: "init", session_id: "sess-1", model: "fake" });
-emit({ type: "assistant", message: { content: [{ type: "text", text: `Working on ${title}` }, { type: "tool_use", name: "Bash", input: { command: "ls" } }] } });
+emit({
+  type: "assistant",
+  message: {
+    content: [
+      { type: "text", text: `Working on ${title}` },
+      { type: "tool_use", name: "Bash", input: { command: "ls" } },
+    ],
+  },
+});
 const todos = (...status: string[]) => ({
   type: "assistant",
-  message: { content: [{ type: "tool_use", name: "TodoWrite", input: { todos: status.map((s, i) => ({ content: `Tâche ${i + 1}`, activeForm: `Tâche ${i + 1} en cours`, status: s })) } }] },
+  message: {
+    content: [
+      {
+        type: "tool_use",
+        name: "TodoWrite",
+        input: { todos: status.map((s, i) => ({ content: `Tâche ${i + 1}`, activeForm: `Tâche ${i + 1} en cours`, status: s })) },
+      },
+    ],
+  },
 });
 if (title === "progress") {
   emit(todos("in_progress", "pending"));
@@ -35,7 +56,11 @@ if (title === "progress") {
   emit({ type: "assistant", message: { content: [{ type: "text", text: "[nightshift-progress] 1/2 Principal" }] } });
   // Subagent events (parent_tool_use_id set) must not drive the card's progress.
   emit({ ...todos("completed", "in_progress"), parent_tool_use_id: "toolu_1" });
-  emit({ type: "assistant", parent_tool_use_id: "toolu_1", message: { content: [{ type: "text", text: "[nightshift-progress] 5/9 Sous-agent" }] } });
+  emit({
+    type: "assistant",
+    parent_tool_use_id: "toolu_1",
+    message: { content: [{ type: "text", text: "[nightshift-progress] 5/9 Sous-agent" }] },
+  });
 } else if (title === "progress-todo") {
   emit(todos("in_progress", "pending"));
 }
@@ -46,16 +71,36 @@ if (title === "no-output" && !resumed) {
 } else if (title === "die" && !resumed) {
   process.exit(137); // killed mid-run: no result event at all
 } else if (title === "ask" && !resumed) {
-  emit({ type: "result", is_error: false, session_id: "sess-ask", structured_output: { move: "stay", summary: "need input", questions: ["Color?", "Size?"] } });
+  emit({
+    type: "result",
+    is_error: false,
+    session_id: "sess-ask",
+    structured_output: { move: "stay", summary: "need input", questions: ["Color?", "Size?"] },
+  });
 } else if (resumed && prompt.includes("FAKE_FAIL")) {
   emit({ type: "result", is_error: true, result: "feedback boom", session_id: "sess-fb" });
 } else if (resumed && prompt.includes("FAKE_ASK")) {
-  emit({ type: "result", is_error: false, session_id: "sess-fb", structured_output: { move: "stay", summary: "need input", questions: ["Which one?"] } });
+  emit({
+    type: "result",
+    is_error: false,
+    session_id: "sess-fb",
+    structured_output: { move: "stay", summary: "need input", questions: ["Which one?"] },
+  });
 } else if (resumed && /FAKE_MOVE=/.test(prompt)) {
   const move = prompt.match(/FAKE_MOVE=(\S+)/)![1]!;
-  emit({ type: "result", is_error: false, session_id: "sess-fb", structured_output: { title: "feedback done", description: prompt, move, summary: "feedback applied" } });
+  emit({
+    type: "result",
+    is_error: false,
+    session_id: "sess-fb",
+    structured_output: { title: "feedback done", description: prompt, move, summary: "feedback applied" },
+  });
 } else if (resumed) {
-  emit({ type: "result", is_error: false, session_id: "sess-ask", structured_output: { title: "answered", description: prompt, move: "next", summary: "resumed" } });
+  emit({
+    type: "result",
+    is_error: false,
+    session_id: "sess-ask",
+    structured_output: { title: "answered", description: prompt, move: "next", summary: "resumed" },
+  });
 } else if (title === "fail") {
   emit({ type: "result", is_error: true, result: "boom", session_id: "sess-1" });
 } else if (title === "stay") {

@@ -7,8 +7,12 @@ export function RunProgress({ progress, live }: { progress?: RunProgressData; li
   return (
     <div className="run-progress">
       <div className="run-progress-head">
-        <span className="run-progress-step">Étape {step}/{total}</span>
-        <span className="run-progress-label" title={label}>{label}</span>
+        <span className="run-progress-step">
+          Étape {step}/{total}
+        </span>
+        <span className="run-progress-label" title={label}>
+          {label}
+        </span>
       </div>
       <div
         className="run-progress-bar"

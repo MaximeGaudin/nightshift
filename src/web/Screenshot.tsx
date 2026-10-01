@@ -3,7 +3,10 @@ import { createPortal } from "react-dom";
 import { isCardScreenshot, screenshotUrl } from "../shared/screenshots.ts";
 
 /** Escape closes the lightbox only: stop it before the card Modal's window listener sees it. */
-export function handleLightboxKey(e: Pick<KeyboardEvent, "key" | "preventDefault" | "stopImmediatePropagation">, onClose: () => void): boolean {
+export function handleLightboxKey(
+  e: Pick<KeyboardEvent, "key" | "preventDefault" | "stopImmediatePropagation">,
+  onClose: () => void,
+): boolean {
   if (e.key !== "Escape") return false;
   e.preventDefault();
   e.stopImmediatePropagation();

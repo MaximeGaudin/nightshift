@@ -130,9 +130,7 @@ test("markdown-image-render-hook", () => {
 });
 
 test("markdown-image-figure-not-in-paragraph", () => {
-  const html = renderToStaticMarkup(
-    <Markdown source={"![A](/w/nightshift-screenshots/01.png)"} renderImage={() => <figure>F</figure>} />,
-  );
+  const html = renderToStaticMarkup(<Markdown source={"![A](/w/nightshift-screenshots/01.png)"} renderImage={() => <figure>F</figure>} />);
   expect(html).not.toContain("<p><figure>");
   expect(html).toContain("<figure>F</figure>");
   expect(renderToStaticMarkup(<Markdown source={"![A](https://x/a.png)"} renderImage={() => null} />)).toContain("<p>");

@@ -26,7 +26,14 @@ export function TestPanel({
     setCommand(card.test?.command ?? "");
     setUrl(card.test?.url ?? "");
   }, [card.test?.command, card.test?.url]);
-  useEffect(() => void api.testLog(project, card.id).then(setLines).catch(() => {}), [card.id]);
+  useEffect(
+    () =>
+      void api
+        .testLog(project, card.id)
+        .then(setLines)
+        .catch(() => {}),
+    [card.id],
+  );
   useServerEvents((e) => {
     if (e.type !== "testlog" || e.project !== project || e.cardId !== card.id) return;
     setLines((l) => (e.line.text.startsWith("$ ") ? [e.line] : [...l, e.line]));

@@ -33,8 +33,7 @@ export const api = {
   answer: (project: string, id: string, answers: string[]) => call("POST", `/api/cards/${id}/answer`, { project, answers }),
   sendFeedback: (project: string, id: string, text: string) => call("POST", `/api/cards/${id}/feedback`, { project, text }),
   testLog: (project: string, id: string) => call<LogLine[]>("GET", `/api/cards/${id}/test?${q(project)}`),
-  setTest: (project: string, id: string, command: string, url: string) =>
-    call("PUT", `/api/cards/${id}/test`, { project, command, url }),
+  setTest: (project: string, id: string, command: string, url: string) => call("PUT", `/api/cards/${id}/test`, { project, command, url }),
   startTest: (project: string, id: string) => call("POST", `/api/cards/${id}/test/start`, { project }),
   stopTest: (project: string, id: string) => call("POST", `/api/cards/${id}/test/stop`, { project }),
   cancel: (project: string, id: string) => call("POST", `/api/cards/${id}/cancel`, { project }),

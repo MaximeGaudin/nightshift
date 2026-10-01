@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { canSendFeedback, cardRef, columnEmoji, type Board, type Card, type LiveStatus, type RunProgress as RunProgressData, type LogLine } from "../shared/types.ts";
+import {
+  canSendFeedback,
+  cardRef,
+  columnEmoji,
+  type Board,
+  type Card,
+  type LiveStatus,
+  type RunProgress as RunProgressData,
+  type LogLine,
+} from "../shared/types.ts";
 import { RunProgress } from "./RunProgress.tsx";
 import { api, useServerEvents } from "./api.ts";
 import { FeedbackForm } from "./FeedbackForm.tsx";
@@ -62,7 +71,14 @@ export function CardModal({
     setDescMode("edit");
   };
 
-  useEffect(() => void api.log(project, card.id).then(setLog).catch(() => {}), [card.id]);
+  useEffect(
+    () =>
+      void api
+        .log(project, card.id)
+        .then(setLog)
+        .catch(() => {}),
+    [card.id],
+  );
   useServerEvents((e) => {
     if (e.type !== "log" || e.project !== project || e.cardId !== card.id) return;
     // A new run resets the log on the server: mirror that.
@@ -87,7 +103,11 @@ export function CardModal({
       wide
       title={
         <span>
-          Fiche <CopyRef card={card} /> <span className="muted">· {column && columnEmoji(column) ? `${columnEmoji(column)} ` : ""}{column?.name}</span>
+          Fiche <CopyRef card={card} />{" "}
+          <span className="muted">
+            · {column && columnEmoji(column) ? `${columnEmoji(column)} ` : ""}
+            {column?.name}
+          </span>
         </span>
       }
       onClose={() => {
@@ -106,7 +126,10 @@ export function CardModal({
           </button>
           <div className="spacer" />
           {live === "running" && <button onClick={() => guard(api.cancel(project, card.id))}>Arrêter l'agent</button>}
-          {column?.type === "skill" && live !== "running" && lr?.sessionId && lr.columnId === card.columnId &&
+          {column?.type === "skill" &&
+            live !== "running" &&
+            lr?.sessionId &&
+            lr.columnId === card.columnId &&
             (lr.status === "error" || lr.status === "cancelled") && (
               <button
                 title="Reprend la même session Claude : l'agent vérifie où il en était et termine, sans tout recommencer."
@@ -230,7 +253,12 @@ export function CardModal({
               {lr.summary && <Markdown source={lr.summary} className="last-run-summary" />}
               {lr.error && <pre className="error-text">{lr.error}</pre>}
               <div className="last-run-meta muted small">
-                {lr.costUsd !== undefined && <>Coût : ${lr.costUsd.toFixed(3)}{lr.sessionId ? " · " : ""}</>}
+                {lr.costUsd !== undefined && (
+                  <>
+                    Coût : ${lr.costUsd.toFixed(3)}
+                    {lr.sessionId ? " · " : ""}
+                  </>
+                )}
                 {lr.sessionId && (
                   <span title="Reprendre la session dans un terminal">
                     <code>claude -r {lr.sessionId}</code>

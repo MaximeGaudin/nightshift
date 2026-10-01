@@ -91,7 +91,14 @@ function parseBlocks(lines: string[], depth: number): Block[] {
 
     // Pathological nesting: stop structuring, keep the text.
     if (depth > MAX_DEPTH) {
-      blocks.push({ t: "para", text: lines.slice(i).map((l) => l.trim()).filter(Boolean).join("\n") });
+      blocks.push({
+        t: "para",
+        text: lines
+          .slice(i)
+          .map((l) => l.trim())
+          .filter(Boolean)
+          .join("\n"),
+      });
       break;
     }
 
@@ -595,15 +602,7 @@ function renderBlocks(blocks: Block[], ri?: RenderImage): ReactNode[] {
   });
 }
 
-export function Markdown({
-  source,
-  className,
-  renderImage,
-}: {
-  source: string;
-  className?: string;
-  renderImage?: RenderImage;
-}) {
+export function Markdown({ source, className, renderImage }: { source: string; className?: string; renderImage?: RenderImage }) {
   const cls = className ? `md ${className}` : "md";
   const src = typeof source === "string" ? source : String(source ?? "");
   let content: ReactNode;
@@ -630,8 +629,7 @@ function blocksPlain(blocks: Block[]): string[] {
     else if (b.t === "code") out.push(b.text);
     else if (b.t === "quote") out.push(...blocksPlain(b.blocks));
     else if (b.t === "list") for (const it of b.items) out.push(...blocksPlain(it.blocks));
-    else if (b.t === "table")
-      for (const row of [b.head, ...b.rows]) out.push(...row.map((c) => inlinePlain(parseInline(c))));
+    else if (b.t === "table") for (const row of [b.head, ...b.rows]) out.push(...row.map((c) => inlinePlain(parseInline(c))));
   }
   return out;
 }
