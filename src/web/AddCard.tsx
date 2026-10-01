@@ -3,6 +3,7 @@ import { useRef, useState } from "react";
 import { type Column, DONE_COLUMN_ID } from "../shared/types.ts";
 import { Button } from "./components/ui/button.tsx";
 import { Textarea } from "./components/ui/textarea.tsx";
+import { useT } from "./i18n/index.ts";
 import { SkipColumnsPicker } from "./SkipColumnsPicker.tsx";
 
 /** Columns a new card can be told to skip: those after the creation column, never Done. */
@@ -35,6 +36,7 @@ export function AddCard({
   onClose?: () => void;
   closeOnEmptyBlur?: boolean;
 }) {
+  const { t } = useT();
   const [open, setOpen] = useState(initialOpen ?? false);
   const [title, setTitle] = useState("");
   const [skip, setSkip] = useState<string[]>([]);
@@ -52,7 +54,7 @@ export function AddCard({
         onClick={() => setOpen(true)}
       >
         <Plus size={12} strokeWidth={1.75} aria-hidden="true" focusable="false" />
-        Ajouter une fiche
+        {t("board.addCard")}
       </Button>
     );
   const submit = () => {
@@ -72,7 +74,7 @@ export function AddCard({
           if (next && formRef.current?.contains(next)) return;
           close();
         }}
-        placeholder="Titre de la fiche…"
+        placeholder={t("board.addCard.placeholder")}
         onChange={(e) => setTitle(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter" && !e.shiftKey) {
@@ -88,10 +90,10 @@ export function AddCard({
       </div>
       <div className="row flex gap-1.5">
         <Button type="button" onClick={submit}>
-          Ajouter
+          {t("board.addCard.submit")}
         </Button>
         <Button type="button" variant="ghost" onClick={close}>
-          Annuler
+          {t("common.cancel")}
         </Button>
       </div>
     </div>

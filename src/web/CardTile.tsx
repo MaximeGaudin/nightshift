@@ -4,15 +4,17 @@ import { type Card, cardRef, type LiveStatus, type RunProgress as RunProgressDat
 import { CardThumbnail } from "./CardThumbnail.tsx";
 import { IconButton } from "./components/icon-button.tsx";
 import { Badge } from "./components/ui/badge.tsx";
+import { useT } from "./i18n/index.ts";
 import { StatusIcon } from "./icons.tsx";
 import { cn } from "./lib/utils.ts";
 import { toPlainText } from "./markdown.tsx";
 import { RunProgress } from "./RunProgress.tsx";
 
 export function SequenceBadge() {
+  const { t } = useT();
   return (
     <Badge variant="secondary" className="sequence-badge ml-1.5 align-middle">
-      séquentiel
+      {t("board.sequential")}
     </Badge>
   );
 }
@@ -49,16 +51,17 @@ export function CardTile({
   /** The sequential mode is working on this card. */
   sequential?: boolean;
 }) {
+  const { t, tn } = useT();
   const lr = card.lastRun?.columnId === card.columnId ? card.lastRun : undefined;
   const status = live ?? lr?.status;
   const excerpt = card.description ? toPlainText(card.description).slice(0, 160) : "";
   const label: Record<string, string> = {
-    running: "En cours",
-    queued: "En attente",
-    success: "Traité",
-    error: "Erreur",
-    cancelled: "Annulé",
-    question: "Question pour vous",
+    running: t("board.status.running"),
+    queued: t("board.status.queued"),
+    success: t("board.status.success"),
+    error: t("board.status.error"),
+    cancelled: t("board.status.cancelled"),
+    question: t("board.status.question"),
   };
   const statusColor = status === "error" ? "text-err" : status === "question" ? "text-warn" : status === "running" ? "text-foreground" : "";
   return (
@@ -88,17 +91,17 @@ export function CardTile({
         {skipped && skipped.length > 0 && (
           <span
             className="card-skipped inline-flex text-muted-foreground"
-            title={`Colonnes sautées : ${skipped.join(", ")}`}
+            title={t("board.card.skippedColumns", { names: skipped.join(", ") })}
             role="img"
-            aria-label={`Colonnes sautées : ${skipped.join(", ")}`}
+            aria-label={t("board.card.skippedColumns", { names: skipped.join(", ") })}
           >
             <ChevronsRight size={12} strokeWidth={1.75} aria-hidden="true" focusable="false" />
           </span>
         )}
         {next && (
           <IconButton
-            label={`Envoyer vers ${next.name}`}
-            title={`Envoyer vers ${next.name}`}
+            label={t("board.card.sendTo", { name: next.name })}
+            title={t("board.card.sendTo", { name: next.name })}
             className="card-next absolute top-1.5 right-1.5 size-5 text-muted-foreground opacity-0 hover:text-foreground group-focus-within:opacity-100 group-hover:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100"
             disabled={sending}
             draggable={false}
@@ -124,10 +127,7 @@ export function CardTile({
             <span className="muted min-w-0 truncate font-normal"> · {toPlainText(lr.summary).slice(0, 80)}</span>
           )}
           {status === "question" && lr?.questions && (
-            <span className="muted min-w-0 truncate font-normal">
-              {" "}
-              · {lr.questions.length} question{lr.questions.length > 1 ? "s" : ""}
-            </span>
+            <span className="muted min-w-0 truncate font-normal"> · {tn("board.card.questions", lr.questions.length)}</span>
           )}
         </div>
       )}

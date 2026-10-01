@@ -4,6 +4,7 @@ import { skipOptions, submitAddCard } from "./AddCard.tsx";
 import { AppDialog } from "./components/app-dialog.tsx";
 import { Button } from "./components/ui/button.tsx";
 import { Input } from "./components/ui/input.tsx";
+import { useT } from "./i18n/index.ts";
 import { SkipColumnsPicker } from "./SkipColumnsPicker.tsx";
 
 /** Create a card in the first column (Backlog), same rules as the inline add-card form. */
@@ -18,6 +19,7 @@ export function NewCardDialog({
   onAdd: (title: string, skip: string[]) => void;
   onClose: () => void;
 }) {
+  const { t } = useT();
   const first = columns[0];
   const [title, setTitle] = useState(initialTitle);
   const [skip, setSkip] = useState<string[]>([]);
@@ -30,16 +32,16 @@ export function NewCardDialog({
   return (
     <AppDialog
       size="md"
-      title="Nouvelle carte"
-      description={`La carte sera créée dans ${first.name}.`}
+      title={t("board.newCard.title")}
+      description={t("board.newCard.description", { name: first.name })}
       onClose={onClose}
       footer={
         <>
           <Button variant="outline" onClick={onClose}>
-            Annuler
+            {t("common.cancel")}
           </Button>
           <Button disabled={!title.trim()} onClick={submit}>
-            Créer
+            {t("board.newCard.create")}
           </Button>
         </>
       }
@@ -48,8 +50,8 @@ export function NewCardDialog({
         <Input
           autoFocus
           value={title}
-          placeholder="Titre de la carte…"
-          aria-label="Titre de la carte"
+          placeholder={t("board.newCard.placeholder")}
+          aria-label={t("board.newCard.aria")}
           onChange={(e) => setTitle(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") {

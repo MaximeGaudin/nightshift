@@ -1,6 +1,7 @@
 import { Plus } from "lucide-react";
 import { type Column, columnEmoji, columnMaxParallel } from "../shared/types.ts";
 import { IconButton } from "./components/icon-button.tsx";
+import { t, useT } from "./i18n/index.ts";
 import { ColumnGlyph } from "./icons.tsx";
 
 /** Shell of a wide column: shares the free space equally between 290px and 560px; the fixed basis stops a long badge from widening it. */
@@ -22,22 +23,23 @@ export function compactColumnTitle(col: Column): string {
   const emoji = columnEmoji(col);
   const parts = [emoji ? `${emoji} ${col.name}` : col.name];
   if (col.type === "skill") {
-    parts.push(col.skill ? `skill : ${col.skill}` : "skill : aucun skill");
-    if (col.model !== undefined) parts.push(`modèle : ${col.model}`);
-    parts.push(`0/${columnMaxParallel(col)} agents`);
+    parts.push(col.skill ? t("board.compact.skill", { skill: col.skill }) : t("board.compact.noSkill"));
+    if (col.model !== undefined) parts.push(t("board.compact.model", { model: col.model }));
+    parts.push(t("board.compact.agents", { max: columnMaxParallel(col) }));
   } else {
-    parts.push("inerte");
+    parts.push(t("board.compact.inert"));
   }
   return parts.join(" — ");
 }
 
 /** Content of a compact column (the caller renders the surrounding <section>). */
 export function CompactColumnBand({ col, onAdd }: { col: Column; onAdd: () => void }) {
+  const { t } = useT();
   return (
     <div className="column-band flex min-h-0 flex-1 flex-col items-center justify-start gap-2 overflow-hidden py-3 *:shrink-0">
       <ColumnGlyph col={col} />
       <span className="count text-xs text-muted-foreground tabular-nums">0</span>
-      <IconButton label="Ajouter une fiche" className="band-add ghost size-6" onClick={onAdd}>
+      <IconButton label={t("board.addCard")} className="band-add ghost size-6" onClick={onAdd}>
         <Plus size={14} strokeWidth={1.75} aria-hidden="true" focusable="false" />
       </IconButton>
       <h2 className="band-name max-h-full min-h-0 shrink! flex-auto overflow-hidden text-[13px] font-medium text-ellipsis whitespace-nowrap [writing-mode:vertical-rl]">
