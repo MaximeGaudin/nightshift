@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { cardRef, columnEmoji, type Board, type Card, type LiveStatus, type LogLine } from "../shared/types.ts";
+import { cardRef, columnEmoji, type Board, type Card, type LiveStatus, type RunProgress as RunProgressData, type LogLine } from "../shared/types.ts";
+import { RunProgress } from "./RunProgress.tsx";
 import { api, useServerEvents } from "./api.ts";
 import { StatusIcon } from "./icons.tsx";
 import { Markdown } from "./markdown.tsx";
@@ -11,6 +12,7 @@ export function CardModal({
   card,
   board,
   live,
+  progress,
   testing,
   onClose,
 }: {
@@ -18,6 +20,7 @@ export function CardModal({
   card: Card;
   board: Board;
   live?: LiveStatus;
+  progress?: RunProgressData;
   testing: boolean;
   onClose: () => void;
 }) {
@@ -230,6 +233,7 @@ export function CardModal({
               Historique
             </button>
           </div>
+          {tab === "log" && <RunProgress progress={progress} live={live} />}
           <div className="log" ref={logRef}>
             {tab === "log" ? (
               log.length ? (
