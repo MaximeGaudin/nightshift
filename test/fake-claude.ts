@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
 // Stand-in for the `claude` CLI: emits stream-json events and a structured result.
 // FAKE_DELAY_MS controls run duration; a card titled "fail" produces an error result,
-// "slow" sleeps ~5 s before the normal result, "stay" returns move "stay".
+// "slow" sleeps ~5 s before the normal result, "stay" returns move "stay",
+// "progress" emits a TodoWrite, a progress marker, then another TodoWrite; "progress-todo" only a TodoWrite.
 // FAKE_ARGS_LOG, when set, receives one JSON line per run: { title, resumed, model }.
 import { appendFileSync } from "node:fs";
 // Nightshift sends the prompt on stdin (never argv).
@@ -19,6 +20,17 @@ if (process.env.FAKE_ARGS_LOG) {
 const emit = (o: unknown) => console.log(JSON.stringify(o));
 emit({ type: "system", subtype: "init", session_id: "sess-1", model: "fake" });
 emit({ type: "assistant", message: { content: [{ type: "text", text: `Working on ${title}` }, { type: "tool_use", name: "Bash", input: { command: "ls" } }] } });
+const todos = (...status: string[]) => ({
+  type: "assistant",
+  message: { content: [{ type: "tool_use", name: "TodoWrite", input: { todos: status.map((s, i) => ({ content: `Tâche ${i + 1}`, activeForm: `Tâche ${i + 1} en cours`, status: s })) } }] },
+});
+if (title === "progress") {
+  emit(todos("in_progress", "pending"));
+  emit({ type: "assistant", message: { content: [{ type: "text", text: "[nightshift-progress] 2/3 Deuxième" }] } });
+  emit(todos("completed", "in_progress")); // ignored: the marker has priority
+} else if (title === "progress-todo") {
+  emit(todos("in_progress", "pending"));
+}
 await Bun.sleep(title === "slow" ? 5000 : delay);
 if (title === "no-output" && !resumed) {
   // Finished its turn without the structured result (e.g. only interim results while background work ran).
