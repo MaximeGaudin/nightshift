@@ -167,12 +167,12 @@ export function Board({
   const onDragOver = ({ active, over }: DragOverEvent) => {
     const id = String(active.id);
     const target = over ? describe(over) : null;
-    setOverColumn(null);
+    const columnOf = (order: LocalOrder) => (target?.kind === "card" ? localColumnOf(order, target.cardId) : target?.columnId);
+    setOverColumn((local && columnOf(local)) ?? null);
     if (!target) return;
     setLocal((prev) => {
       if (!prev) return prev;
-      const targetCol = target.kind === "card" ? localColumnOf(prev, target.cardId) : target.columnId;
-      setOverColumn(targetCol ?? null);
+      const targetCol = columnOf(prev);
       const col = columns.find((c) => c.id === targetCol);
       if (!col || !targetCol) return prev;
       const current = localColumnOf(prev, id);
