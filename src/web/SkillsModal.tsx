@@ -1,32 +1,37 @@
+import { Plus, Search, Zap } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import type { SkillInfo } from "../shared/types.ts";
 import { api } from "./api.ts";
-import { Icon } from "./icons.tsx";
-import { ErrorBanner, Modal } from "./ui.tsx";
+import { CreateSkillDialog } from "./CreateSkillDialog.tsx";
+import { AppDialog } from "./components/app-dialog.tsx";
+import { Badge } from "./components/ui/badge.tsx";
+import { Button } from "./components/ui/button.tsx";
+import { Input } from "./components/ui/input.tsx";
+import { Skeleton } from "./components/ui/skeleton.tsx";
+import { Textarea } from "./components/ui/textarea.tsx";
+import { notifyError } from "./notify.ts";
 
-const TEMPLATE = `Tu reçois une fiche de kanban (titre + description).
+const DISCARD = "Abandonner les modifications non enregistrées ?";
 
-1. Lis la fiche.
-2. Fais le travail demandé.
-3. Mets à jour la description avec le résultat.
-4. Envoie la fiche à la colonne suivante.`;
+const norm = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 
 export function SkillsModal({ project, onClose }: { project: string; onClose: () => void }) {
-  const [skills, setSkills] = useState<SkillInfo[]>([]);
+  const [skills, setSkills] = useState<SkillInfo[] | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [content, setContent] = useState("");
   const [original, setOriginal] = useState("");
   const [creating, setCreating] = useState(false);
   const [filter, setFilter] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [form, setForm] = useState({ name: "", description: "", body: TEMPLATE });
 
   const reload = useCallback(
     () =>
       api
         .skills(project)
         .then(setSkills)
-        .catch((e) => setError(e.message)),
+        .catch((e) => {
+          setSkills((prev) => prev ?? []);
+          notifyError(e.message);
+        }),
     [project],
   );
   useEffect(() => void reload(), [reload]);
@@ -38,113 +43,144 @@ export function SkillsModal({ project, onClose }: { project: string; onClose: ()
         setContent(s.content);
         setOriginal(s.content);
       })
-      .catch((e) => setError(e.message));
+      .catch((e) => notifyError(e.message));
   }, [project, selected]);
 
-  const current = skills.find((s) => s.name === selected);
+  const current = skills?.find((s) => s.name === selected);
   const dirty = content !== original;
-  const shown = skills.filter((s) => (s.name + s.description).toLowerCase().includes(filter.toLowerCase()));
+  const query = norm(filter.trim());
+  const shown = (skills ?? []).filter((s) => norm(`${s.name} ${s.description}`).includes(query));
 
-  const pick = (name: string | null, create = false) => {
-    if (dirty && !confirm("Abandonner les modifications non enregistrées ?")) return;
-    setCreating(create);
+  const confirmDiscard = () => !dirty || confirm(DISCARD);
+
+  const pick = (name: string) => {
+    if (name === selected || !confirmDiscard()) return;
     setSelected(name);
-    if (!name) {
-      setContent("");
-      setOriginal("");
-    }
   };
 
   const save = async () => {
+    if (!selected) return;
     try {
-      if (creating) {
-        const s = await api.createSkill(project, form.name.trim(), form.description, form.body);
-        await reload();
-        setCreating(false);
-        setSelected(s.name);
-        setForm({ name: "", description: "", body: TEMPLATE });
-      } else if (selected) {
-        await api.saveSkill(project, selected, content);
-        setOriginal(content);
-        reload();
-      }
+      await api.saveSkill(project, selected, content);
+      setOriginal(content);
+      void reload();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      notifyError(e instanceof Error ? e.message : String(e));
     }
   };
 
   return (
-    <Modal
-      wide
-      title="Skills"
-      onClose={() => {
-        if (!dirty || confirm("Abandonner les modifications non enregistrées ?")) onClose();
-      }}
-      footer={
-        <>
-          <button type="button" onClick={() => pick(null, true)}>
-            <Icon name="plus" /> Nouveau skill (projet)
-          </button>
-          <div className="spacer" />
-          {(creating || selected) && (
-            <button type="button" className="primary" disabled={creating ? !form.name.trim() : !dirty} onClick={save}>
-              {creating ? "Créer" : "Enregistrer"}
-            </button>
-          )}
-        </>
-      }
-    >
-      <ErrorBanner error={error} onClose={() => setError(null)} />
-      <div className="skills">
-        <div className="skill-list">
-          <input placeholder="Filtrer…" value={filter} onChange={(e) => setFilter(e.target.value)} />
-          <ul>
-            {shown.map((s) => (
-              <li key={s.name}>
-                <button type="button" className={s.name === selected && !creating ? "active" : ""} onClick={() => pick(s.name)}>
-                  <span className="skill-name">
-                    <Icon name="bolt" />
-                    <span className="truncate">{s.name}</span>
-                    <span className={`scope ${s.scope}`}>{s.scope === "project" ? "projet" : "user"}</span>
-                  </span>
-                  <span className="skill-desc">{s.description}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
+    <>
+      <AppDialog
+        size="xl"
+        title="Skills"
+        description="Instructions réutilisables que les colonnes confient aux agents."
+        onClose={() => {
+          if (confirmDiscard()) onClose();
+        }}
+        footer={
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                if (confirmDiscard()) setCreating(true);
+              }}
+            >
+              <Plus /> Nouveau skill (projet)
+            </Button>
+            <div className="flex-1" />
+            {selected && (
+              <Button type="button" disabled={!dirty} onClick={save}>
+                Enregistrer
+              </Button>
+            )}
+          </>
+        }
+      >
+        <div className="skills grid h-[min(60vh,560px)] grid-cols-[minmax(0,280px)_minmax(0,1fr)] gap-4">
+          <div className="skill-list flex min-h-0 flex-col gap-2">
+            <div className="relative">
+              <Search className="pointer-events-none absolute top-1/2 left-2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                aria-label="Rechercher un skill"
+                className="pl-7"
+                placeholder="Rechercher…"
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+              />
+            </div>
+            <ul className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
+              {skills === null ? (
+                ["a", "b", "c", "d"].map((k) => (
+                  <li key={k} className="flex flex-col gap-1.5 px-2 py-2">
+                    <Skeleton className="h-3.5 w-2/3" />
+                    <Skeleton className="h-3 w-full" />
+                  </li>
+                ))
+              ) : shown.length === 0 ? (
+                <li className="skills-empty px-2 py-6 text-center text-xs text-muted-foreground">
+                  {skills.length === 0
+                    ? "Aucun skill pour le moment. Créez-en un avec « Nouveau skill »."
+                    : "Aucun skill ne correspond à la recherche."}
+                </li>
+              ) : (
+                shown.map((s) => (
+                  <li key={s.name}>
+                    <button
+                      type="button"
+                      aria-current={s.name === selected ? "true" : undefined}
+                      className="flex w-full flex-col gap-0.5 rounded-md px-2 py-1.5 text-left transition-colors duration-150 hover:bg-accent aria-[current=true]:bg-accent"
+                      onClick={() => pick(s.name)}
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <Zap className="size-3.5 shrink-0 text-primary" />
+                        <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{s.name}</span>
+                        <Badge variant={s.scope === "project" ? "default" : "secondary"}>
+                          {s.scope === "project" ? "projet" : "utilisateur"}
+                        </Badge>
+                      </span>
+                      <span className="line-clamp-2 text-xs text-muted-foreground">{s.description}</span>
+                    </button>
+                  </li>
+                ))
+              )}
+            </ul>
+          </div>
+          <div className="skill-editor flex min-h-0 min-w-0 flex-col gap-2">
+            {current ? (
+              <>
+                <p className="text-xs text-muted-foreground">
+                  <code>{current.path}</code>
+                  {current.scope === "user" && " · skill utilisateur, partagé par tous vos projets"}
+                </p>
+                <Textarea
+                  aria-label={`Contenu du skill ${current.name}`}
+                  className="min-h-0 flex-1 resize-none font-mono text-xs"
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  spellCheck={false}
+                />
+              </>
+            ) : (
+              <div className="flex flex-1 items-center justify-center rounded-md border border-dashed">
+                <p className="text-xs text-muted-foreground">Choisissez un skill à éditer, ou créez-en un nouveau.</p>
+              </div>
+            )}
+          </div>
         </div>
-        <div className="skill-editor">
-          {creating ? (
-            <>
-              <p className="hint">
-                Le skill sera créé dans <code>.claude/skills/&lt;nom&gt;/SKILL.md</code> du projet (commitable).
-              </p>
-              <label>
-                Nom (minuscules, chiffres, tirets)
-                <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="ex. write-spec" />
-              </label>
-              <label>
-                Description (quand l'utiliser)
-                <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-              </label>
-              <label className="grow">
-                Instructions
-                <textarea value={form.body} onChange={(e) => setForm({ ...form, body: e.target.value })} />
-              </label>
-            </>
-          ) : current ? (
-            <>
-              <p className="hint small">
-                <code>{current.path}</code>
-                {current.scope === "user" && " · skill utilisateur, partagé par tous vos projets"}
-              </p>
-              <textarea className="grow code" value={content} onChange={(e) => setContent(e.target.value)} spellCheck={false} />
-            </>
-          ) : (
-            <p className="muted empty">Choisissez un skill à éditer, ou créez-en un nouveau.</p>
-          )}
-        </div>
-      </div>
-    </Modal>
+      </AppDialog>
+      {creating && (
+        <CreateSkillDialog
+          project={project}
+          onClose={() => setCreating(false)}
+          onCreated={async (skill) => {
+            await reload();
+            setCreating(false);
+            setSelected(skill.name);
+          }}
+        />
+      )}
+    </>
   );
 }
