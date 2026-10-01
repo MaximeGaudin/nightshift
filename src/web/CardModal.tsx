@@ -5,6 +5,7 @@ import {
   canSendFeedback,
   cardRef,
   columnEmoji,
+  DONE_COLUMN_ID,
   type LiveStatus,
   type LogLine,
   type RunProgress as RunProgressData,
@@ -17,9 +18,33 @@ import { Markdown } from "./markdown.tsx";
 import { NextColumnButton } from "./NextColumnButton.tsx";
 import { RunProgress } from "./RunProgress.tsx";
 import { renderCardImage } from "./Screenshot.tsx";
+import { SkipColumnsPicker } from "./SkipColumnsPicker.tsx";
 import { TestPanel } from "./TestPanel.tsx";
 import { TimePanel } from "./TimePanel.tsx";
 import { ErrorBanner, Modal, timeAgo } from "./ui.tsx";
+
+/** Saves the skipped columns at once, on their own: the title/description draft is neither sent nor touched. */
+export async function saveSkipColumns({
+  project,
+  cardId,
+  ids,
+  onError,
+  update = api.updateCard,
+}: {
+  project: string;
+  cardId: string;
+  ids: string[];
+  onError: (message: string) => void;
+  update?: (project: string, id: string, patch: { skipColumnIds: string[] }) => Promise<unknown>;
+}): Promise<boolean> {
+  try {
+    await update(project, cardId, { skipColumnIds: ids });
+    return true;
+  } catch (e) {
+    onError(e instanceof Error ? e.message : String(e));
+    return false;
+  }
+}
 
 export function CardModal({
   project,
@@ -60,6 +85,13 @@ export function CardModal({
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
   const column = board.columns.find((c) => c.id === card.columnId);
+  // Skipped columns are saved on each change; the display follows the board snapshot (the server value wins on every update).
+  const serverSkip = card.skipColumnIds ?? [];
+  const [skip, setSkip] = useState(serverSkip);
+  const skipKey = serverSkip.join(",");
+  // biome-ignore lint/correctness/useExhaustiveDependencies: skipKey is the trigger (the server list changed); serverSkip is derived from it
+  useEffect(() => setSkip(serverSkip), [skipKey]);
+  const skipOptions = board.columns.filter((c) => c.id !== DONE_COLUMN_ID && c.id !== card.columnId);
 
   // Re-runs only when the card changes on the server: edits in progress are kept, so `dirty` is read through a ref.
   useEffect(() => {
@@ -224,6 +256,16 @@ export function CardModal({
           )}
         </div>
         <aside className="card-side">
+          <SkipColumnsPicker
+            columns={skipOptions}
+            value={skip}
+            onChange={(ids) => {
+              setSkip(ids);
+              void saveSkipColumns({ project, cardId: card.id, ids, onError: setError }).then((ok) => {
+                if (!ok) setSkip(serverSkip);
+              });
+            }}
+          />
           {lr?.status === "question" && lr.columnId === card.columnId && !live && (
             <form
               className="question"
