@@ -60,9 +60,10 @@ export function SettingsModal({ settings, onClose }: { settings: Settings; onClo
           </p>
         )}
         <label>
-          Modèle (vide = défaut de Claude Code)
+          Modèle par défaut
           <input value={s.model} placeholder="ex. sonnet, opus" onChange={(e) => setS({ ...s, model: e.target.value })} />
         </label>
+        <p className="hint small">S'applique aux colonnes sans modèle propre. Vide = défaut du CLI claude.</p>
         <label>
           Commande claude
           <input value={s.claudePath} onChange={(e) => setS({ ...s, claudePath: e.target.value })} />
