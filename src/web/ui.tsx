@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from "react";
+import { Icon } from "./icons.tsx";
 
 export function Modal({
   title,
@@ -24,7 +25,7 @@ export function Modal({
         <header className="modal-head">
           <h2>{title}</h2>
           <button className="icon-btn" onClick={onClose} aria-label="Fermer">
-            ✕
+            <Icon name="close" />
           </button>
         </header>
         <div className="modal-body">{children}</div>
@@ -41,7 +42,7 @@ export function ErrorBanner({ error, onClose }: { error: string | null; onClose?
       <span>{error}</span>
       {onClose && (
         <button className="icon-btn" onClick={onClose} aria-label="Fermer">
-          ✕
+          <Icon name="close" />
         </button>
       )}
     </div>
