@@ -1115,3 +1115,21 @@ test("failed feedback leaves the card in place", async () => {
     b.stop();
   }
 });
+
+test("cancelled feedback keeps the session so feedback can be sent again", async () => {
+  const b = await feedbackBoard();
+  try {
+    const id = await b.landed("go");
+    await b.send(id, "wait FAKE_SLOW FAKE_MOVE=stay");
+    await waitFor(async () => (await getProject(b.dir)).live[id] === "running");
+    expect((await post(`/api/cards/${id}/cancel`, { project: b.dir })).cancelled).toBe(true);
+    await b.settled(id, (c) => c.lastRun?.status === "cancelled");
+    const card = await b.card(id);
+    expect(card.columnId).toBe(b.toTest.id);
+    expect(card.lastRun.sessionId).toBeDefined();
+    expect((await b.send(id, "again FAKE_MOVE=stay")).error).toBeUndefined();
+    await b.settled(id, (c) => c.lastRun?.status === "success");
+  } finally {
+    b.stop();
+  }
+});

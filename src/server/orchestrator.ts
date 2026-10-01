@@ -662,6 +662,9 @@ export class Orchestrator {
     p.mutate((board) => {
       const now = new Date().toISOString();
       const out = data.output;
+      // A resumed run that dies without a session id (cancelled, failed to start) keeps the session it resumed,
+      // so feedback or answers can be sent again.
+      const sessionId = data.sessionId ?? (card.pendingAnswer ? job.sessionId ?? card.pendingAnswer.sessionId : undefined);
       delete card.pendingAnswer;
       card.lastRun = {
         columnId: job.columnId,
@@ -671,7 +674,7 @@ export class Orchestrator {
         ...(status === "question" ? { questions: out.questions as string[] } : {}),
         ...(data.error ? { error: data.error } : {}),
         ...(data.costUsd !== undefined ? { costUsd: data.costUsd } : {}),
-        ...(data.sessionId ? { sessionId: data.sessionId } : {}),
+        ...(sessionId ? { sessionId } : {}),
         ...(job.skill ? { skill: job.skill } : {}),
       };
       const colName = p.column(job.columnId)?.name ?? "?";
