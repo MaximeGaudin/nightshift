@@ -14,7 +14,6 @@ import { Alert } from "./components/ui/alert.tsx";
 import { Button } from "./components/ui/button.tsx";
 import { Kbd } from "./components/ui/kbd.tsx";
 import { Skeleton } from "./components/ui/skeleton.tsx";
-import { Toaster } from "./components/ui/sonner.tsx";
 import { NewCardDialog } from "./NewCardDialog.tsx";
 import { notifyError } from "./notify.ts";
 import { ProjectPicker } from "./ProjectPicker.tsx";
@@ -171,17 +170,10 @@ export function App() {
             setProject(p);
           }}
         />
-        <Toaster />
       </div>
     );
   }
-  if (!snap)
-    return (
-      <>
-        <BoardSkeleton />
-        <Toaster />
-      </>
-    );
+  if (!snap) return <BoardSkeleton />;
 
   const running = Object.values(snap.live).filter((s) => s === "running").length;
   const queued = Object.values(snap.live).filter((s) => s === "queued").length;
@@ -315,7 +307,6 @@ export function App() {
           onClose={() => setNewCard(null)}
         />
       )}
-      <Toaster />
     </div>
   );
 }
