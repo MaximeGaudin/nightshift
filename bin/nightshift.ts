@@ -2,6 +2,7 @@
 import { resolve } from "node:path";
 import { type CliOptions, openBrowser, parseArgs, USAGE } from "../src/server/cli.ts";
 import { startServer } from "../src/server/server.ts";
+import { setSettingsReadOnly } from "../src/server/settings.ts";
 
 let opts: CliOptions;
 try {
@@ -15,6 +16,8 @@ if (opts.help) {
   process.exit(0);
 }
 const { port, dir, open, agents } = opts;
+// A --no-agents instance is a test run started from a card's worktree: it must not rewrite the user's settings.
+if (!agents) setSettingsReadOnly(true);
 
 const { server, orch } = startServer({ port, agents, development: process.env.NODE_ENV !== "production" });
 const project = resolve(dir ?? process.cwd());
