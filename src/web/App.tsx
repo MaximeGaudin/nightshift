@@ -285,7 +285,7 @@ function CardTile({
         <div className={`status st-${status}`}>
           <StatusIcon status={status} />
           <span className="status-label">{label[status]}</span>
-          {status === "success" && lr?.summary && <span className="muted"> · {lr.summary.slice(0, 80)}</span>}
+          {status === "success" && lr?.summary && <span className="muted"> · {toPlainText(lr.summary).slice(0, 80)}</span>}
           {status === "question" && lr?.questions && (
             <span className="muted"> · {lr.questions.length} question{lr.questions.length > 1 ? "s" : ""}</span>
           )}
