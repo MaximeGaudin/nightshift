@@ -127,6 +127,17 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
                   />
                 </label>
                 <p className="hint small">Vide = modèle des réglages globaux.</p>
+                <label className="col-model">
+                  Agents en parallèle dans cette colonne
+                  <input
+                    type="number"
+                    min={1}
+                    placeholder="Limite globale"
+                    value={c.maxParallel ?? ""}
+                    onChange={(e) => patch(i, { maxParallel: e.target.value ? Math.max(1, Number(e.target.value)) : undefined })}
+                  />
+                </label>
+                <p className="hint small">Mettez 1 pour une colonne qui ne doit traiter qu'une fiche à la fois (ex. merge).</p>
                 <textarea
                   className="instructions"
                   placeholder="Instructions additionnelles pour l'agent (optionnel)…"

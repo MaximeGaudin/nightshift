@@ -110,6 +110,11 @@ export function App() {
         </nav>
       </header>
       <ErrorBanner error={error} onClose={() => setError(null)} />
+      {snap.agentsDisabled && (
+        <div className="lock-banner" role="status">
+          Instance de test (--no-agents) : aucun agent ne sera lancé depuis cette fenêtre.
+        </div>
+      )}
       {snap.lockedBy && (
         <div className="lock-banner" role="status">
           Un autre processus Nightshift (pid {snap.lockedBy}) exécute déjà les agents de ce projet. Cette fenêtre affiche et
@@ -118,7 +123,7 @@ export function App() {
       )}
       <Board snap={snap} onOpen={setOpenCard} guard={guard} />
 
-      {card && <CardModal project={snap.path} card={card} board={snap.board} live={snap.live[card.id]} onClose={() => setOpenCard(null)} />}
+      {card && <CardModal project={snap.path} card={card} board={snap.board} live={snap.live[card.id]} testing={snap.testing?.includes(card.id) ?? false} onClose={() => setOpenCard(null)} />}
       {modal === "columns" && <ColumnsEditor snap={snap} onClose={() => setModal(null)} />}
       {modal === "skills" && <SkillsModal project={snap.path} onClose={() => setModal(null)} />}
       {modal === "settings" && settings && <SettingsModal settings={settings} onClose={() => setModal(null)} />}

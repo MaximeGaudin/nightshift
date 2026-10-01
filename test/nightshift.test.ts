@@ -204,6 +204,83 @@ test("loop guard ignores runs before the last user action", async () => {
   expect((await get()).lastRun?.error).toBeUndefined();
 });
 
+test("column maxParallel caps agents in that column", async () => {
+  const p2 = mkdtempSync(join(tmpdir(), "ns-colmax-"));
+  await post("/api/projects/open", { path: p2 });
+  const res = await post(
+    "/api/board",
+    { project: p2, columns: [{ name: "Merge", type: "skill", skill: "enrich", maxParallel: 1 }, { name: "Done", type: "inert" }] },
+    "PUT",
+  );
+  expect(res.board.columns[0].maxParallel).toBe(1);
+  for (const t of ["cap1", "cap2", "cap3"]) await post("/api/cards", { project: p2, columnId: res.board.columns[0].id, title: t });
+  let maxRunning = 0;
+  await waitFor(async () => {
+    const s = await fetch(`${base}/api/project?project=${encodeURIComponent(p2)}`).then((r) => r.json());
+    maxRunning = Math.max(maxRunning, Object.values(s.live).filter((v) => v === "running").length);
+    return Object.keys(s.live).length === 0;
+  });
+  expect(maxRunning).toBe(1);
+});
+
+test("agent test command is stored on the card and can be started and stopped", async () => {
+  const p3 = mkdtempSync(join(tmpdir(), "ns-test-"));
+  await post("/api/projects/open", { path: p3 });
+  const res = await post("/api/board", { project: p3, columns: [{ name: "Impl", type: "skill", skill: "enrich" }, { name: "Testing", type: "inert" }] }, "PUT");
+  const { id } = await post("/api/cards", { project: p3, columnId: res.board.columns[0].id, title: "with-test" });
+  const snap = async () => fetch(`${base}/api/project?project=${encodeURIComponent(p3)}`).then((r) => r.json());
+  await waitFor(async () => !!(await snap()).board.cards[0].test);
+  expect((await snap()).board.cards[0].test).toEqual({ command: "echo hello-from-test; sleep 30", url: "http://localhost:9999" });
+  await post(`/api/cards/${id}/test/start`, { project: p3 });
+  expect((await snap()).testing).toEqual([id]);
+  const log = () => fetch(`${base}/api/cards/${id}/test?project=${encodeURIComponent(p3)}`).then((r) => r.json());
+  await waitFor(async () => (await log()).some((l: any) => l.text === "hello-from-test"));
+  await post(`/api/cards/${id}/test/stop`, { project: p3 });
+  await waitFor(async () => (await snap()).testing.length === 0);
+  expect((await log()).at(-1).text).toContain("Exited");
+});
+
+test("fields unknown to this version survive load and PUT", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "ns-future-"));
+  writeFileSync(
+    join(dir, "nightshift.json"),
+    JSON.stringify({
+      version: 1,
+      name: "f",
+      futureBoardField: 1,
+      columns: [{ id: "c1", name: "A", type: "inert", futureColumnField: "x" }],
+      cards: [{ id: "k1", title: "t", columnId: "c1", futureCardField: [1, 2], history: [] }],
+    }),
+  );
+  const snap = await post("/api/projects/open", { path: dir });
+  await post("/api/board", { project: dir, columns: snap.board.columns }, "PUT");
+  await post(`/api/cards/k1`, { project: dir, title: "t2" }, "PATCH");
+  const file = JSON.parse(readFileSync(join(dir, "nightshift.json"), "utf8"));
+  expect(file.futureBoardField).toBe(1);
+  expect(file.columns[0].futureColumnField).toBe("x");
+  expect(file.cards[0].futureCardField).toEqual([1, 2]);
+  expect(file.cards[0].title).toBe("t2");
+});
+
+test("--no-agents instance never runs agents nor takes the lock", async () => {
+  const { Orchestrator } = await import("../src/server/orchestrator.ts");
+  const dir = mkdtempSync(join(tmpdir(), "ns-noagents-"));
+  writeFileSync(
+    join(dir, "nightshift.json"),
+    JSON.stringify({ version: 1, name: "n", columns: [{ id: "s", name: "S", type: "skill", skill: "enrich" }], cards: [{ id: "k", title: "t", columnId: "s", history: [] }] }),
+  );
+  const passive = new Orchestrator({ agents: false });
+  const p = passive.open(dir);
+  await Bun.sleep(300);
+  expect(p.card("k")!.lastRun).toBeUndefined();
+  expect(passive.snapshot(p).agentsDisabled).toBe(true);
+  expect(passive.snapshot(p).live).toEqual({ k: "queued" });
+  const { createHash } = await import("node:crypto");
+  const lock = join(home, "locks", `${createHash("sha1").update(dir).digest("hex").slice(0, 12)}.lock`);
+  expect(require("node:fs").existsSync(lock)).toBe(false);
+  passive.shutdown();
+});
+
 test("removing a column that still holds cards is refused", async () => {
   const snap = await post("/api/projects/open", { path: proj });
   const res = await post("/api/board", { project: proj, columns: [snap.board.columns[0]] }, "PUT");
@@ -391,6 +468,25 @@ test("numbering: load writes back only when changed", async () => {
   expect(opened.board.nextCardNumber).toBe(3);
   expect(readFileSync(cleanFile, "utf8")).toBe(before.text);
   expect(statSync(cleanFile).mtimeMs).toBe(before.mtime);
+});
+
+test("screenshot: serves a linked png and rejects the rest", async () => {
+  const snap = await post("/api/projects/open", { path: proj });
+  const backlog = snap.board.columns.find((c: { type: string }) => c.type === "inert");
+  const { id } = await post("/api/cards", { project: proj, columnId: backlog.id, title: "shot" });
+  const dir = join(mkdtempSync(join(tmpdir(), "ns-shot-")), "nightshift-screenshots");
+  mkdirSync(dir);
+  const png = join(dir, "01-home.png");
+  writeFileSync(png, Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64"));
+  const outside = join(tmpdir(), `not-a-shot-${Date.now()}.png`);
+  writeFileSync(outside, readFileSync(png));
+  await post(`/api/cards/${id}`, { project: proj, description: `## Screenshots\n\n![Home](${png})\n![Other](${outside})` }, "PATCH");
+  const q = `project=${encodeURIComponent(proj)}`;
+  const ok = await fetch(`${base}/api/cards/${id}/screenshot?${q}&file=${encodeURIComponent(png)}`);
+  expect(ok.status).toBe(200);
+  expect(ok.headers.get("content-type")).toContain("image/png");
+  const rejected = await fetch(`${base}/api/cards/${id}/screenshot?${q}&file=${encodeURIComponent(outside)}`);
+  expect(rejected.status).toBe(400);
 });
 
 test("prompt: includes card ref", async () => {

@@ -6,15 +6,16 @@ import index from "../web/index.html";
 import type { Column, ServerEvent } from "../shared/types.ts";
 import { Orchestrator } from "./orchestrator.ts";
 import { getSettings, updateSettings } from "./settings.ts";
-import { newId } from "./store.ts";
+import { COLUMN_KEYS, newId, unknownFields } from "./store.ts";
+import { resolveScreenshot } from "./screenshots.ts";
 import { createSkill, listSkills, readSkill, saveSkill } from "./skills.ts";
 
-export function startServer({ port, development }: { port: number; development?: boolean }) {
+export function startServer({ port, development, agents = true }: { port: number; development?: boolean; agents?: boolean }) {
   // `bun --hot` re-runs this module on every change. Reuse the orchestrator from the previous run:
   // a new one would schedule every card a second time next to the old one, which keeps its watchers.
   const g = globalThis as { __nightshift?: { orch: Orchestrator; sockets: Set<ServerWebSocket<unknown>> } };
   if (!g.__nightshift) {
-    const orch = new Orchestrator();
+    const orch = new Orchestrator({ agents });
     const sockets = new Set<ServerWebSocket<unknown>>();
     orch.on((e: ServerEvent) => {
       const msg = JSON.stringify(e);
@@ -85,12 +86,16 @@ export function startServer({ port, development }: { port: number; development?:
             if (typeof b.name === "string" && b.name.trim()) board.name = b.name.trim();
             if (Array.isArray(b.columns)) {
               const cols: Column[] = b.columns.map((c: any) => ({
+                ...unknownFields(c, COLUMN_KEYS),
                 id: typeof c.id === "string" && c.id ? c.id : newId("col"),
                 name: String(c.name || "Column").trim(),
                 type: c.type === "skill" ? "skill" : "inert",
                 ...(c.type === "skill" && c.skill ? { skill: String(c.skill) } : {}),
                 ...(c.instructions?.trim() ? { instructions: String(c.instructions).trim() } : {}),
                 ...(typeof c.model === "string" && c.model.trim() ? { model: c.model.trim() } : {}),
+                ...(Number.isInteger(Number(c.maxParallel)) && Number(c.maxParallel) >= 1 && c.maxParallel !== ""
+                  ? { maxParallel: Number(c.maxParallel) }
+                  : {}),
               }));
               if (cols.length === 0) throw new Error("A board needs at least one column");
               const ids = new Set(cols.map((c) => c.id));
@@ -160,6 +165,34 @@ export function startServer({ port, development }: { port: number; development?:
       },
       "/api/cards/:id/answer": {
         POST: h((b, url, req) => orch.answer(project(b, url), req.params.id!, Array.isArray(b.answers) ? b.answers.map(String) : [])),
+      },
+      "/api/cards/:id/screenshot": {
+        GET: h((_b, url, req) => {
+          const card = project({}, url).card(req.params.id!);
+          if (!card) throw new Error("Unknown card");
+          const file = resolveScreenshot(card.description, url.searchParams.get("file") ?? "");
+          return new Response(Bun.file(file), { headers: { "content-type": "image/png" } });
+        }),
+      },
+      "/api/cards/:id/test": {
+        GET: h((b, url, req) => orch.testLog(project(b, url), req.params.id!)),
+        PUT: h((b, url, req) => {
+          const p = project(b, url);
+          p.mutate(() => {
+            const card = p.card(req.params.id!);
+            if (!card) throw new Error("Unknown card");
+            const command = String(b.command ?? "").trim();
+            const testUrl = String(b.url ?? "").trim();
+            if (command) card.test = { command, ...(testUrl ? { url: testUrl } : {}) };
+            else delete card.test;
+          });
+        }),
+      },
+      "/api/cards/:id/test/start": {
+        POST: h((b, url, req) => orch.startTest(project(b, url), req.params.id!)),
+      },
+      "/api/cards/:id/test/stop": {
+        POST: h((b, url, req) => ({ stopped: orch.stopTest(project(b, url), req.params.id!) })),
       },
       "/api/cards/:id/cancel": {
         POST: h((b, url, req) => ({ cancelled: orch.cancel(project(b, url), req.params.id!) })),
