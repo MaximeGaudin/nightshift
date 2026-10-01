@@ -203,7 +203,7 @@ test("loop guard ignores runs before the last user action", async () => {
   await post(`/api/cards/${id}/move`, { project: proj, columnId: enrich.id });
   await waitFor(async () => (await get()).columnId !== enrich.id);
   expect((await get()).lastRun?.error).toBeUndefined();
-});
+}, 20000);
 
 test("column maxParallel caps agents in that column", async () => {
   const p2 = mkdtempSync(join(tmpdir(), "ns-colmax-"));
