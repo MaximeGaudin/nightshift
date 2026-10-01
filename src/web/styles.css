@@ -202,6 +202,8 @@ label > input, label > textarea, label > select { font-size: var(--fs-md); color
 .st-icon.st-question { color: var(--warn); }
 .col-icon.col-inert { color: var(--muted); }
 .col-icon.col-skill { color: var(--accent); }
+.col-icon.col-emoji { width: 14px; height: 14px; font-size: 13px; line-height: 14px; text-align: center; overflow: hidden; color: initial; }
+input.col-emoji-input { width: 2.4em; padding-left: 4px; padding-right: 4px; text-align: center; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 /* ---------- Reduced motion ---------- */

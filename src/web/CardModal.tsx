@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { cardRef, type Board, type Card, type LiveStatus, type LogLine } from "../shared/types.ts";
+import { cardRef, columnEmoji, type Board, type Card, type LiveStatus, type LogLine } from "../shared/types.ts";
 import { api, useServerEvents } from "./api.ts";
 import { StatusIcon } from "./icons.tsx";
 import { Markdown } from "./markdown.tsx";
@@ -76,7 +76,7 @@ export function CardModal({
       wide
       title={
         <span>
-          Fiche <CopyRef card={card} /> <span className="muted">· {column?.name}</span>
+          Fiche <CopyRef card={card} /> <span className="muted">· {column && columnEmoji(column) ? `${columnEmoji(column)} ` : ""}{column?.name}</span>
         </span>
       }
       onClose={() => {

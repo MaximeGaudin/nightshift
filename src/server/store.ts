@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, renameSync, statSync, watch, writeFileSync, type FSWatcher } from "node:fs";
 import { basename, join } from "node:path";
-import { doneColumn, ensureDoneColumn, normalizeColumnParallel, type Board, type Card, type Column, type ColumnType, type HistoryEntry } from "../shared/types.ts";
+import { doneColumn, ensureDoneColumn, normalizeColumnEmoji, normalizeColumnParallel, type Board, type Card, type Column, type ColumnType, type HistoryEntry } from "../shared/types.ts";
 
 export const BOARD_FILE = "nightshift.json";
 
@@ -10,12 +10,23 @@ export function newId(prefix: string) {
 
 const now = () => new Date().toISOString();
 
+// Key order matches normalizeBoard's output so a fresh board is not rewritten on reopen.
+const DEFAULT_COLUMNS: Omit<Column, "id">[] = [
+  { name: "Backlog", type: "inert" },
+  { name: "Grill", type: "skill", skill: "nightshift-grill", model: "opus", maxParallel: 3 },
+  { name: "Plan", type: "skill", skill: "nightshift-plan", model: "opus", maxParallel: 3 },
+  { name: "Implement", type: "skill", skill: "nightshift-implement", model: "sonnet", maxParallel: 3 },
+  { name: "Review", type: "skill", skill: "nightshift-review", model: "opus", maxParallel: 1 },
+  { name: "To Test", type: "inert" },
+  { name: "Merged", type: "skill", skill: "nightshift-merge", model: "sonnet", maxParallel: 1 },
+];
+
 export function defaultBoard(name: string): Board {
   return {
     version: 1,
     name,
     columns: [
-      { id: newId("col"), name: "Backlog", type: "inert" },
+      ...DEFAULT_COLUMNS.map((c) => ({ id: newId("col"), ...c })),
       doneColumn(),
     ],
     cards: [],
@@ -67,7 +78,7 @@ export function doneColumnChanged(raw: any, board: Board): boolean {
   return JSON.stringify(rawCols) !== JSON.stringify(board.columns);
 }
 
-export const COLUMN_KEYS = ["id", "name", "type", "skill", "instructions", "model", "maxParallel"];
+export const COLUMN_KEYS = ["id", "name", "type", "skill", "instructions", "model", "maxParallel", "emoji"];
 const CARD_KEYS = ["id", "number", "title", "description", "columnId", "createdAt", "updatedAt", "enteredColumnAt", "lastRun", "pendingAnswer", "test", "history"];
 const BOARD_KEYS = ["version", "name", "columns", "cards", "nextCardNumber"];
 
@@ -89,6 +100,7 @@ export function normalizeBoard(raw: any, fallbackName: string): Board {
         .map((c: any) => {
           const type: ColumnType = c.type === "skill" ? "skill" : "inert";
           const maxParallel = normalizeColumnParallel(type, c.maxParallel);
+          const emoji = normalizeColumnEmoji(c.emoji);
           return {
             ...unknownFields(c, COLUMN_KEYS),
             id: c.id,
@@ -98,6 +110,7 @@ export function normalizeBoard(raw: any, fallbackName: string): Board {
             ...(c.instructions ? { instructions: String(c.instructions) } : {}),
             ...(typeof c.model === "string" && c.model.trim() ? { model: c.model.trim() } : {}),
             ...(maxParallel !== undefined ? { maxParallel } : {}),
+            ...(emoji !== undefined ? { emoji } : {}),
           };
         })
     : [];

@@ -113,7 +113,8 @@ async function waitFor(fn: () => Promise<boolean>, ms = 8000) {
 
 test("pipeline: skill column without maxParallel runs one card at a time, respects limit, moves them on", async () => {
   const snap = await post("/api/projects/open", { path: proj });
-  const [backlog, done] = snap.board.columns;
+  const backlog = snap.board.columns[0];
+  const done = snap.board.columns.at(-1);
   const res = await post(
     "/api/board",
     { project: proj, columns: [backlog, { name: "Enrich", type: "skill", skill: "enrich" }, done] },
@@ -191,7 +192,7 @@ test("a project locked by another live process runs no agents", async () => {
 
 test("loop guard ignores runs before the last user action", async () => {
   const snap = await post("/api/projects/open", { path: proj });
-  const enrich = snap.board.columns[1];
+  const enrich = snap.board.columns.find((c: any) => c.name === "Enrich");
   const { id } = await post("/api/cards", { project: proj, columnId: enrich.id, title: "guarded" });
   const get = async () => (await fetch(`${base}/api/project?project=${encodeURIComponent(proj)}`).then((r) => r.json())).board.cards.find((c: any) => c.id === id);
   await waitFor(async () => (await get()).columnId !== enrich.id);
@@ -817,10 +818,73 @@ test(
 
 // ---- system Done column -------------------------------------------------------
 
-test("done column: defaultBoard is Backlog then col_done", () => {
-  const cols = defaultBoard("x").columns;
-  expect(cols.map((c) => c.name)).toEqual(["Backlog", "Done"]);
-  expect(cols[1]).toEqual({ id: DONE_COLUMN_ID, name: "Done", type: "inert" });
+test("defaultBoard has the Nightshift pipeline", () => {
+  const b = defaultBoard("x");
+  expect(b.columns.map((c) => c.name)).toEqual(["Backlog", "Grill", "Plan", "Implement", "Review", "To Test", "Merged", "Done"]);
+  const noId = b.columns.map(({ id: _id, ...rest }) => rest);
+  expect(noId).toEqual([
+    { name: "Backlog", type: "inert" },
+    { name: "Grill", type: "skill", skill: "nightshift-grill", model: "opus", maxParallel: 3 },
+    { name: "Plan", type: "skill", skill: "nightshift-plan", model: "opus", maxParallel: 3 },
+    { name: "Implement", type: "skill", skill: "nightshift-implement", model: "sonnet", maxParallel: 3 },
+    { name: "Review", type: "skill", skill: "nightshift-review", model: "opus", maxParallel: 1 },
+    { name: "To Test", type: "inert" },
+    { name: "Merged", type: "skill", skill: "nightshift-merge", model: "sonnet", maxParallel: 1 },
+    { name: "Done", type: "inert" },
+  ]);
+  expect(b.columns.at(-1)).toEqual({ id: DONE_COLUMN_ID, name: "Done", type: "inert" });
+  for (const c of b.columns) expect("instructions" in c).toBe(false);
+  expect(b.cards).toEqual([]);
+  expect(b.nextCardNumber).toBe(1);
+});
+
+test("defaultBoard ids are fresh", () => {
+  const ids = (b: ReturnType<typeof defaultBoard>) => b.columns.slice(0, -1).map((c) => c.id);
+  const a = ids(defaultBoard("x"));
+  const b = ids(defaultBoard("x"));
+  expect(a.length).toBe(7);
+  expect(new Set(a).size).toBe(7);
+  expect(new Set(b).size).toBe(7);
+  for (const id of [...a, ...b]) {
+    expect(id.startsWith("col_")).toBe(true);
+    expect(id).not.toBe(DONE_COLUMN_ID);
+  }
+  expect(a.filter((id) => b.includes(id))).toEqual([]);
+});
+
+test("opening an empty folder writes the pipeline", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "ns-empty-"));
+  new Project(dir).close();
+  const file = join(dir, "nightshift.json");
+  const disk = JSON.parse(readFileSync(file, "utf8"));
+  expect(disk.columns.map((c: any) => c.name)).toEqual(["Backlog", "Grill", "Plan", "Implement", "Review", "To Test", "Merged", "Done"]);
+  expect(disk.columns.at(-1).id).toBe(DONE_COLUMN_ID);
+  const text = readFileSync(file, "utf8");
+  const mtime = statSync(file).mtimeMs;
+  await Bun.sleep(20);
+  new Project(dir).close();
+  expect(readFileSync(file, "utf8")).toBe(text);
+  expect(statSync(file).mtimeMs).toBe(mtime);
+});
+
+test("existing custom columns are untouched", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "ns-custom-"));
+  const file = join(dir, "nightshift.json");
+  const board = { version: 1, name: "c", columns: [{ id: "a", name: "A", type: "inert" }, { id: DONE_COLUMN_ID, name: "Done", type: "inert" }], cards: [], nextCardNumber: 1 };
+  writeFileSync(file, JSON.stringify(board, null, 2) + "\n");
+  const text = readFileSync(file, "utf8");
+  const mtime = statSync(file).mtimeMs;
+  await Bun.sleep(20);
+  const p = new Project(dir);
+  p.close();
+  expect(readFileSync(file, "utf8")).toBe(text);
+  expect(statSync(file).mtimeMs).toBe(mtime);
+  expect(p.board.columns.map((c) => c.name)).toEqual(["A", "Done"]);
+});
+
+test("file without columns gets the pipeline", () => {
+  const b = normalizeBoard({ cards: [] }, "x");
+  expect(b.columns.map((c) => c.name)).toEqual(["Backlog", "Grill", "Plan", "Implement", "Review", "To Test", "Merged", "Done"]);
 });
 
 test("done column: normalizeBoard keeps a user column named Done and puts col_done after it", () => {
@@ -889,5 +953,5 @@ test("done column: nextColumn from col_done is undefined", () => {
   const p = new Project(dir);
   p.close();
   expect(p.nextColumn(DONE_COLUMN_ID)).toBeUndefined();
-  expect(p.nextColumn(p.board.columns[0]!.id)!.id).toBe(DONE_COLUMN_ID);
+  expect(p.nextColumn(p.board.columns.at(-2)!.id)!.id).toBe(DONE_COLUMN_ID);
 });
