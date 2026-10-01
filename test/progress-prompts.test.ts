@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { buildAnswerPrompt, buildFeedbackPrompt, buildPrompt, PROGRESS_RULE, RECOVER_PROMPT } from "../src/server/orchestrator.ts";
+import { parseProgressMarker } from "../src/server/progress.ts";
 import { defaultBoard } from "../src/server/store.ts";
 import type { Card, Column } from "../src/shared/types.ts";
 
@@ -25,4 +26,8 @@ test("prompts-carry-progress-rule: every prompt embeds the rule verbatim", () =>
 test("prompts-carry-progress-rule: the rule names the marker and the style priority", () => {
   expect(PROGRESS_RULE).toContain("[nightshift-progress]");
   expect(PROGRESS_RULE).toContain("priority over any style instruction");
+});
+
+test("progress-marker-rejects-prose: the rule text never matches a marker", () => {
+  expect(parseProgressMarker(PROGRESS_RULE)).toBeUndefined();
 });

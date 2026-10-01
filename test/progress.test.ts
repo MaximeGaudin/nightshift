@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { PROGRESS_RULE } from "../src/server/orchestrator.ts";
 import { parseProgressMarker, progressFromTodos } from "../src/server/progress.ts";
 
 describe("parseProgressMarker", () => {
@@ -110,8 +109,5 @@ describe("progress-marker-tolerant", () => {
 describe("progress-marker-rejects-prose", () => {
   test("mid-sentence", () => {
     expect(parseProgressMarker("Write a line [nightshift-progress] 2/4 x in your reply")).toBeUndefined();
-  });
-  test("PROGRESS_RULE text", () => {
-    expect(parseProgressMarker(PROGRESS_RULE)).toBeUndefined();
   });
 });
