@@ -39,6 +39,19 @@ export function startServer({ port, development, agents = true }: { port: number
   const json = (data: unknown, status = 200) => Response.json(data, { status });
   const fail = (e: any) => json({ error: e?.message ?? String(e) }, 400);
 
+  /** Empty body is `{}`; anything else must be a JSON object. */
+  const parseBody = (text: string): any => {
+    if (!text.trim()) return {};
+    let data: unknown;
+    try {
+      data = JSON.parse(text);
+    } catch {
+      throw new Error("Invalid JSON body");
+    }
+    if (typeof data !== "object" || data === null || Array.isArray(data)) throw new Error("Body must be a JSON object");
+    return data;
+  };
+
   /** Wraps a handler: parses the JSON body and turns thrown errors into 400s. */
   const h =
     (fn: (body: any, url: URL, req: Request & { params: Record<string, string> }) => unknown) =>
@@ -47,7 +60,7 @@ export function startServer({ port, development, agents = true }: { port: number
       if (denied) return denied;
       try {
         const url = new URL(req.url);
-        const body = req.method === "GET" || req.method === "DELETE" ? {} : await req.json().catch(() => ({}));
+        const body = req.method === "GET" || req.method === "DELETE" ? {} : parseBody(await req.text());
         const out = await fn(body, url, req);
         return out instanceof Response ? out : json(out ?? { ok: true });
       } catch (e) {
