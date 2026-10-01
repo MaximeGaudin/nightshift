@@ -6,12 +6,30 @@ export interface ParsedProgress {
 
 const MARKER = /^\[nightshift-progress\] +(\d+) *\/ *(\d+)(?:[ \t]+(.*))?$/;
 const MAX_LABEL = 120;
+const LIST_PREFIX = /^(?:[-*+>]|\d+\.)[ \t]+/;
+const EMPHASIS = /[`*_]/;
+
+/** Strips indentation, list/quote prefixes and emphasis or code delimiters surrounding a line. */
+function normalizeLine(raw: string): string {
+  let line = raw.trim();
+  for (let prev = ""; prev !== line; ) {
+    prev = line;
+    line = line.replace(LIST_PREFIX, "").trimStart();
+  }
+  let lead = 0;
+  while (lead < line.length && EMPHASIS.test(line[lead])) lead++;
+  if (lead === 0) return line;
+  line = line.slice(lead);
+  let end = line.length;
+  while (end > 0 && EMPHASIS.test(line[end - 1])) end--;
+  return line.slice(0, end).trimEnd();
+}
 
 /** Last valid `[nightshift-progress] N/M label` line of the text, if any. */
 export function parseProgressMarker(text: string): ParsedProgress | undefined {
   let found: ParsedProgress | undefined;
   for (const line of text.split(/\r\n|\r|\n/)) {
-    const m = MARKER.exec(line);
+    const m = MARKER.exec(normalizeLine(line));
     if (!m) continue;
     const step = Number(m[1]);
     const total = Number(m[2]);
