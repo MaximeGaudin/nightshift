@@ -64,8 +64,12 @@ export function CardModal({
   });
   useEffect(() => {
     const el = logRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (el && tab !== "time") el.scrollTop = el.scrollHeight;
   }, [log.length, tab]);
+  // The time tab opens at the top, where the pie chart is.
+  useEffect(() => {
+    if (tab === "time" && logRef.current) logRef.current.scrollTop = 0;
+  }, [tab]);
 
   const guard = (p: Promise<unknown>) => p.catch((e) => setError(e.message));
   const save = () =>
