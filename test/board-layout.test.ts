@@ -5,7 +5,7 @@ const css = readFileSync(new URL("../src/web/styles/board.css", import.meta.url)
 const rule = (selector: string): string => {
   const m = css.match(new RegExp(`(?:^|\\n)${selector.replace(/[.*+?^${}()|[\]\\>]/g, "\\$&")}\\s*\\{([^}]*)\\}`));
   if (!m) throw new Error(`rule not found: ${selector}`);
-  return m[1]!;
+  return m[1];
 };
 
 test("board-layout-css-contract", () => {

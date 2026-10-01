@@ -26,9 +26,6 @@
       "preset": "recommended",
       "suspicious": {
         "noExplicitAny": "off"
-      },
-      "style": {
-        "noNonNullAssertion": "off"
       }
     }
   },

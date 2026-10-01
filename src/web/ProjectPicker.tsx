@@ -89,7 +89,7 @@ export function ProjectPicker({
           <ul className="browser">
             {browse.parent && (
               <li>
-                <button type="button" onClick={() => go(browse.parent!)}>
+                <button type="button" onClick={() => go(browse.parent ?? undefined)}>
                   <Icon name="folder" />
                   <span className="truncate">..</span>
                 </button>

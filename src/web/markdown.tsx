@@ -44,7 +44,7 @@ const isBlank = (line: string) => line.trim() === "";
 const indentOf = (line: string) => line.length - line.trimStart().length;
 
 function expandTabs(line: string): string {
-  const lead = /^[ \t]*/.exec(line)![0];
+  const lead = /^[ \t]*/.exec(line)?.[0] ?? "";
   if (!lead.includes("\t")) return line;
   let width = 0;
   for (const ch of lead) width = ch === "\t" ? width + 4 - (width % 4) : width + 1;
@@ -76,14 +76,14 @@ function splitRow(line: string): string[] {
 
 function isTableStart(lines: string[], i: number): boolean {
   const next = lines[i + 1];
-  return lines[i]!.includes("|") && next?.includes("-") && DELIM.test(next);
+  return lines[i]?.includes("|") && next?.includes("-") && DELIM.test(next);
 }
 
 function parseBlocks(lines: string[], depth: number): Block[] {
   const blocks: Block[] = [];
   let i = 0;
   while (i < lines.length) {
-    const line = lines[i]!;
+    const line = lines[i];
     if (isBlank(line)) {
       i++;
       continue;
@@ -104,14 +104,14 @@ function parseBlocks(lines: string[], depth: number): Block[] {
 
     const fence = FENCE.exec(line);
     if (fence) {
-      const ind = fence[1]!.length;
-      const marker = fence[2]!;
+      const ind = fence[1]?.length;
+      const marker = fence[2];
       const body: string[] = [];
       i++;
       while (i < lines.length) {
-        const l = lines[i]!;
+        const l = lines[i];
         const close = /^ *(`{3,}|~{3,}) *$/.exec(l);
-        if (close && close[1]![0] === marker[0] && close[1]!.length >= marker.length) {
+        if (close && close[1]?.[0] === marker[0] && close[1]?.length >= marker.length) {
           i++;
           break;
         }
@@ -125,7 +125,7 @@ function parseBlocks(lines: string[], depth: number): Block[] {
 
     const heading = HEADING.exec(line);
     if (heading) {
-      blocks.push({ t: "heading", level: heading[1]!.length, text: (heading[2] ?? "").trim() });
+      blocks.push({ t: "heading", level: heading[1]?.length, text: (heading[2] ?? "").trim() });
       i++;
       continue;
     }
@@ -139,9 +139,9 @@ function parseBlocks(lines: string[], depth: number): Block[] {
     if (QUOTE.test(line)) {
       const inner: string[] = [];
       while (i < lines.length) {
-        const l = lines[i]!;
+        const l = lines[i];
         if (QUOTE.test(l)) inner.push(l.replace(QUOTE, ""));
-        else if (!isBlank(l) && !startsBlock(l) && inner.length && !isBlank(inner[inner.length - 1]!)) inner.push(l.trim());
+        else if (!isBlank(l) && !startsBlock(l) && inner.length && !isBlank(inner[inner.length - 1])) inner.push(l.trim());
         else break;
         i++;
       }
@@ -156,7 +156,7 @@ function parseBlocks(lines: string[], depth: number): Block[] {
 
     if (isTableStart(lines, i)) {
       const head = splitRow(line);
-      const aligns: Align[] = splitRow(lines[i + 1]!).map((c) => {
+      const aligns: Align[] = splitRow(lines[i + 1]).map((c) => {
         const l = c.startsWith(":");
         const r = c.endsWith(":");
         return l && r ? "center" : r ? "right" : l ? "left" : null;
@@ -165,8 +165,8 @@ function parseBlocks(lines: string[], depth: number): Block[] {
       const fit = (cells: string[]) => Array.from({ length: width }, (_, k) => cells[k] ?? "");
       const rows: string[][] = [];
       i += 2;
-      while (i < lines.length && !isBlank(lines[i]!) && lines[i]!.includes("|")) {
-        rows.push(fit(splitRow(lines[i]!)));
+      while (i < lines.length && !isBlank(lines[i]) && lines[i]?.includes("|")) {
+        rows.push(fit(splitRow(lines[i])));
         i++;
       }
       blocks.push({ t: "table", aligns, head: fit(head), rows });
@@ -175,7 +175,7 @@ function parseBlocks(lines: string[], depth: number): Block[] {
 
     const para: string[] = [];
     while (i < lines.length) {
-      const l = lines[i]!;
+      const l = lines[i];
       if (isBlank(l) || (para.length && (startsBlock(l) || isTableStart(lines, i)))) break;
       para.push(l.trim());
       i++;
@@ -187,9 +187,10 @@ function parseBlocks(lines: string[], depth: number): Block[] {
 
 /** Parses one list starting at `start`, pushes it to `out`, returns the next line index. */
 function parseList(lines: string[], start: number, depth: number, out: Block[]): number {
-  const first = LIST.exec(lines[start]!)!;
-  const baseIndent = first[1]!.length;
-  const ordered = /\d/.test(first[2]!);
+  const first = LIST.exec(lines[start] ?? "");
+  if (!first) return start + 1;
+  const baseIndent = first[1]?.length;
+  const ordered = /\d/.test(first[2]);
   const items: ListItem[] = [];
   let i = start;
 
@@ -197,8 +198,8 @@ function parseList(lines: string[], start: number, depth: number, out: Block[]):
     if (line === undefined || HR.test(line)) return null;
     const m = LIST.exec(line);
     if (!m) return null;
-    if (m[1]!.length > baseIndent + 1 || m[1]!.length < baseIndent) return null;
-    if (/\d/.test(m[2]!) !== ordered) return null;
+    if (m[1]?.length > baseIndent + 1 || m[1]?.length < baseIndent) return null;
+    if (/\d/.test(m[2]) !== ordered) return null;
     return m;
   };
 
@@ -206,7 +207,7 @@ function parseList(lines: string[], start: number, depth: number, out: Block[]):
     const m = sibling(lines[i]);
     if (!m) break;
     const spaces = m[3]?.length ?? 1;
-    const contentIndent = m[1]!.length + m[2]!.length + (spaces > 4 ? 1 : spaces);
+    const contentIndent = m[1]?.length + m[2]?.length + (spaces > 4 ? 1 : spaces);
     const threshold = Math.min(contentIndent, baseIndent + 2);
     let text = m[4] ?? "";
 
@@ -220,11 +221,11 @@ function parseList(lines: string[], start: number, depth: number, out: Block[]):
     const itemLines = [text];
     i++;
     while (i < lines.length) {
-      const l = lines[i]!;
+      const l = lines[i];
       if (isBlank(l)) {
         let j = i;
-        while (j < lines.length && isBlank(lines[j]!)) j++;
-        if (j < lines.length && indentOf(lines[j]!) >= threshold) {
+        while (j < lines.length && isBlank(lines[j])) j++;
+        if (j < lines.length && indentOf(lines[j]) >= threshold) {
           for (let k = i; k < j; k++) itemLines.push("");
           i = j;
           continue;
@@ -238,7 +239,7 @@ function parseList(lines: string[], start: number, depth: number, out: Block[]):
         continue;
       }
       // Lazy continuation of the item's paragraph.
-      const last = itemLines[itemLines.length - 1]!;
+      const last = itemLines[itemLines.length - 1];
       if (!startsBlock(l) && !isBlank(last) && !FENCE.test(last)) {
         itemLines.push(l.trim());
         i++;
@@ -255,11 +256,11 @@ function parseList(lines: string[], start: number, depth: number, out: Block[]):
 
     // Blank lines between siblings keep the same list.
     let j = i;
-    while (j < lines.length && isBlank(lines[j]!)) j++;
+    while (j < lines.length && isBlank(lines[j])) j++;
     if (j > i && sibling(lines[j])) i = j;
   }
 
-  out.push({ t: "list", ordered, start: ordered ? parseInt(first[2]!, 10) || 0 : 1, items });
+  out.push({ t: "list", ordered, start: ordered ? parseInt(first[2], 10) || 0 : 1, items });
   return i;
 }
 
@@ -351,7 +352,7 @@ function matchLink(s: string, i: number): LinkMatch | null {
   if (end < 0) return null;
   let dest = s.slice(close + 2, end).trim();
   const angled = /^<([^>]*)>/.exec(dest);
-  dest = angled ? angled[1]! : (dest.split(/\s+/)[0] ?? "");
+  dest = angled ? angled[1] : (dest.split(/\s+/)[0] ?? "");
   return { label: s.slice(i + 1, close), dest, end: end + 1 };
 }
 
@@ -366,9 +367,9 @@ function parseInline(s: string, depth = 0, inLink = false): Inline[] {
 
   let i = 0;
   while (i < s.length) {
-    const c = s[i]!;
+    const c = s[i];
 
-    if (c === "\\" && i + 1 < s.length && PUNCT.test(s[i + 1]!)) {
+    if (c === "\\" && i + 1 < s.length && PUNCT.test(s[i + 1])) {
       buf += s[i + 1];
       i += 2;
       continue;

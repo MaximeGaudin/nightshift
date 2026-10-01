@@ -75,11 +75,11 @@ test("startTicker: one interval, cleared on stop", () => {
   let ticks = 0;
   const stop = startTicker(() => ticks++, 10);
   expect(set).toHaveBeenCalledTimes(1);
-  expect(set.mock.calls[0]![1]).toBe(10);
+  expect(set.mock.calls[0][1]).toBe(10);
   expect(clear).not.toHaveBeenCalled();
   stop();
   expect(clear).toHaveBeenCalledTimes(1);
-  expect(clear.mock.calls[0]![0]).toBe(set.mock.results[0]!.value);
+  expect(clear.mock.calls[0][0]).toBe(set.mock.results[0].value);
   set.mockRestore();
   clear.mockRestore();
 });
@@ -87,7 +87,7 @@ test("startTicker: one interval, cleared on stop", () => {
 test("startTicker: default period 1 s, fires on schedule", async () => {
   const set = spyOn(globalThis, "setInterval");
   const stop = startTicker(() => {});
-  expect(set.mock.calls[0]![1]).toBe(1000);
+  expect(set.mock.calls[0][1]).toBe(1000);
   stop();
   set.mockRestore();
   let ticks = 0;

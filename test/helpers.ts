@@ -131,3 +131,9 @@ export async function addAgentCard(srv: ChildServer, title: string) {
   };
   return { dir, id, card };
 }
+
+/** Narrows a value that the test setup guarantees (an array element, a lookup): fails loudly instead of using `!`. */
+export function must<T>(value: T | null | undefined, what = "value"): T {
+  if (value === null || value === undefined) throw new Error(`Expected ${what} to be defined`);
+  return value;
+}

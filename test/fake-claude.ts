@@ -88,7 +88,7 @@ if (title === "no-output" && !resumed) {
     structured_output: { move: "stay", summary: "need input", questions: ["Which one?"] },
   });
 } else if (resumed && /FAKE_MOVE=/.test(prompt)) {
-  const move = prompt.match(/FAKE_MOVE=(\S+)/)![1]!;
+  const move = prompt.match(/FAKE_MOVE=(\S+)/)?.[1] ?? "stay";
   emit({
     type: "result",
     is_error: false,

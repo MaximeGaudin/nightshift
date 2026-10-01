@@ -202,7 +202,7 @@ export function startServer({ port, development, agents = true }: { port: number
           const now = new Date().toISOString();
           const title = optString(b, "title");
           const description = optString(b, "description");
-          const columnId = optString(b, "columnId") ?? p.board.columns[0]!.id;
+          const columnId = optString(b, "columnId") ?? p.board.columns[0]?.id;
           if (!p.column(columnId)) throw new Error("Unknown column");
           const id = newId("card");
           const number = p.mutate((board) => {
@@ -218,7 +218,7 @@ export function startServer({ port, development, agents = true }: { port: number
               history: [],
             };
             board.nextCardNumber += 1;
-            p.addHistory(card, "created", `Created in ${p.column(columnId)!.name}`, columnId);
+            p.addHistory(card, "created", `Created in ${p.column(columnId)?.name}`, columnId);
             board.cards.push(card);
             p.addQueued(card, board);
             return card.number;
@@ -232,7 +232,7 @@ export function startServer({ port, development, agents = true }: { port: number
           const title = optString(b, "title");
           const description = optString(b, "description");
           p.mutate(() => {
-            const card = p.card(req.params.id!);
+            const card = p.card(req.params.id);
             if (!card) throw new HttpError(404, "Unknown card");
             if (title !== undefined) card.title = title;
             if (description !== undefined) card.description = description;
@@ -245,8 +245,8 @@ export function startServer({ port, development, agents = true }: { port: number
           p.mutate((board) => {
             board.cards = board.cards.filter((c) => c.id !== req.params.id);
           });
-          removeScreenshots(req.params.id!);
-          orch.purgeCard(p, req.params.id!);
+          removeScreenshots(req.params.id);
+          orch.purgeCard(p, req.params.id);
         }),
       },
       "/api/cards/:id/move": {
@@ -254,37 +254,37 @@ export function startServer({ port, development, agents = true }: { port: number
           const p = project(b, url);
           const columnId = reqString(b, "columnId");
           if (b.index != null && !Number.isInteger(b.index)) throw new Error("index must be an integer");
-          p.mutate((board) => p.moveCard(board, req.params.id!, columnId, b.index ?? undefined, "Moved by user"));
+          p.mutate((board) => p.moveCard(board, req.params.id, columnId, b.index ?? undefined, "Moved by user"));
         }),
       },
       "/api/cards/:id/retry": {
-        POST: h((b, url, req) => orch.retry(project(b, url), req.params.id!)),
+        POST: h((b, url, req) => orch.retry(project(b, url), req.params.id)),
       },
       "/api/cards/:id/answer": {
-        POST: h((b, url, req) => orch.answer(project(b, url), req.params.id!, Array.isArray(b.answers) ? b.answers.map(String) : [])),
+        POST: h((b, url, req) => orch.answer(project(b, url), req.params.id, Array.isArray(b.answers) ? b.answers.map(String) : [])),
       },
       "/api/cards/:id/feedback": {
-        POST: h((b, url, req) => orch.feedback(project(b, url), req.params.id!, typeof b.text === "string" ? b.text : "")),
+        POST: h((b, url, req) => orch.feedback(project(b, url), req.params.id, typeof b.text === "string" ? b.text : "")),
       },
       "/api/cards/:id/screenshot": {
         GET: h((_b, url, req) => {
-          const card = project({}, url).card(req.params.id!);
+          const card = project({}, url).card(req.params.id);
           if (!card) throw new HttpError(404, "Unknown card");
           const file = resolveScreenshot(card.description, url.searchParams.get("file") ?? "", card.id);
           return new Response(Bun.file(file), { headers: { "content-type": "image/png" } });
         }),
       },
       "/api/cards/:id/resume": {
-        POST: h((b, url, req) => orch.resumeSession(project(b, url), req.params.id!)),
+        POST: h((b, url, req) => orch.resumeSession(project(b, url), req.params.id)),
       },
       "/api/cards/:id/test": {
-        GET: h((b, url, req) => orch.testLog(project(b, url), req.params.id!)),
+        GET: h((b, url, req) => orch.testLog(project(b, url), req.params.id)),
         PUT: h((b, url, req) => {
           const p = project(b, url);
           const command = (optString(b, "command") ?? "").trim();
           const rawUrl = (optString(b, "url") ?? "").trim();
           p.mutate(() => {
-            const card = p.card(req.params.id!);
+            const card = p.card(req.params.id);
             if (!card) throw new HttpError(404, "Unknown card");
             const testUrl = rawUrl ? safeHttpUrl(rawUrl) : "";
             if (testUrl === null) throw new Error("url must be an absolute http(s) URL");
@@ -294,16 +294,16 @@ export function startServer({ port, development, agents = true }: { port: number
         }),
       },
       "/api/cards/:id/test/start": {
-        POST: h((b, url, req) => orch.startTest(project(b, url), req.params.id!)),
+        POST: h((b, url, req) => orch.startTest(project(b, url), req.params.id)),
       },
       "/api/cards/:id/test/stop": {
-        POST: h((b, url, req) => ({ stopped: orch.stopTest(project(b, url), req.params.id!) })),
+        POST: h((b, url, req) => ({ stopped: orch.stopTest(project(b, url), req.params.id) })),
       },
       "/api/cards/:id/cancel": {
-        POST: h((b, url, req) => ({ cancelled: orch.cancel(project(b, url), req.params.id!) })),
+        POST: h((b, url, req) => ({ cancelled: orch.cancel(project(b, url), req.params.id) })),
       },
       "/api/cards/:id/log": {
-        GET: h((b, url, req) => orch.getLog(project(b, url), req.params.id!)),
+        GET: h((b, url, req) => orch.getLog(project(b, url), req.params.id)),
       },
 
       "/api/skills": {

@@ -27,7 +27,7 @@ export function checkRequest(req: Request, port: number): Response | null {
   }
 
   if (req.method === "POST" || req.method === "PUT" || req.method === "PATCH") {
-    const type = (req.headers.get("content-type") ?? "").split(";")[0]!.trim().toLowerCase();
+    const type = (req.headers.get("content-type") ?? "").split(";")[0]?.trim().toLowerCase();
     if (type !== "application/json") return deny(415, "Content-Type must be application/json");
   }
   return null;

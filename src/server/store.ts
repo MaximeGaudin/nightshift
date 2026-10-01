@@ -55,8 +55,8 @@ const validNumber = (n: unknown): n is number => Number.isInteger(n) && (n as nu
 function assignNumbers(cards: Card[], rawNumbers: unknown[], rawNext: unknown): number {
   const order = cards.map((_, i) => i);
   order.sort((a, b) => {
-    const ca = cards[a]!.createdAt;
-    const cb = cards[b]!.createdAt;
+    const ca = cards[a]?.createdAt;
+    const cb = cards[b]?.createdAt;
     return ca < cb ? -1 : ca > cb ? 1 : a - b;
   });
   const seen = new Set<number>();
@@ -66,12 +66,12 @@ function assignNumbers(cards: Card[], rawNumbers: unknown[], rawNext: unknown): 
     const n = rawNumbers[i];
     if (validNumber(n) && !seen.has(n)) {
       seen.add(n);
-      cards[i]!.number = n;
+      cards[i].number = n;
       if (n > maxKept) maxKept = n;
     } else queue.push(i);
   }
   let counter = Math.max(validNumber(rawNext) ? rawNext : 1, maxKept + 1);
-  for (const i of queue) cards[i]!.number = counter++;
+  for (const i of queue) cards[i].number = counter++;
   return counter;
 }
 
@@ -177,7 +177,7 @@ export function normalizeBoard(raw: any, fallbackName: string): Board {
       number: 0,
       title: String(c.title ?? ""),
       description: String(c.description ?? ""),
-      columnId: colIds.has(c.columnId) ? c.columnId : columns[0]!.id,
+      columnId: colIds.has(c.columnId) ? c.columnId : columns[0]?.id,
       createdAt: c.createdAt ?? now(),
       updatedAt: c.updatedAt ?? now(),
       enteredColumnAt: c.enteredColumnAt ?? c.updatedAt ?? now(),
@@ -345,7 +345,7 @@ export class Project {
   /** Records that a card waits for an agent, when it is in a skill column and needs a run. */
   addQueued(card: Card, board: Board = this.board) {
     if (!needsRun(board, card)) return;
-    this.addHistory(card, "queued", `Queued in ${this.column(card.columnId)!.name}`, card.columnId);
+    this.addHistory(card, "queued", `Queued in ${this.column(card.columnId)?.name}`, card.columnId);
   }
 
   /** Moves a card to a column at an index (end when omitted). Resets its run state for that column. */

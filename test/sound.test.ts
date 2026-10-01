@@ -24,7 +24,7 @@ test("sound batcher: burst plays one sound with the most urgent kind", () => {
   b.push("error");
   b.push("question");
   expect(t.timers.length).toBe(1);
-  expect(t.timers[0]!.ms).toBe(1000);
+  expect(t.timers[0].ms).toBe(1000);
   t.fire();
   expect(played).toEqual(["error"]);
 

@@ -71,10 +71,10 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
   const move = (i: number, d: number) =>
     setCols((cs) => {
       const target = i + d;
-      if (isDoneColumn(cs[i]!) || target < 0 || target >= cs.length - 1) return cs;
+      if (isDoneColumn(cs[i]) || target < 0 || target >= cs.length - 1) return cs;
       const next = [...cs];
       const [c] = next.splice(i, 1);
-      next.splice(i + d, 0, c!);
+      next.splice(i + d, 0, c);
       return next;
     });
 
@@ -106,7 +106,7 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
               setCols((cs) => [
                 ...cs.slice(0, -1),
                 { id: "", key: crypto.randomUUID(), name: "Nouvelle colonne", type: "inert" },
-                cs[cs.length - 1]!,
+                cs[cs.length - 1],
               ])
             }
           >

@@ -93,11 +93,11 @@ test("persist-copies-and-rewrites", async () => {
   const png = join(wt, "nightshift-screenshots", "01-a.png");
   writeFileSync(png, PNG);
   const { id, card } = await runAgent(`## Shots\n\n![A](${png})\n![again](${png})`);
-  const copy = join(home, "screenshots", id!, "01-a.png");
+  const copy = join(home, "screenshots", id, "01-a.png");
   expect(existsSync(copy)).toBe(true);
   expect(card.description).toBe(`## Shots\n\n![A](${copy})\n![again](${copy})`);
   rmSync(wt, { recursive: true, force: true });
-  const res = await shot(id!, copy);
+  const res = await shot(id, copy);
   expect(res.status).toBe(200);
   expect(Buffer.from(await res.arrayBuffer()).equals(PNG)).toBe(true);
 });
@@ -108,7 +108,7 @@ test("persist-overwrite-and-missing", async () => {
   const gone = join(wt, "nightshift-screenshots", "03-gone.png");
   writeFileSync(png, PNG);
   const first = await runAgent(`![B](${png})`);
-  const copy = join(home, "screenshots", first.id!, "02-b.png");
+  const copy = join(home, "screenshots", first.id, "02-b.png");
   expect(readFileSync(copy).equals(PNG)).toBe(true);
   const modified = Buffer.concat([PNG, Buffer.from("x")]);
   writeFileSync(png, modified);
@@ -128,7 +128,7 @@ test("screenshot-access-other-card", async () => {
   writeFileSync(copyB, PNG);
   const { id } = await runAgent(`![X](${copyB})`);
   expect(id).not.toBe("card_b");
-  expect((await shot(id!, copyB)).status).toBe(400);
+  expect((await shot(id, copyB)).status).toBe(400);
 });
 
 test("delete-removes-screenshots", async () => {
@@ -136,7 +136,7 @@ test("delete-removes-screenshots", async () => {
   const png = join(wt, "nightshift-screenshots", "04-d.png");
   writeFileSync(png, PNG);
   const { id } = await runAgent(`![D](${png})`);
-  const dir = join(home, "screenshots", id!);
+  const dir = join(home, "screenshots", id);
   expect(existsSync(dir)).toBe(true);
   await post(`/api/cards/${id}`, { project: proj }, "DELETE");
   expect(existsSync(dir)).toBe(false);

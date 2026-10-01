@@ -33,5 +33,5 @@ test("idempotent and does not mutate input", () => {
 test("done-keeps-emoji", () => {
   const withEmoji = ensureDoneColumn([a, { ...doneColumn(), emoji: "🏁", skill: "s" } as Column]);
   expect(withEmoji[1]).toEqual({ id: "col_done", name: "Done", type: "inert", emoji: "🏁" });
-  expect("emoji" in ensureDoneColumn([a])[1]!).toBe(false);
+  expect("emoji" in ensureDoneColumn([a])[1]).toBe(false);
 });

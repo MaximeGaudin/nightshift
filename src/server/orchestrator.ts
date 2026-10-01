@@ -291,8 +291,8 @@ export class Orchestrator {
     if (this.agents) this.acquireLock(p);
     this.projects.set(path, p);
     p.onChange(() => {
-      this.cancelStaleJobs(p!);
-      this.broadcast({ type: "board", project: path, snapshot: this.snapshot(p!) });
+      this.cancelStaleJobs(p);
+      this.broadcast({ type: "board", project: path, snapshot: this.snapshot(p) });
       this.scheduleTick();
     });
     rememberProject(path);
@@ -509,8 +509,9 @@ export class Orchestrator {
       const card = p.card(cardId);
       if (!card) throw new HttpError(404, "Unknown card");
       const live: LiveStatus | undefined = this.jobs.has(this.key(p, cardId)) ? "running" : needsRun(p.board, card) ? "queued" : undefined;
-      if (!canSendFeedback(card, live)) throw new Error("This card has no session to send feedback to");
-      card.pendingAnswer = { text: trimmed, sessionId: card.lastRun!.sessionId!, at: new Date().toISOString(), kind: "feedback" };
+      const sessionId = card.lastRun?.sessionId;
+      if (!sessionId || !canSendFeedback(card, live)) throw new Error("This card has no session to send feedback to");
+      card.pendingAnswer = { text: trimmed, sessionId, at: new Date().toISOString(), kind: "feedback" };
       p.addHistory(card, "edited", "Feedback sent to agent");
     });
   }
@@ -556,7 +557,8 @@ export class Orchestrator {
   }
 
   private start(p: Project, card: Card) {
-    const column = p.column(card.columnId)!;
+    const column = p.column(card.columnId);
+    if (!column) return;
     const job: Job = {
       key: this.key(p, card.id),
       project: p,
@@ -611,7 +613,7 @@ export class Orchestrator {
     }
     const skillRef = job.skill ? `the skill "${job.skill}"` : "the skill you applied earlier in this session";
     let prompt = !answer
-      ? buildPrompt(p.board, card, column, skill!.path)
+      ? buildPrompt(p.board, card, column, skill?.path)
       : answer.kind === "resume"
         ? RECOVER_PROMPT
         : answer.kind === "feedback"

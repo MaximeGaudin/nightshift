@@ -5,7 +5,7 @@ const css = readFileSync(new URL("../src/web/styles/card-modal.css", import.meta
 const rule = (selector: string): string => {
   const m = css.match(new RegExp(`(?:^|\\n)${selector.replace(/[.*+?^${}()|[\]\\>]/g, "\\$&")}\\s*\\{([^}]*)\\}`));
   if (!m) throw new Error(`rule not found: ${selector}`);
-  return m[1]!;
+  return m[1];
 };
 
 test("card-modal-layout-css-contract", () => {
@@ -23,14 +23,14 @@ test("card-modal-layout-css-contract", () => {
 const mdCss = readFileSync(new URL("../src/web/styles/markdown.css", import.meta.url), "utf8");
 const mdRule = (selector: string): string => {
   const re = new RegExp(`(?:^|\\n)${selector.replace(/[.*+?^${}()|[\]\\>]/g, "\\$&")}\\s*\\{([^}]*)\\}`, "g");
-  const blocks = [...mdCss.matchAll(re)].map((m) => m[1]!);
+  const blocks = [...mdCss.matchAll(re)].map((m) => m[1]);
   if (!blocks.length) throw new Error(`rule not found: ${selector}`);
   return blocks.join(" ");
 };
 const mobileBlock = (): string => {
   const m = css.match(/@media \(max-width: 800px\)\s*\{([\s\S]*?\n)\}/);
   if (!m) throw new Error("media query not found");
-  return m[1]!;
+  return m[1];
 };
 
 test("card-modal-grid-tracks-shrink", () => {

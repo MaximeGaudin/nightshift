@@ -162,7 +162,7 @@ test("checkpoint replay equals full replay at every cut point", () => {
   let t = 0;
   for (let i = 0; i < 120; i++) {
     t += rnd(7) - 1; // occasionally goes backwards
-    const col = cols[rnd(cols.length)]!;
+    const col = cols[rnd(cols.length)];
     const detailed = i > 60 || rnd(3) === 0;
     switch (rnd(7)) {
       case 0:
@@ -170,7 +170,7 @@ test("checkpoint replay equals full replay at every cut point", () => {
         break;
       case 1:
       case 2:
-        h.push(detailed ? moved(t, cols[rnd(cols.length)]!, col) : oldMoved(t, names[rnd(5)]!, names[rnd(5)]!));
+        h.push(detailed ? moved(t, cols[rnd(cols.length)], col) : oldMoved(t, names[rnd(5)], names[rnd(5)]));
         break;
       case 3:
         h.push(queued(t, col));

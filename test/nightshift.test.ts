@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { quiet, removeTempDirs, tempDir, waitFor } from "./helpers.ts";
+import { must, quiet, removeTempDirs, tempDir, waitFor } from "./helpers.ts";
 
 /** An mtime long ago: a file that is rewritten gets a later one. */
 const PAST = new Date("2020-01-01T00:00:00Z");
@@ -64,9 +64,9 @@ test("normalizeBoard keeps a trimmed model and drops empty ones", () => {
     },
     "x",
   );
-  expect(b.columns[0]!.model).toBe("sonnet");
-  expect("model" in b.columns[1]!).toBe(false);
-  expect("model" in b.columns[2]!).toBe(false);
+  expect(b.columns[0].model).toBe("sonnet");
+  expect("model" in b.columns[1]).toBe(false);
+  expect("model" in b.columns[2]).toBe(false);
 });
 
 test("resolveModel priority", () => {
@@ -92,7 +92,7 @@ test("project skills shadow user skills", () => {
   createSkill(proj, "dup", "project one", "body");
   const dup = listSkills(proj).filter((s) => s.name === "dup");
   expect(dup).toHaveLength(1);
-  expect(dup[0]!.scope).toBe("project");
+  expect(dup[0].scope).toBe("project");
   expect(() => createSkill(proj, "Bad Name", "", "")).toThrow();
 });
 
@@ -206,7 +206,7 @@ test("loop guard ignores runs before the last user action", async () => {
   await waitFor(async () => (await get()).columnId !== enrich.id);
   // Simulate a burst of stale runs, then move the card back by hand: it must run again.
   srv.orch.get(proj).mutate(() => {
-    const card = srv.orch.get(proj).card(id)!;
+    const card = must(srv.orch.get(proj).card(id), "the card");
     for (let i = 0; i < 20; i++) srv.orch.get(proj).addHistory(card, "run", "Enrich: stale");
   });
   // The user move must be strictly later than the stale runs (same-millisecond entries count as recent).
@@ -319,7 +319,7 @@ test("column maxParallel normalization", async () => {
   check(res.board.columns);
   check(normalizeBoard({ columns: cols.map((c, i) => ({ id: `c${i}`, ...c })), cards: [] }, "x").columns);
   expect(
-    normalizeBoard({ columns: [{ id: "s", name: "S", type: "skill", skill: "s", maxParallel: "5" }], cards: [] }, "x").columns[0]!
+    normalizeBoard({ columns: [{ id: "s", name: "S", type: "skill", skill: "s", maxParallel: "5" }], cards: [] }, "x").columns[0]
       .maxParallel,
   ).toBe(5);
 });
@@ -445,7 +445,7 @@ test("--no-agents instance never runs agents nor takes the lock", async () => {
   const passive = new Orchestrator({ agents: false });
   const p = passive.open(dir);
   await quiet(); // a passive orchestrator never starts the card
-  expect(p.card("k")!.lastRun).toBeUndefined();
+  expect(must(p.card("k")).lastRun).toBeUndefined();
   expect(passive.snapshot(p).agentsDisabled).toBe(true);
   expect(passive.snapshot(p).live).toEqual({ k: "queued" });
   const { createHash } = await import("node:crypto");
@@ -564,7 +564,7 @@ test("run passes the column model to claude", async () => {
     await waitFor(async () => (await getProject(dir)).board.cards.find((c: any) => c.id === second.id)?.columnId === done.id);
     const entry = argsEntries().find((e) => e.title === "m2");
     expect(entry).toBeDefined();
-    expect(entry!.model).toBeNull();
+    expect(must(entry).model).toBeNull();
   } finally {
     updateSettings({ model: "" });
   }
@@ -595,7 +595,7 @@ test("resume uses the column model at resume time", async () => {
     .slice(before)
     .filter((e) => e.resumed);
   expect(resumed).toHaveLength(1);
-  expect(resumed[0]!.model).toBe("haiku");
+  expect(resumed[0].model).toBe("haiku");
 });
 
 // ---- card numbers -----------------------------------------------------------
@@ -615,7 +615,7 @@ test("numbering: fresh board assigns 1,2,3 and never reuses", async () => {
   const ids: string[] = [];
   for (const t of ["a", "b", "c"]) ids.push((await post("/api/cards", { project: fresh, title: t })).id);
   const get = () => fetch(`${base}/api/project?project=${encodeURIComponent(fresh)}`).then((r) => r.json());
-  expect(numbers((await get()).board)).toEqual({ [ids[0]!]: 1, [ids[1]!]: 2, [ids[2]!]: 3 });
+  expect(numbers((await get()).board)).toEqual({ [ids[0]]: 1, [ids[1]]: 2, [ids[2]]: 3 });
   await fetch(`${base}/api/cards/${ids[2]}?project=${encodeURIComponent(fresh)}`, { method: "DELETE" });
   const { id, number } = await post("/api/cards", { project: fresh, title: "d" });
   expect(number).toBe(4);
@@ -926,7 +926,7 @@ test("attention: answering emits nothing, resumed run follows the rules", async 
     const [work, done] = b.cols;
     const { id } = await post("/api/cards", { project: b.dir, columnId: work.id, title: "ask" });
     await waitFor(async () => b.forCard(id).length === 1 && (await b.idle(id)));
-    expect(b.forCard(id)[0]!.kind).toBe("question");
+    expect(b.forCard(id)[0].kind).toBe("question");
     // The resumed run takes at least the fake delay, so any event seen right after the answer came from answer() itself.
     await post(`/api/cards/${id}/answer`, { project: b.dir, answers: ["blue", "big"] });
     expect(b.forCard(id)).toHaveLength(1);
@@ -1030,7 +1030,7 @@ test("done column: normalizeBoard keeps a user column named Done and puts col_do
     "x",
   );
   expect(b.columns.map((c) => c.id)).toEqual(["u", "w", DONE_COLUMN_ID]);
-  expect(b.columns[0]!.name).toBe("Done");
+  expect(b.columns[0].name).toBe("Done");
 });
 
 test("done column: load writes col_done back once, then leaves the file alone", async () => {
@@ -1102,7 +1102,7 @@ test("done column: nextColumn from col_done is undefined", () => {
   const p = new Project(dir);
   p.close();
   expect(p.nextColumn(DONE_COLUMN_ID)).toBeUndefined();
-  expect(p.nextColumn(p.board.columns.at(-2)!.id)!.id).toBe(DONE_COLUMN_ID);
+  expect(p.nextColumn(must(p.board.columns.at(-2)).id)?.id).toBe(DONE_COLUMN_ID);
 });
 
 // ---- user feedback ----------------------------------------------------------
@@ -1337,7 +1337,7 @@ test("queue time is due to the column limit", async () => {
   const started2 = c2.history.find((h: any) => h.kind === "started");
   expect(started2.at >= run1.at).toBe(true);
   const slices = cardTimeSlices(c2, board.columns, Date.now());
-  expect(slices.find((s) => s.columnId === enrich.id && s.part === "queued")!.ms).toBeGreaterThan(0);
+  expect(must(slices.find((s) => s.columnId === enrich.id && s.part === "queued")).ms).toBeGreaterThan(0);
 });
 
 test("answer and retry put the card back in the queue", async () => {
@@ -1375,21 +1375,21 @@ test("history cap keeps the time in timeBase", async () => {
         number: 1,
         title: "t",
         description: "",
-        columnId: a!.id,
+        columnId: a.id,
         createdAt: "2026-01-01T00:00:00.000Z",
         updatedAt: "2026-01-01T00:00:00.000Z",
         enteredColumnAt: "2026-01-01T00:00:00.000Z",
         history: [],
       });
     });
-    return p.card("k")!;
+    return p.card("k");
   };
   const card = p.board.cards[0] ?? seed();
   const t0 = Date.parse("2026-01-01T00:00:00.000Z");
   const at = (i: number) => new Date(t0 + i * 60_000).toISOString();
-  const full: any[] = [{ at: at(0), kind: "created", text: `Created in ${a!.name}`, columnId: a!.id }];
+  const full: any[] = [{ at: at(0), kind: "created", text: `Created in ${a.name}`, columnId: a.id }];
   for (let i = 1; i <= 60; i++) {
-    const [from, to] = i % 2 ? [a!, b!] : [b!, a!];
+    const [from, to] = i % 2 ? [a, b] : [b, a];
     full.push({ at: at(i), kind: "moved", text: `Moved by user: ${from.name} → ${to.name}`, columnId: to.id });
   }
   const before = cardTimeSlices(
@@ -1401,7 +1401,7 @@ test("history cap keeps the time in timeBase", async () => {
   card.history = [];
   for (const e of full) {
     p.addHistory(card, e.kind, e.text, e.columnId);
-    card.history[card.history.length - 1]!.at = e.at;
+    card.history[card.history.length - 1].at = e.at;
   }
   expect(card.history.length).toBeLessThanOrEqual(50);
   expect(card.timeBase).toBeDefined();
@@ -1429,7 +1429,7 @@ test("--no-agents instance records queued but never started", async () => {
   const p = passive.open(dir);
   p.mutate((board) => p.moveCard(board, "k", "s", undefined, "Moved by user"));
   await quiet(); // nothing may start
-  const kinds = p.card("k")!.history.map((h) => h.kind);
+  const kinds = must(p.card("k")).history.map((h) => h.kind);
   expect(kinds).toContain("queued");
   expect(kinds).not.toContain("started");
   passive.shutdown();

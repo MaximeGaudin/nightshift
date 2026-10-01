@@ -279,7 +279,7 @@ function Board({ snap, onOpen, guard }: { snap: ProjectSnapshot; onOpen: (id: st
               const list = (e.currentTarget as HTMLElement).querySelectorAll<HTMLElement>("[data-card]");
               let index = list.length;
               for (let i = 0; i < list.length; i++) {
-                const r = list[i]!.getBoundingClientRect();
+                const r = list[i]?.getBoundingClientRect();
                 if (e.clientY < r.top + r.height / 2) {
                   index = i;
                   break;

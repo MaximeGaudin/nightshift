@@ -29,9 +29,9 @@ test("emoji-load: normalizeBoard keeps first grapheme, drops empty and non-strin
     },
     "x",
   );
-  expect(b.columns[0]!.emoji).toBe("✅");
-  expect("emoji" in b.columns[1]!).toBe(false);
-  expect("emoji" in b.columns[2]!).toBe(false);
+  expect(b.columns[0].emoji).toBe("✅");
+  expect("emoji" in b.columns[1]).toBe(false);
+  expect("emoji" in b.columns[2]).toBe(false);
 });
 
 test("emoji-no-rewrite", () => {
@@ -54,7 +54,7 @@ test("emoji-no-rewrite", () => {
     nextCardNumber: 1,
   };
   const n = normalizeBoard(withEmoji, "x");
-  expect(n.columns[1]!.emoji).toBe("🏁");
+  expect(n.columns[1].emoji).toBe("🏁");
   expect(doneColumnChanged(withEmoji, n)).toBe(false);
   expect(numberingChanged(withEmoji, n)).toBe(false);
 });

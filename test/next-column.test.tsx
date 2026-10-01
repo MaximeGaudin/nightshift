@@ -28,7 +28,7 @@ test("next-column-click-order", async () => {
   const base = {
     project: "p",
     card: cardIn("x1"),
-    target: columns[1]!,
+    target: columns[1],
     onError: (m: string) => errors.push(m),
     moveCard: async (...a: unknown[]) => void calls.push(["move", ...a]),
   };

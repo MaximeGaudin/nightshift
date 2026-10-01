@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Project } from "../src/server/store.ts";
+import { must } from "./helpers.ts";
 
 test("store-write-failure: a failed write throws and leaves memory identical to the file", () => {
   const dir = mkdtempSync(join(tmpdir(), "ns-wf-"));
@@ -10,7 +11,7 @@ test("store-write-failure: a failed write throws and leaves memory identical to 
     const p = new Project(dir);
     const file = join(dir, "nightshift.json");
     const onDisk = () => JSON.parse(readFileSync(file, "utf8"));
-    const first = p.column(p.board.columns[0]!.id)!;
+    const first = must(p.column(must(p.board.columns[0]).id));
     let notified = 0;
     p.onChange(() => notified++);
 

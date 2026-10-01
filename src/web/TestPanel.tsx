@@ -117,7 +117,7 @@ export function TestPanel({
           </button>
         )}
       </div>
-      <pre className="test-command">{card.test!.command}</pre>
+      <pre className="test-command">{card.test?.command}</pre>
       {linkUrl && (
         <a href={linkUrl} target="_blank" rel="noreferrer">
           {linkUrl}

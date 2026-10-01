@@ -21,7 +21,7 @@ export function parsePort(value: string | undefined): number {
 export function parseArgs(argv: string[], env: Record<string, string | undefined>): CliOptions {
   const opts: CliOptions = { port: env.PORT ? parsePort(env.PORT) : 4545, open: true, agents: true, help: false };
   for (let i = 0; i < argv.length; i++) {
-    const a = argv[i]!;
+    const a = argv[i];
     if (a === "--port" || a === "-p") opts.port = parsePort(argv[++i]);
     else if (a === "--no-open") opts.open = false;
     else if (a === "--no-agents") opts.agents = false;

@@ -9,7 +9,7 @@ const IMAGE_RE = /!\[[^\]]*\]\(([^)\s]+)\)/g;
 
 /** PNG paths embedded as markdown images in a card description. */
 export function screenshotRefs(description: string): string[] {
-  return [...description.matchAll(IMAGE_RE)].map((m) => m[1]!).filter((p) => p.endsWith(".png"));
+  return [...description.matchAll(IMAGE_RE)].map((m) => m[1]).filter((p) => p.endsWith(".png"));
 }
 
 /** Stable folder holding the captures of a card. Throws on a dubious id. */

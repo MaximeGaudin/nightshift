@@ -29,19 +29,19 @@ export function parseFrontmatter(text: string): Record<string, string> {
   const m = text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!m) return {};
   const out: Record<string, string> = {};
-  const lines = m[1]!.split(/\r?\n/);
+  const lines = m[1]?.split(/\r?\n/);
   for (let i = 0; i < lines.length; i++) {
-    const kv = lines[i]!.match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
+    const kv = lines[i]?.match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
     if (!kv) continue;
-    let value = kv[2]!.trim();
+    let value = kv[2]?.trim();
     if (/^[>|][-+]?$/.test(value)) {
       const block: string[] = [];
-      while (i + 1 < lines.length && (/^\s+/.test(lines[i + 1]!) || lines[i + 1] === "")) {
-        block.push(lines[++i]!.trim());
+      while (i + 1 < lines.length && (/^\s+/.test(lines[i + 1]) || lines[i + 1] === "")) {
+        block.push(lines[++i]?.trim());
       }
       value = block.join(value.startsWith(">") ? " " : "\n").trim();
     }
-    out[kv[1]!] = unquote(value);
+    out[kv[1]] = unquote(value);
   }
   return out;
 }
@@ -95,5 +95,5 @@ export function createSkill(projectPath: string, name: string, description: stri
   const desc = description.replace(/\s+/g, " ").trim() || `Nightshift skill ${name}.`;
   const content = `---\nname: ${name}\ndescription: ${JSON.stringify(desc)}\n---\n\n${body.trim() || `# ${name}\n\nDescribe what to do with the card.`}\n`;
   writeFileAtomic(join(dir, "SKILL.md"), content);
-  return findSkill(projectPath, name)!;
+  return findSkill(projectPath, name);
 }

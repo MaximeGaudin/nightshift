@@ -16,7 +16,7 @@ export function isCardScreenshot(dest: string, cardId: string): boolean {
 export function cardScreenshots(description: string, cardId: string): { alt: string; file: string }[] {
   const out: { alt: string; file: string }[] = [];
   for (const m of description.matchAll(/!\[([^\]]*)\]\(([^)\s]+)\)/g)) {
-    const file = m[2]!;
+    const file = m[2];
     if (isCardScreenshot(file, cardId)) out.push({ alt: m[1] || "Capture", file });
   }
   return out;
