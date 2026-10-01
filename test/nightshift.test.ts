@@ -1,14 +1,17 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { quiet, removeTempDirs, tempDir, waitFor } from "./helpers.ts";
 
-const home = mkdtempSync(join(tmpdir(), "ns-home-"));
-const userSkills = mkdtempSync(join(tmpdir(), "ns-skills-"));
+/** An mtime long ago: a file that is rewritten gets a later one. */
+const PAST = new Date("2020-01-01T00:00:00Z");
+
+const home = tempDir("ns-home-");
+const userSkills = tempDir("ns-skills-");
 process.env.NIGHTSHIFT_HOME = home;
 process.env.NIGHTSHIFT_USER_SKILLS = userSkills;
 // Read by the fake claude binary, which inherits the server's environment.
-const argsLog = join(mkdtempSync(join(tmpdir(), "ns-args-")), "args.jsonl");
+const argsLog = join(tempDir("ns-args-"), "args.jsonl");
 const prevArgsLog = process.env.FAKE_ARGS_LOG;
 process.env.FAKE_ARGS_LOG = argsLog;
 
@@ -83,7 +86,7 @@ test("resolveModel priority", () => {
 });
 
 test("project skills shadow user skills", () => {
-  const proj = mkdtempSync(join(tmpdir(), "ns-proj-"));
+  const proj = tempDir("ns-proj-");
   mkdirSync(join(userSkills, "dup"), { recursive: true });
   writeFileSync(join(userSkills, "dup", "SKILL.md"), "---\nname: dup\ndescription: user\n---\n");
   createSkill(proj, "dup", "project one", "body");
@@ -97,7 +100,7 @@ test("project skills shadow user skills", () => {
 
 let srv: ReturnType<typeof startServer>;
 let base = "";
-const proj = mkdtempSync(join(tmpdir(), "ns-e2e-"));
+const proj = tempDir("ns-e2e-");
 
 beforeAll(() => {
   updateSettings({ claudePath: join(import.meta.dir, "fake-claude.ts"), maxParallel: 2 });
@@ -106,24 +109,16 @@ beforeAll(() => {
   mkdirSync(join(userSkills, "enrich"), { recursive: true });
   writeFileSync(join(userSkills, "enrich", "SKILL.md"), "---\nname: enrich\ndescription: test\n---\n");
 });
-afterAll(() => {
-  srv.orch.shutdown();
+afterAll(async () => {
+  await srv.orch.shutdown();
   srv.server.stop(true);
   if (prevArgsLog === undefined) delete process.env.FAKE_ARGS_LOG;
   else process.env.FAKE_ARGS_LOG = prevArgsLog;
+  removeTempDirs();
 });
 
 const post = (path: string, body: object, method = "POST") =>
   fetch(base + path, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json());
-
-async function waitFor(fn: () => Promise<boolean>, ms = 8000) {
-  const end = Date.now() + ms;
-  while (Date.now() < end) {
-    if (await fn()) return;
-    await Bun.sleep(50);
-  }
-  throw new Error("timeout");
-}
 
 test("pipeline: skill column without maxParallel runs one card at a time, respects limit, moves them on", async () => {
   const snap = await post("/api/projects/open", { path: proj });
@@ -186,7 +181,7 @@ test("startServer reuses one orchestrator per process (bun --hot safety)", () =>
 
 test("a project locked by another live process runs no agents", async () => {
   const { createHash } = await import("node:crypto");
-  const locked = mkdtempSync(join(tmpdir(), "ns-locked-"));
+  const locked = tempDir("ns-locked-");
   mkdirSync(join(home, "locks"), { recursive: true });
   const hash = createHash("sha1").update(locked).digest("hex").slice(0, 12);
   writeFileSync(join(home, "locks", `${hash}.lock`), String(process.ppid));
@@ -194,7 +189,7 @@ test("a project locked by another live process runs no agents", async () => {
   expect(snap.lockedBy).toBe(process.ppid);
   const res = await post("/api/board", { project: locked, columns: [{ name: "Enrich", type: "skill", skill: "enrich" }] }, "PUT");
   await post("/api/cards", { project: locked, columnId: res.board.columns[0].id, title: "x" });
-  await Bun.sleep(400);
+  await quiet(400); // no agent may start in a project locked by another process
   const s = await fetch(`${base}/api/project?project=${encodeURIComponent(locked)}`).then((r) => r.json());
   expect(Object.values(s.live)).not.toContain("running");
   expect(s.board.cards[0].lastRun).toBeUndefined();
@@ -215,14 +210,15 @@ test("loop guard ignores runs before the last user action", async () => {
     for (let i = 0; i < 20; i++) srv.orch.get(proj).addHistory(card, "run", "Enrich: stale");
   });
   // The user move must be strictly later than the stale runs (same-millisecond entries count as recent).
-  await Bun.sleep(5);
+  const stamp = Date.now();
+  while (Date.now() === stamp); // the next millisecond
   await post(`/api/cards/${id}/move`, { project: proj, columnId: enrich.id });
   await waitFor(async () => (await get()).columnId !== enrich.id);
   expect((await get()).lastRun?.error).toBeUndefined();
 }, 20000);
 
 test("column maxParallel caps agents in that column", async () => {
-  const p2 = mkdtempSync(join(tmpdir(), "ns-colmax-"));
+  const p2 = tempDir("ns-colmax-");
   await post("/api/projects/open", { path: p2 });
   const res = await post(
     "/api/board",
@@ -252,7 +248,7 @@ const liveRunning = async (project: string) => {
 };
 
 test("column maxParallel > 1 runs several cards", async () => {
-  const p = mkdtempSync(join(tmpdir(), "ns-colpar-"));
+  const p = tempDir("ns-colpar-");
   await post("/api/projects/open", { path: p });
   const res = await post(
     "/api/board",
@@ -277,7 +273,7 @@ test("column maxParallel > 1 runs several cards", async () => {
 });
 
 test("global cap cuts below the sum of column limits", async () => {
-  const p = mkdtempSync(join(tmpdir(), "ns-globalcap-"));
+  const p = tempDir("ns-globalcap-");
   await post("/api/projects/open", { path: p });
   const res = await post(
     "/api/board",
@@ -306,7 +302,7 @@ test("global cap cuts below the sum of column limits", async () => {
 });
 
 test("column maxParallel normalization", async () => {
-  const p = mkdtempSync(join(tmpdir(), "ns-colnorm-"));
+  const p = tempDir("ns-colnorm-");
   await post("/api/projects/open", { path: p });
   const cols = [
     { name: "Big", type: "skill", skill: "enrich", maxParallel: 99 },
@@ -334,7 +330,7 @@ test("columnMaxParallel default", () => {
 });
 
 test("agent test command is stored on the card and can be started and stopped", async () => {
-  const p3 = mkdtempSync(join(tmpdir(), "ns-test-"));
+  const p3 = tempDir("ns-test-");
   await post("/api/projects/open", { path: p3 });
   const res = await post(
     "/api/board",
@@ -361,7 +357,7 @@ test("agent test command is stored on the card and can be started and stopped", 
 });
 
 test("column maxParallel caps agents in that column", async () => {
-  const p2 = mkdtempSync(join(tmpdir(), "ns-colmax-"));
+  const p2 = tempDir("ns-colmax-");
   await post("/api/projects/open", { path: p2 });
   const res = await post(
     "/api/board",
@@ -386,7 +382,7 @@ test("column maxParallel caps agents in that column", async () => {
 });
 
 test("agent test command is stored on the card and can be started and stopped", async () => {
-  const p3 = mkdtempSync(join(tmpdir(), "ns-test-"));
+  const p3 = tempDir("ns-test-");
   await post("/api/projects/open", { path: p3 });
   const res = await post(
     "/api/board",
@@ -413,7 +409,7 @@ test("agent test command is stored on the card and can be started and stopped", 
 });
 
 test("fields unknown to this version survive load and PUT", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "ns-future-"));
+  const dir = tempDir("ns-future-");
   writeFileSync(
     join(dir, "nightshift.json"),
     JSON.stringify({
@@ -436,7 +432,7 @@ test("fields unknown to this version survive load and PUT", async () => {
 
 test("--no-agents instance never runs agents nor takes the lock", async () => {
   const { Orchestrator } = await import("../src/server/orchestrator.ts");
-  const dir = mkdtempSync(join(tmpdir(), "ns-noagents-"));
+  const dir = tempDir("ns-noagents-");
   writeFileSync(
     join(dir, "nightshift.json"),
     JSON.stringify({
@@ -448,7 +444,7 @@ test("--no-agents instance never runs agents nor takes the lock", async () => {
   );
   const passive = new Orchestrator({ agents: false });
   const p = passive.open(dir);
-  await Bun.sleep(300);
+  await quiet(); // a passive orchestrator never starts the card
   expect(p.card("k")!.lastRun).toBeUndefined();
   expect(passive.snapshot(p).agentsDisabled).toBe(true);
   expect(passive.snapshot(p).live).toEqual({ k: "queued" });
@@ -459,7 +455,7 @@ test("--no-agents instance never runs agents nor takes the lock", async () => {
 });
 
 test("an agent that stops without its result is resumed once to collect it", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "ns-recover-"));
+  const dir = tempDir("ns-recover-");
   await post("/api/projects/open", { path: dir });
   const res = await post(
     "/api/board",
@@ -483,7 +479,7 @@ test("an agent that stops without its result is resumed once to collect it", asy
 });
 
 test("prompt goes through stdin, never argv", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "ns-stdin-"));
+  const dir = tempDir("ns-stdin-");
   const argsLog = join(dir, "args.jsonl");
   const previous = process.env.FAKE_ARGS_LOG;
   process.env.FAKE_ARGS_LOG = argsLog;
@@ -531,7 +527,7 @@ const argsEntries = (): { title: string; resumed: boolean; model: string | null 
 const getProject = (path: string) => fetch(`${base}/api/project?project=${encodeURIComponent(path)}`).then((r) => r.json());
 
 test("PUT /api/board keeps model on an inert column", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "ns-model-inert-"));
+  const dir = tempDir("ns-model-inert-");
   await post("/api/projects/open", { path: dir });
   const res = await post("/api/board", { project: dir, columns: [{ name: "Inbox", type: "inert", model: "opus" }] }, "PUT");
   expect(res.board.columns[0].model).toBe("opus");
@@ -540,7 +536,7 @@ test("PUT /api/board keeps model on an inert column", async () => {
 });
 
 test("run passes the column model to claude", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "ns-model-run-"));
+  const dir = tempDir("ns-model-run-");
   updateSettings({ model: "sonnet" });
   try {
     await post("/api/projects/open", { path: dir });
@@ -575,7 +571,7 @@ test("run passes the column model to claude", async () => {
 });
 
 test("resume uses the column model at resume time", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "ns-model-resume-"));
+  const dir = tempDir("ns-model-resume-");
   await post("/api/projects/open", { path: dir });
   const res = await post(
     "/api/board",
@@ -613,7 +609,7 @@ const rawCard = (id: string, createdAt: string, number?: unknown) => ({
 const numbers = (b: { cards: { id: string; number: number }[] }) => Object.fromEntries(b.cards.map((c) => [c.id, c.number]));
 
 test("numbering: fresh board assigns 1,2,3 and never reuses", async () => {
-  const fresh = mkdtempSync(join(tmpdir(), "ns-num-"));
+  const fresh = tempDir("ns-num-");
   const snap = await post("/api/projects/open", { path: fresh });
   expect(snap.board.nextCardNumber).toBe(1);
   const ids: string[] = [];
@@ -696,7 +692,7 @@ test("numbering: counter too low is raised, higher counter kept", () => {
 });
 
 test("numbering: load writes back only when changed", async () => {
-  const legacy = mkdtempSync(join(tmpdir(), "ns-legacy-"));
+  const legacy = tempDir("ns-legacy-");
   const legacyFile = join(legacy, "nightshift.json");
   writeFileSync(
     legacyFile,
@@ -714,11 +710,12 @@ test("numbering: load writes back only when changed", async () => {
   expect(onDisk.nextCardNumber).toBe(3);
   expect(numberingChanged(onDisk, normalizeBoard(onDisk, "legacy"))).toBe(false);
 
-  const clean = mkdtempSync(join(tmpdir(), "ns-clean-"));
+  const clean = tempDir("ns-clean-");
   const cleanFile = join(clean, "nightshift.json");
   writeFileSync(cleanFile, JSON.stringify(onDisk));
+  // Pin the mtime in the past: a rewrite would move it to now.
+  utimesSync(cleanFile, PAST, PAST);
   const before = { text: readFileSync(cleanFile, "utf8"), mtime: statSync(cleanFile).mtimeMs };
-  await Bun.sleep(20);
   const opened = new Project(clean);
   opened.close();
   expect(opened.board.nextCardNumber).toBe(3);
@@ -730,14 +727,14 @@ test("screenshot: serves a linked png and rejects the rest", async () => {
   const snap = await post("/api/projects/open", { path: proj });
   const backlog = snap.board.columns.find((c: { type: string }) => c.type === "inert");
   const { id } = await post("/api/cards", { project: proj, columnId: backlog.id, title: "shot" });
-  const dir = join(mkdtempSync(join(tmpdir(), "ns-shot-")), "nightshift-screenshots");
+  const dir = join(tempDir("ns-shot-"), "nightshift-screenshots");
   mkdirSync(dir);
   const png = join(dir, "01-home.png");
   writeFileSync(
     png,
     Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64"),
   );
-  const outside = join(tmpdir(), `not-a-shot-${Date.now()}.png`);
+  const outside = join(tempDir("ns-outside-"), "not-a-shot.png");
   writeFileSync(outside, readFileSync(png));
   await post(`/api/cards/${id}`, { project: proj, description: `## Screenshots\n\n![Home](${png})\n![Other](${outside})` }, "PATCH");
   const q = `project=${encodeURIComponent(proj)}`;
@@ -790,7 +787,7 @@ type AttentionEvent = { type: "attention"; project: string; cardId: string; kind
 /** Fresh project with the given columns; collects the attention events of that project only. */
 async function attentionBoard(columns: object[]) {
   updateSettings({ claudePath: join(import.meta.dir, "fake-claude.ts"), maxParallel: 2 });
-  const dir = mkdtempSync(join(tmpdir(), "ns-attn-"));
+  const dir = tempDir("ns-attn-");
   await post("/api/projects/open", { path: dir });
   const res = await post("/api/board", { project: dir, columns }, "PUT");
   const events: AttentionEvent[] = [];
@@ -812,7 +809,7 @@ test("attention: run ending in an inert column emits inert", async () => {
     const [work, done] = b.cols;
     const { id } = await post("/api/cards", { project: b.dir, columnId: work.id, title: "go" });
     await waitFor(async () => (await b.card(id))?.columnId === done.id && (await b.idle(id)));
-    await Bun.sleep(100);
+    await waitFor(() => b.forCard(id).length > 0);
     expect(b.forCard(id)).toEqual([{ type: "attention", project: b.dir, cardId: id, kind: "inert" }]);
   } finally {
     b.stop();
@@ -827,7 +824,7 @@ test("attention: question emits question", async () => {
   try {
     const { id } = await post("/api/cards", { project: b.dir, columnId: b.cols[0].id, title: "ask" });
     await waitFor(async () => (await b.card(id))?.lastRun?.status === "question" && (await b.idle(id)));
-    await Bun.sleep(100);
+    await waitFor(() => b.forCard(id).length > 0);
     expect(b.forCard(id)).toEqual([{ type: "attention", project: b.dir, cardId: id, kind: "question" }]);
   } finally {
     b.stop();
@@ -846,7 +843,7 @@ test("attention: error emits error", async () => {
     const unknown = await post("/api/cards", { project: b.dir, columnId: missing.id, title: "m" });
     for (const id of [failed.id, unknown.id])
       await waitFor(async () => (await b.card(id))?.lastRun?.status === "error" && (await b.idle(id)));
-    await Bun.sleep(100);
+    await waitFor(() => b.forCard(failed.id).length > 0 && b.forCard(unknown.id).length > 0);
     expect(b.forCard(failed.id)).toEqual([{ type: "attention", project: b.dir, cardId: failed.id, kind: "error" }]);
     expect(b.forCard(unknown.id)).toEqual([{ type: "attention", project: b.dir, cardId: unknown.id, kind: "error" }]);
   } finally {
@@ -863,7 +860,7 @@ test("attention: manual move into inert column emits nothing", async () => {
     const [inbox, done] = b.cols;
     const { id } = await post("/api/cards", { project: b.dir, columnId: inbox.id, title: "manual" });
     await post(`/api/cards/${id}/move`, { project: b.dir, columnId: done.id });
-    await Bun.sleep(300);
+    await quiet(); // a manual move emits no attention event
     expect((await b.card(id)).columnId).toBe(done.id);
     expect(b.forCard(id)).toEqual([]);
   } finally {
@@ -890,7 +887,7 @@ test("attention: cancelled run emits nothing", async () => {
     await waitFor(() => running(moved.id));
     await post(`/api/cards/${moved.id}/move`, { project: b.dir, columnId: done.id });
     await waitFor(() => b.idle(moved.id), 4000);
-    await Bun.sleep(200);
+    await quiet(200); // a cancelled or moved run emits no attention event
     expect(b.forCard(cancelled.id)).toEqual([]);
     expect(b.forCard(moved.id)).toEqual([]);
   } finally {
@@ -910,7 +907,8 @@ test("attention: move into a skill column or stay emits nothing", async () => {
     const flow = await post("/api/cards", { project: b.dir, columnId: a.id, title: "flow" });
     await waitFor(async () => (await b.card(stay.id))?.lastRun?.status === "success" && (await b.idle(stay.id)));
     await waitFor(async () => (await b.card(flow.id))?.columnId === done.id && (await b.idle(flow.id)));
-    await Bun.sleep(100);
+    await waitFor(() => b.forCard(flow.id).length > 0);
+    await quiet(100); // the stay card emits nothing
     expect((await b.card(stay.id)).columnId).toBe(a.id);
     expect(b.forCard(stay.id)).toEqual([]);
     expect(b.forCard(flow.id)).toEqual([{ type: "attention", project: b.dir, cardId: flow.id, kind: "inert" }]);
@@ -933,7 +931,7 @@ test("attention: answering emits nothing, resumed run follows the rules", async 
     await post(`/api/cards/${id}/answer`, { project: b.dir, answers: ["blue", "big"] });
     expect(b.forCard(id)).toHaveLength(1);
     await waitFor(async () => (await b.card(id))?.columnId === done.id && (await b.idle(id)));
-    await Bun.sleep(100);
+    await waitFor(() => b.forCard(id).length > 1);
     expect(b.forCard(id).map((e) => e.kind)).toEqual(["question", "inert"]);
   } finally {
     b.stop();
@@ -977,22 +975,22 @@ test("defaultBoard ids are fresh", () => {
 });
 
 test("opening an empty folder writes the pipeline", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "ns-empty-"));
+  const dir = tempDir("ns-empty-");
   new Project(dir).close();
   const file = join(dir, "nightshift.json");
   const disk = JSON.parse(readFileSync(file, "utf8"));
   expect(disk.columns.map((c: any) => c.name)).toEqual(["Backlog", "Grill", "Plan", "Implement", "Review", "To Test", "Merged", "Done"]);
   expect(disk.columns.at(-1).id).toBe(DONE_COLUMN_ID);
   const text = readFileSync(file, "utf8");
+  utimesSync(file, PAST, PAST);
   const mtime = statSync(file).mtimeMs;
-  await Bun.sleep(20);
   new Project(dir).close();
   expect(readFileSync(file, "utf8")).toBe(text);
   expect(statSync(file).mtimeMs).toBe(mtime);
 });
 
 test("existing custom columns are untouched", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "ns-custom-"));
+  const dir = tempDir("ns-custom-");
   const file = join(dir, "nightshift.json");
   const board = {
     version: 1,
@@ -1006,8 +1004,8 @@ test("existing custom columns are untouched", async () => {
   };
   writeFileSync(file, `${JSON.stringify(board, null, 2)}\n`);
   const text = readFileSync(file, "utf8");
+  utimesSync(file, PAST, PAST);
   const mtime = statSync(file).mtimeMs;
-  await Bun.sleep(20);
   const p = new Project(dir);
   p.close();
   expect(readFileSync(file, "utf8")).toBe(text);
@@ -1036,7 +1034,7 @@ test("done column: normalizeBoard keeps a user column named Done and puts col_do
 });
 
 test("done column: load writes col_done back once, then leaves the file alone", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "ns-done-"));
+  const dir = tempDir("ns-done-");
   const file = join(dir, "nightshift.json");
   writeFileSync(
     file,
@@ -1045,15 +1043,15 @@ test("done column: load writes col_done back once, then leaves the file alone", 
   new Project(dir).close();
   const onDisk = JSON.parse(readFileSync(file, "utf8"));
   expect(onDisk.columns.map((c: any) => c.id)).toEqual(["a", DONE_COLUMN_ID]);
+  utimesSync(file, PAST, PAST);
   const before = { text: readFileSync(file, "utf8"), mtime: statSync(file).mtimeMs };
-  await Bun.sleep(20);
   new Project(dir).close();
   expect(readFileSync(file, "utf8")).toBe(before.text);
   expect(statSync(file).mtimeMs).toBe(before.mtime);
 });
 
 test("done column: PUT /api/board repairs col_done and refuses a board without user columns", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "ns-doneput-"));
+  const dir = tempDir("ns-doneput-");
   const snap = await post("/api/projects/open", { path: dir });
   const [backlog] = snap.board.columns;
   const card = await post("/api/cards", { project: dir, columnId: DONE_COLUMN_ID, title: "finished" });
@@ -1090,7 +1088,7 @@ test("done column: next from the last user column lands in col_done with no run 
     const runs = argsEntries().length;
     const { id } = await post("/api/cards", { project: b.dir, columnId: work.id, title: "go" });
     await waitFor(async () => (await b.card(id))?.columnId === DONE_COLUMN_ID && (await b.idle(id)));
-    await Bun.sleep(150);
+    await quiet(150); // no second run may start
     expect(argsEntries().length).toBe(runs + 1);
     expect(b.forCard(id)).toEqual([]);
     expect((await b.card(id)).lastRun.columnId).toBe(work.id);
@@ -1100,7 +1098,7 @@ test("done column: next from the last user column lands in col_done with no run 
 });
 
 test("done column: nextColumn from col_done is undefined", () => {
-  const dir = mkdtempSync(join(tmpdir(), "ns-donenext-"));
+  const dir = tempDir("ns-donenext-");
   const p = new Project(dir);
   p.close();
   expect(p.nextColumn(DONE_COLUMN_ID)).toBeUndefined();
@@ -1296,7 +1294,7 @@ test("cancelled feedback keeps the session so feedback can be sent again", async
 // ---- time transitions recorded in card history ---------------------------------
 
 async function openSkillBoard(prefix: string, maxParallel?: number) {
-  const dir = mkdtempSync(join(tmpdir(), prefix));
+  const dir = tempDir(prefix);
   await post("/api/projects/open", { path: dir });
   const res = await post(
     "/api/board",
@@ -1367,7 +1365,7 @@ test("answer and retry put the card back in the queue", async () => {
 
 test("history cap keeps the time in timeBase", async () => {
   const { cardTimeSlices } = await import("../src/shared/timeline.ts");
-  const dir = mkdtempSync(join(tmpdir(), "ns-cap-"));
+  const dir = tempDir("ns-cap-");
   const p = new Project(dir);
   const [a, b] = p.board.columns.filter((c) => c.type === "inert");
   const card =
@@ -1413,7 +1411,7 @@ test("history cap keeps the time in timeBase", async () => {
 
 test("--no-agents instance records queued but never started", async () => {
   const { Orchestrator } = await import("../src/server/orchestrator.ts");
-  const dir = mkdtempSync(join(tmpdir(), "ns-noagents-hist-"));
+  const dir = tempDir("ns-noagents-hist-");
   writeFileSync(
     join(dir, "nightshift.json"),
     JSON.stringify({
@@ -1429,7 +1427,7 @@ test("--no-agents instance records queued but never started", async () => {
   const passive = new Orchestrator({ agents: false });
   const p = passive.open(dir);
   p.mutate((board) => p.moveCard(board, "k", "s", undefined, "Moved by user"));
-  await Bun.sleep(300);
+  await quiet(); // nothing may start
   const kinds = p.card("k")!.history.map((h) => h.kind);
   expect(kinds).toContain("queued");
   expect(kinds).not.toContain("started");

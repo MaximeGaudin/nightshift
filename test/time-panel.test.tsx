@@ -2,6 +2,7 @@ import { expect, spyOn, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { type Board, type Card, type Column, DONE_COLUMN_ID } from "../src/shared/types.ts";
 import { startTicker, TimePanelView } from "../src/web/TimePanel.tsx";
+import { quiet, waitFor } from "./helpers.ts";
 
 const T0 = Date.parse("2026-01-01T00:00:00Z");
 const iso = (ms: number) => new Date(T0 + ms).toISOString();
@@ -91,10 +92,10 @@ test("startTicker: default period 1 s, fires on schedule", async () => {
   set.mockRestore();
   let ticks = 0;
   const stop2 = startTicker(() => ticks++, 5);
-  await new Promise((r) => setTimeout(r, 40));
+  await waitFor(() => ticks > 1);
   stop2();
   const seen = ticks;
   expect(seen).toBeGreaterThan(0);
-  await new Promise((r) => setTimeout(r, 30));
+  await quiet(30); // several periods (5 ms) go by: a stopped ticker must not fire
   expect(ticks).toBe(seen);
 });

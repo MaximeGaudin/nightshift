@@ -1,7 +1,7 @@
-import { beforeEach, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { afterAll, beforeEach, expect, test } from "bun:test";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { removeTempDirs, tempDir } from "./helpers.ts";
 
 const prevHome = process.env.NIGHTSHIFT_HOME;
 let n = 0;
@@ -9,7 +9,7 @@ let home = "";
 
 // settings.ts reads NIGHTSHIFT_HOME at import; a unique query string gives each case a fresh module instance.
 async function load(file?: string) {
-  home = mkdtempSync(join(tmpdir(), "ns-settings-"));
+  home = tempDir("ns-settings-");
   if (file !== undefined) {
     mkdirSync(home, { recursive: true });
     writeFileSync(join(home, "settings.json"), file);
@@ -72,3 +72,5 @@ test("settings-load-corrupt-keeps-backup", async () => {
   updateSettings({ model: "m" });
   expect(existsSync(join(home, "settings.json.bak"))).toBe(true);
 });
+
+afterAll(removeTempDirs);

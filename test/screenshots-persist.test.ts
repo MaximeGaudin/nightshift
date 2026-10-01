@@ -1,11 +1,11 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { removeTempDirs, tempDir, waitFor } from "./helpers.ts";
 
 // The server runs as a child process: modules are shared between bun test files, and this suite
 // needs its own NIGHTSHIFT_HOME and skills folder.
-const tmp = mkdtempSync(join(tmpdir(), "ns-persist-"));
+const tmp = tempDir("ns-persist-");
 const home = join(tmp, "home");
 const descFile = join(tmp, "desc.md");
 
@@ -15,6 +15,7 @@ writeFileSync(
   fake,
   `#!/usr/bin/env bun
 import { readFileSync } from "node:fs";
+import { removeTempDirs, tempDir, waitFor } from "./helpers.ts";
 const e = (o) => console.log(JSON.stringify(o));
 e({ type: "system", subtype: "init", session_id: "s", model: "fake" });
 e({ type: "result", is_error: false, session_id: "s", structured_output: { description: readFileSync(process.env.FAKE_DESC_FILE, "utf8"), move: "stay", summary: "ok" } });
@@ -35,15 +36,6 @@ const post = (path: string, body: object, method = "POST") =>
 const snapshot = () => fetch(`${base}/api/project?project=${encodeURIComponent(proj)}`).then((r) => r.json());
 const q = `project=${encodeURIComponent(proj)}`;
 const shot = (id: string, file: string) => fetch(`${base}/api/cards/${id}/screenshot?${q}&file=${encodeURIComponent(file)}`);
-
-async function waitFor(fn: () => Promise<boolean>, ms = 8000) {
-  const end = Date.now() + ms;
-  while (Date.now() < end) {
-    if (await fn()) return;
-    await Bun.sleep(50);
-  }
-  throw new Error("timeout");
-}
 
 /** Creates a card, lets the fake agent return `description`, and returns the card once the run ended. */
 async function runAgent(description: string, existingId?: string) {
@@ -94,6 +86,7 @@ beforeAll(async () => {
 });
 afterAll(() => {
   srv?.kill();
+  removeTempDirs();
 });
 
 test("persist-copies-and-rewrites", async () => {

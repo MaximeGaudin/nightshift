@@ -1,11 +1,11 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { removeTempDirs, tempDir } from "./helpers.ts";
 
 // The server runs as a child process: bun test files share one module cache and one orchestrator, and this suite
 // needs its own NIGHTSHIFT_HOME. The child prints the bound address once startServer returned.
-const tmp = mkdtempSync(join(tmpdir(), "ns-sec-"));
+const tmp = tempDir("ns-sec-");
 const script = join(tmp, "serve.ts");
 writeFileSync(
   script,
@@ -38,6 +38,7 @@ beforeAll(async () => {
 });
 afterAll(() => {
   child?.kill();
+  removeTempDirs();
 });
 
 const claudePath = () => fetch(`${base}/api/settings`).then((r) => r.json().then((s) => s.claudePath));

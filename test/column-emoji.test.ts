@@ -1,11 +1,8 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { mkdtempSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
-import { type ChildServer, startChildServer } from "./helpers.ts";
+import { type ChildServer, removeTempDirs, startChildServer, tempDir } from "./helpers.ts";
 
 const { doneColumnChanged, normalizeBoard, numberingChanged } = await import("../src/server/store.ts");
 const { normalizeColumnEmoji } = await import("../src/shared/types.ts");
@@ -67,10 +64,13 @@ let srv: ChildServer;
 beforeAll(async () => {
   srv = await startChildServer({ settings: { maxParallel: 1 } });
 });
-afterAll(() => srv.stop());
+afterAll(async () => {
+  await srv.stop();
+  removeTempDirs();
+});
 
 test("emoji-save via board endpoint", async () => {
-  const proj = mkdtempSync(join(tmpdir(), "ns-emoji-proj-"));
+  const proj = tempDir("ns-emoji-proj-");
   const post = (path: string, body: unknown, method = "POST") => srv.call(path, { method, body }).then((r) => r.json());
   await post("/api/projects/open", { path: proj });
   const res = await post(

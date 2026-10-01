@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { quiet, removeTempDirs, tempDir, waitFor } from "./helpers.ts";
 
 // The server, orchestrator and settings modules keep process-wide singletons (NIGHTSHIFT_HOME is read at
 // import, settings live on globalThis) and `bun test` shares them across files. To avoid clobbering
@@ -29,8 +29,8 @@ if (!CHILD) {
     }
   }, 60000);
 } else {
-  const home = mkdtempSync(join(tmpdir(), "ns-prog-home-"));
-  const userSkills = mkdtempSync(join(tmpdir(), "ns-prog-skills-"));
+  const home = tempDir("ns-prog-home-");
+  const userSkills = tempDir("ns-prog-skills-");
   process.env.NIGHTSHIFT_HOME = home;
   process.env.NIGHTSHIFT_USER_SKILLS = userSkills;
   process.env.FAKE_DELAY_MS = "1500";
@@ -50,26 +50,18 @@ if (!CHILD) {
     mkdirSync(join(userSkills, "enrich"), { recursive: true });
     writeFileSync(join(userSkills, "enrich", "SKILL.md"), "---\nname: enrich\ndescription: test\n---\n");
   });
-  afterAll(() => {
-    srv.orch.shutdown();
+  afterAll(async () => {
+    await srv.orch.shutdown();
     srv.server.stop(true);
+    removeTempDirs();
   });
 
   const post = (path: string, body: object, method = "POST") =>
     fetch(base + path, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json());
   const getProject = (path: string) => fetch(`${base}/api/project?project=${encodeURIComponent(path)}`).then((r) => r.json());
 
-  async function waitFor(fn: () => Promise<boolean>, ms = 8000) {
-    const end = Date.now() + ms;
-    while (Date.now() < end) {
-      if (await fn()) return;
-      await Bun.sleep(25);
-    }
-    throw new Error("timeout");
-  }
-
   async function setup(title: string) {
-    const dir = mkdtempSync(join(tmpdir(), "ns-prog-"));
+    const dir = tempDir("ns-prog-");
     await post("/api/projects/open", { path: dir });
     const res = await post(
       "/api/board",
@@ -95,7 +87,7 @@ if (!CHILD) {
   test("run-progress-live: marker wins over TodoWrite while running", async () => {
     const { dir, id } = await setup("progress");
     await waitFor(async () => !!(await getProject(dir)).progress?.[id]?.source && (await getProject(dir)).progress[id].source === "marker");
-    await Bun.sleep(200); // the second TodoWrite must not override the marker
+    await quiet(200); // the second TodoWrite must not override the marker
     const s = await getProject(dir);
     expect(stripAt(s.progress[id])).toEqual({ step: 2, total: 3, label: "Deuxième", source: "marker" });
     await waitFor(async () => (await getProject(dir)).live[id] === undefined);
@@ -125,7 +117,7 @@ if (!CHILD) {
   test("run-progress-ignores-subagents: subagent marker and TodoWrite do not override", async () => {
     const { dir, id } = await setup("progress-subagent");
     await waitFor(async () => !!(await getProject(dir)).progress?.[id]);
-    await Bun.sleep(200);
+    await quiet(200); // subagent events must not override the main agent progress
     const s = await getProject(dir);
     expect(stripAt(s.progress[id])).toEqual({ step: 1, total: 2, label: "Principal", source: "marker" });
     await waitFor(async () => (await getProject(dir)).live[id] === undefined);

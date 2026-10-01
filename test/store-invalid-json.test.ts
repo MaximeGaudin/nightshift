@@ -1,18 +1,17 @@
-import { expect, spyOn, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { afterAll, expect, spyOn, test } from "bun:test";
+import { existsSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Project } from "../src/server/store.ts";
-import { waitFor } from "./helpers.ts";
+import { removeTempDirs, tempDir, waitFor } from "./helpers.ts";
 
 test("store-invalid-json: invalid file at open names the file", () => {
-  const dir = mkdtempSync(join(tmpdir(), "ns-inv-"));
+  const dir = tempDir("ns-inv-");
   writeFileSync(join(dir, "nightshift.json"), "{ not json");
   expect(() => new Project(dir)).toThrow(join(dir, "nightshift.json"));
 });
 
 test("store-invalid-json: invalid external edit is retried, then backed up before the next write", async () => {
-  const dir = mkdtempSync(join(tmpdir(), "ns-inv-"));
+  const dir = tempDir("ns-inv-");
   const file = join(dir, "nightshift.json");
   const p = new Project(dir);
   const err = spyOn(console, "error").mockImplementation(() => {});
@@ -48,3 +47,5 @@ test("store-invalid-json: invalid external edit is retried, then backed up befor
     p.close();
   }
 });
+
+afterAll(removeTempDirs);

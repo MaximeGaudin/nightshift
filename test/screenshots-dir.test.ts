@@ -1,10 +1,10 @@
-import { expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { afterAll, expect, test } from "bun:test";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { removeTempDirs, tempDir } from "./helpers.ts";
 
 // Runs in a child process: importing the server modules here would fix NIGHTSHIFT_HOME for every test file.
-const tmp = mkdtempSync(join(tmpdir(), "ns-dir-"));
+const tmp = tempDir("ns-dir-");
 const run = (code: string) => {
   const r = Bun.spawnSync(
     [
@@ -32,3 +32,5 @@ test("persistScreenshots ignores paths that escape the captures folder", () => {
   const desc = `![S](${join(tmp, "nightshift-screenshots")}/../secret.png)`;
   expect(run(`console.log(persistScreenshots("card_a", ${JSON.stringify(desc)}))`)).toBe(desc);
 });
+
+afterAll(removeTempDirs);

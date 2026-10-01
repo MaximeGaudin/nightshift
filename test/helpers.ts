@@ -1,10 +1,23 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 // bun test runs every file in one process with one module cache: settings.ts reads NIGHTSHIFT_HOME at import and
 // startServer reuses globalThis.__nightshift. Any test that starts a server or touches settings therefore runs
 // the server in a child process with its own NIGHTSHIFT_HOME, through this helper.
+
+const tempDirs: string[] = [];
+
+/** Creates a temporary directory removed by `removeTempDirs()` (call it from `afterAll`). */
+export function tempDir(prefix: string): string {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  tempDirs.push(dir);
+  return dir;
+}
+
+export function removeTempDirs() {
+  for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+}
 
 export interface ChildServer {
   base: string;
@@ -68,6 +81,7 @@ setInterval(() => {}, 1 << 30);
     async stop() {
       child.kill("SIGTERM");
       await child.exited;
+      rmSync(tmp, { recursive: true, force: true });
     },
     call(path, init = {}) {
       return fetch(base + path, {
@@ -87,6 +101,9 @@ export async function waitFor(fn: () => Promise<boolean> | boolean, ms = 8000) {
   }
   throw new Error("timeout");
 }
+
+/** Bounded wait for something that must NOT happen: an absence has no observable condition to poll, so a late event gets this long to show up. */
+export const quiet = (ms = 300) => Bun.sleep(ms);
 
 /** Opens a fresh project with a one-skill column then an inert one, and adds a card (the agent starts at once). */
 export async function addAgentCard(srv: ChildServer, title: string) {
