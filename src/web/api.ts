@@ -28,6 +28,7 @@ export const api = {
   deleteCard: (project: string, id: string) => call("DELETE", `/api/cards/${id}?${q(project)}`),
   moveCard: (project: string, id: string, columnId: string, index?: number) =>
     call("POST", `/api/cards/${id}/move`, { project, columnId, index }),
+  resumeSession: (project: string, id: string) => call("POST", `/api/cards/${id}/resume`, { project }),
   retry: (project: string, id: string) => call("POST", `/api/cards/${id}/retry`, { project }),
   answer: (project: string, id: string, answers: string[]) => call("POST", `/api/cards/${id}/answer`, { project, answers }),
   testLog: (project: string, id: string) => call<LogLine[]>("GET", `/api/cards/${id}/test?${q(project)}`),

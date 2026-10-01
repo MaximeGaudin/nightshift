@@ -177,6 +177,9 @@ export function startServer({ port, development, agents = true }: { port: number
           return new Response(Bun.file(file), { headers: { "content-type": "image/png" } });
         }),
       },
+      "/api/cards/:id/resume": {
+        POST: h((b, url, req) => orch.resumeSession(project(b, url), req.params.id!)),
+      },
       "/api/cards/:id/test": {
         GET: h((b, url, req) => orch.testLog(project(b, url), req.params.id!)),
         PUT: h((b, url, req) => {

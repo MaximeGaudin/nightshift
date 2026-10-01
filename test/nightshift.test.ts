@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
-import { mkdtempSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -394,6 +394,38 @@ test("--no-agents instance never runs agents nor takes the lock", async () => {
   const lock = join(home, "locks", `${createHash("sha1").update(dir).digest("hex").slice(0, 12)}.lock`);
   expect(require("node:fs").existsSync(lock)).toBe(false);
   passive.shutdown();
+});
+
+test("an agent that stops without its result is resumed once to collect it", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "ns-recover-"));
+  await post("/api/projects/open", { path: dir });
+  const res = await post("/api/board", { project: dir, columns: [{ name: "S", type: "skill", skill: "enrich" }, { name: "D", type: "inert" }] }, "PUT");
+  const [s, d] = res.board.columns;
+  for (const title of ["no-output", "die"]) await post("/api/cards", { project: dir, columnId: s.id, title });
+  const get = async () => (await fetch(`${base}/api/project?project=${encodeURIComponent(dir)}`).then((r) => r.json())).board.cards;
+  await waitFor(async () => (await get()).every((c: any) => c.columnId === d.id));
+  for (const c of await get()) {
+    expect(c.title).toBe("answered");
+    expect(c.description).toContain("stopped before returning");
+  }
+});
+
+test("prompt goes through stdin, never argv", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "ns-stdin-"));
+  const argsLog = join(dir, "args.jsonl");
+  const previous = process.env.FAKE_ARGS_LOG;
+  process.env.FAKE_ARGS_LOG = argsLog;
+  try {
+    await post("/api/projects/open", { path: dir });
+    const res = await post("/api/board", { project: dir, columns: [{ name: "S", type: "skill", skill: "enrich" }, { name: "D", type: "inert" }] }, "PUT");
+    await post("/api/cards", { project: dir, columnId: res.board.columns[0].id, title: "argv-check" });
+    await waitFor(async () => existsSync(argsLog) && readFileSync(argsLog, "utf8").includes("argv-check"));
+  } finally {
+    if (previous === undefined) delete process.env.FAKE_ARGS_LOG;
+    else process.env.FAKE_ARGS_LOG = previous;
+  }
+  const entry = readFileSync(argsLog, "utf8").trim().split("\n").map((l) => JSON.parse(l)).find((e) => e.title === "argv-check");
+  expect(entry.argvHasCard).toBe(false);
 });
 
 test("removing a column that still holds cards is refused", async () => {

@@ -95,6 +95,15 @@ export function CardModal({
           </button>
           <div className="spacer" />
           {live === "running" && <button onClick={() => guard(api.cancel(project, card.id))}>Arrêter l'agent</button>}
+          {column?.type === "skill" && live !== "running" && lr?.sessionId && lr.columnId === card.columnId &&
+            (lr.status === "error" || lr.status === "cancelled") && (
+              <button
+                title="Reprend la même session Claude : l'agent vérifie où il en était et termine, sans tout recommencer."
+                onClick={() => guard(api.resumeSession(project, card.id))}
+              >
+                Reprendre la session
+              </button>
+            )}
           {column?.type === "skill" && live !== "running" && (
             <button onClick={() => guard(api.retry(project, card.id))}>{lr?.columnId === card.columnId ? "Relancer" : "Lancer"}</button>
           )}

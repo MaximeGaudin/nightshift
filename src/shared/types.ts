@@ -57,7 +57,8 @@ export interface Card {
   enteredColumnAt: string;
   lastRun?: LastRun;
   /** User answer to the agent's question, waiting to be sent by resuming the session. */
-  pendingAnswer?: { text: string; sessionId: string; at: string };
+  /** "resume" asks the agent to finish an interrupted session instead of sending answers. */
+  pendingAnswer?: { text: string; sessionId: string; at: string; kind?: "resume" };
   /** How a human tries the card's result, set by an agent (e.g. run the app from the card's worktree). */
   test?: CardTest;
   history: HistoryEntry[];
