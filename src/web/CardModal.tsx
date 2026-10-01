@@ -200,7 +200,7 @@ export function CardModal({
               {lr.summary && <Markdown source={lr.summary} className="last-run-summary" />}
               {lr.error && <pre className="error-text">{lr.error}</pre>}
               <div className="last-run-meta muted small">
-                {lr.costUsd !== undefined && <>Coût : ${lr.costUsd.toFixed(3)} · </>}
+                {lr.costUsd !== undefined && <>Coût : ${lr.costUsd.toFixed(3)}{lr.sessionId ? " · " : ""}</>}
                 {lr.sessionId && (
                   <span title="Reprendre la session dans un terminal">
                     <code>claude -r {lr.sessionId}</code>
