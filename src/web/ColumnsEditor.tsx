@@ -1,9 +1,17 @@
 import { useEffect, useState } from "react";
-import type { Column, ProjectSnapshot, SkillInfo } from "../shared/types.ts";
+import { MAX_PARALLEL, type Column, type ProjectSnapshot, type SkillInfo } from "../shared/types.ts";
 import { api } from "./api.ts";
 import { ErrorBanner, Modal } from "./ui.tsx";
 
 type Draft = Column & { key: string };
+
+/** Empty input → undefined (column default); otherwise an integer clamped to 1–MAX_PARALLEL. */
+function clampParallel(raw: string): number | undefined {
+  if (raw.trim() === "") return undefined;
+  const n = Math.floor(Number(raw));
+  if (!Number.isFinite(n)) return undefined;
+  return Math.min(MAX_PARALLEL, Math.max(1, n));
+}
 
 export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClose: () => void }) {
   const [name, setName] = useState(snap.board.name);
@@ -67,8 +75,8 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
         <input value={name} onChange={(e) => setName(e.target.value)} />
       </label>
       <p className="hint">
-        Une colonne <strong>skill</strong> exécute le skill choisi sur chaque fiche qui y arrive (en parallèle, dans la limite des
-        réglages). Le skill peut modifier la fiche puis l'envoyer à la colonne suivante.
+        Une colonne <strong>skill</strong> exécute le skill choisi sur chaque fiche qui y arrive. Chaque colonne skill a sa propre
+        limite d'agents en parallèle (1 par défaut), sous le plafond global des réglages. Le skill peut modifier la fiche puis l'envoyer à la colonne suivante.
       </p>
       <ol className="col-editor">
         {cols.map((c, i) => (
@@ -132,12 +140,14 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
                   <input
                     type="number"
                     min={1}
-                    placeholder="Limite globale"
+                    max={MAX_PARALLEL}
+                    step={1}
+                    placeholder="1 (défaut)"
                     value={c.maxParallel ?? ""}
-                    onChange={(e) => patch(i, { maxParallel: e.target.value ? Math.max(1, Number(e.target.value)) : undefined })}
+                    onChange={(e) => patch(i, { maxParallel: clampParallel(e.target.value) })}
                   />
                 </label>
-                <p className="hint small">Mettez 1 pour une colonne qui ne doit traiter qu'une fiche à la fois (ex. merge).</p>
+                <p className="hint small">Vide = 1. Le plafond global des réglages s'applique toujours.</p>
                 <textarea
                   className="instructions"
                   placeholder="Instructions additionnelles pour l'agent (optionnel)…"
