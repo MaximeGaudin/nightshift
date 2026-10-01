@@ -22,6 +22,7 @@ export function Lightbox({ src, alt, onClose }: { src: string; alt: string; onCl
   }, [onClose]);
   if (typeof document === "undefined") return null;
   return createPortal(
+    // biome-ignore lint/a11y/useKeyWithClickEvents: the click on the backdrop is a mouse shortcut; the keyboard closes the lightbox with Escape (window listener above)
     <div className="lightbox" role="dialog" aria-label={alt} onClick={onClose}>
       <img src={src} alt={alt} />
     </div>,
@@ -38,7 +39,9 @@ export function CardScreenshot({ project, cardId, alt, file }: { project: string
       {failed ? (
         <div className="md-figure-missing">Capture introuvable — {alt}</div>
       ) : (
-        <img src={src} alt={alt} onError={() => setFailed(true)} onClick={() => setOpen(true)} />
+        <button type="button" className="md-figure-open" onClick={() => setOpen(true)}>
+          <img src={src} alt={alt} onError={() => setFailed(true)} />
+        </button>
       )}
       <figcaption>{alt}</figcaption>
       {open && !failed && <Lightbox src={src} alt={alt} onClose={() => setOpen(false)} />}

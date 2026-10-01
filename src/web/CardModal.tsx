@@ -201,6 +201,7 @@ export function CardModal({
               <div
                 className="card-desc-body card-desc-preview"
                 role="tabpanel"
+                // biome-ignore lint/a11y/noNoninteractiveTabindex: the scrollable preview must be reachable by keyboard
                 tabIndex={0}
                 title="Double-cliquer pour modifier"
                 onDoubleClick={editDescription}
@@ -240,6 +241,7 @@ export function CardModal({
                   </div>
                   <textarea
                     aria-label={`Réponse à la question ${i + 1}`}
+                    // biome-ignore lint/a11y/noAutofocus: the question form appears on user request, the first answer is what comes next
                     autoFocus={i === 0}
                     value={answers[i] ?? ""}
                     placeholder="Votre réponse… (⌘+Entrée pour tout envoyer)"

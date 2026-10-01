@@ -52,6 +52,7 @@ export function CardTile({
       }}
       onDragEnd={onDragEnd}
       onClick={onOpen}
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: the tile is a focusable, draggable surface that opens the card with Enter; it holds its own buttons, so a button role would nest controls
       tabIndex={0}
       onKeyDown={(e) => e.key === "Enter" && onOpen()}
     >

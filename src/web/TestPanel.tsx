@@ -67,6 +67,7 @@ export function TestPanel({
         <strong>Commande de test</strong>
         <label>
           Commande (lancée avec sh -c depuis le dossier du projet)
+          {/* biome-ignore lint/a11y/noAutofocus: the editor opens on user request, the command field is what they want to type in */}
           <textarea className="code" value={command} onChange={(e) => setCommand(e.target.value)} autoFocus />
         </label>
         <label>

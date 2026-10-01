@@ -33,14 +33,6 @@
       },
       "correctness": {
         "useExhaustiveDependencies": "off"
-      },
-      "a11y": {
-        "noAutofocus": "off",
-        "useKeyWithClickEvents": "off",
-        "noStaticElementInteractions": "off",
-        "noNoninteractiveTabindex": "off",
-        "useSemanticElements": "off",
-        "noNoninteractiveElementToInteractiveRole": "off"
       }
     }
   },

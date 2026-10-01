@@ -165,6 +165,7 @@ export function App() {
       {modal === "skills" && <SkillsModal project={snap.path} onClose={() => setModal(null)} />}
       {modal === "settings" && settings && <SettingsModal settings={settings} onClose={() => setModal(null)} />}
       {modal === "projects" && (
+        // biome-ignore lint/a11y/noStaticElementInteractions: clicking outside the dialog is a mouse shortcut; the project picker has its own cancel button
         <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && setModal(null)}>
           <div className="modal wide">
             <ProjectPicker
@@ -382,6 +383,7 @@ function AddCard({
   return (
     <div className="add-card-form" ref={formRef}>
       <textarea
+        // biome-ignore lint/a11y/noAutofocus: the form opens on user request ("add a card"), the title field is what they want to type in
         autoFocus
         value={title}
         onBlur={(e) => {

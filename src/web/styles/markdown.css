@@ -189,6 +189,20 @@
   background: var(--surface);
   cursor: zoom-in;
 }
+.md .md-figure .md-figure-open {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  cursor: zoom-in;
+}
+.md .md-figure .md-figure-open:hover:not(:disabled) {
+  background: none;
+  border-color: transparent;
+}
 .md .md-figure figcaption {
   margin-top: var(--sp-2);
   font-size: var(--fs-sm);

@@ -39,3 +39,8 @@ test("lightbox-escape-stops-propagation", () => {
   expect(handleLightboxKey(ev("Escape"), () => calls.push("close"))).toBe(true);
   expect(calls).toEqual(["prevent", "stop", "close"]);
 });
+
+test("card-screenshot-keyboard-open: the capture is a real button, reachable and activable by keyboard", () => {
+  const html = renderToStaticMarkup(<Markdown source={`![Vue](${shot})`} renderImage={renderCardImage("/p", "card_a")} />);
+  expect(html).toMatch(/<button type="button" class="md-figure-open"><img src=/);
+});

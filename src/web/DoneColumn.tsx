@@ -45,7 +45,8 @@ export function DoneColumn({
 
   if (collapsed) {
     return (
-      <section
+      // biome-ignore lint/a11y/useSemanticElements: the whole strip is both the toggle and a drop target; a native button cannot host the drag and drop handlers and the counter layout
+      <div
         className={`column done done-collapsed ${dropActive ? "drop-target" : ""}`}
         role="button"
         aria-expanded="false"
@@ -62,12 +63,13 @@ export function DoneColumn({
       >
         <span className="done-strip-label">Done</span>
         <span className="count">{cards.length}</span>
-      </section>
+      </div>
     );
   }
 
   return (
     <section className={`column done ${dropActive ? "drop-target" : ""}`} {...dnd}>
+      {/* biome-ignore lint/a11y/useSemanticElements: a <header> carries the column heading (h2); the button role and the keyboard handlers make it the collapse toggle without a native button around a heading */}
       <header
         className="column-head done-head"
         role="button"

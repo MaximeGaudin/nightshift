@@ -20,6 +20,7 @@ export function Modal({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: clicking outside the dialog is a mouse shortcut; the keyboard closes the modal with Escape (listener above) or the close button
     <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className={`modal ${wide ? "wide" : ""}`} role="dialog" aria-modal="true">
         <header className="modal-head">
