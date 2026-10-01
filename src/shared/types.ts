@@ -35,8 +35,38 @@ export interface LastRun {
 
 export interface HistoryEntry {
   at: string;
-  kind: "created" | "moved" | "run" | "edited";
+  kind: "created" | "moved" | "run" | "edited" | "queued" | "started";
   text: string;
+  /**
+   * Column the card arrived in (created, moved) or sits in (queued, started). Absent on old entries;
+   * its presence on a created/moved entry marks detailed time data.
+   */
+  columnId?: string;
+}
+
+/** What a card is doing during an interval: waiting in an inert column, queued, agent running, waiting for a human, or unknown (old data). */
+export type TimePart = "inert" | "queued" | "running" | "human" | "legacy";
+
+/** Open interval of a card: since `at`, it sits in a column in a given part. `part` null = not counted (Done, unknown column). */
+export interface TimeCursor {
+  at: string;
+  columnId?: string;
+  columnName: string;
+  part: TimePart | null;
+}
+
+/** Accumulated time of a card in one (column, part). */
+export interface TimeSlice {
+  columnId?: string;
+  columnName: string;
+  part: TimePart;
+  ms: number;
+}
+
+/** Closed totals plus the open interval. Bounded: one slice per column and part. */
+export interface TimeState {
+  totals: TimeSlice[];
+  cursor?: TimeCursor;
 }
 
 export interface CardTest {
@@ -64,6 +94,8 @@ export interface Card {
   /** How a human tries the card's result, set by an agent (e.g. run the app from the card's worktree). */
   test?: CardTest;
   history: HistoryEntry[];
+  /** Time checkpoint of the history entries dropped by the history cap. */
+  timeBase?: TimeState;
 }
 
 /** Content of `nightshift.json`, the single committable file at the project root. */

@@ -365,6 +365,7 @@ export class Orchestrator {
       delete card.lastRun;
       delete card.pendingAnswer;
       p.addHistory(card, "edited", "Retry requested by user");
+      p.addQueued(card);
     });
   }
 
@@ -382,6 +383,7 @@ export class Orchestrator {
         .join("\n\n");
       card.pendingAnswer = { text, sessionId: lr.sessionId, at: new Date().toISOString() };
       p.addHistory(card, "edited", `Answered ${answers.filter((a) => a.trim()).length} question(s)`);
+      p.addQueued(card);
     });
   }
 
@@ -398,6 +400,7 @@ export class Orchestrator {
         throw new Error("This card has no interrupted session to resume");
       card.pendingAnswer = { text: "Resume the interrupted session", sessionId: lr.sessionId, at: new Date().toISOString(), kind: "resume" };
       p.addHistory(card, "edited", "Session resume requested by user");
+      p.addQueued(card);
     });
   }
 
@@ -422,6 +425,7 @@ export class Orchestrator {
       done: false,
     };
     this.jobs.set(job.key, job);
+    p.mutate(() => p.addHistory(card, "started", `Agent started in ${column.name}`, column.id));
     // A resumed session (answer to a question) keeps the log of the run that asked it.
     if (!card.pendingAnswer) {
       this.logs.set(job.key, []);

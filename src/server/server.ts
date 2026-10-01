@@ -3,7 +3,7 @@ import { dirname, join, resolve } from "node:path";
 import { homedir } from "node:os";
 import type { ServerWebSocket } from "bun";
 import index from "../web/index.html";
-import { ensureDoneColumn, isDoneColumn, normalizeColumnEmoji, normalizeColumnParallel, type Column, type ColumnType, type ServerEvent } from "../shared/types.ts";
+import { ensureDoneColumn, isDoneColumn, normalizeColumnEmoji, normalizeColumnParallel, type Card, type Column, type ColumnType, type ServerEvent } from "../shared/types.ts";
 import { Orchestrator } from "./orchestrator.ts";
 import { getSettings, updateSettings } from "./settings.ts";
 import { COLUMN_KEYS, newId, unknownFields } from "./store.ts";
@@ -121,7 +121,7 @@ export function startServer({ port, development, agents = true }: { port: number
           if (!p.column(columnId)) throw new Error("Unknown column");
           const id = newId("card");
           const number = p.mutate((board) => {
-            const card = {
+            const card: Card = {
               id,
               number: board.nextCardNumber,
               title: String(b.title || "Untitled").trim(),
@@ -130,11 +130,12 @@ export function startServer({ port, development, agents = true }: { port: number
               createdAt: now,
               updatedAt: now,
               enteredColumnAt: now,
-              history: [] as any[],
+              history: [],
             };
             board.nextCardNumber += 1;
-            p.addHistory(card, "created", `Created in ${p.column(columnId)!.name}`);
+            p.addHistory(card, "created", `Created in ${p.column(columnId)!.name}`, columnId);
             board.cards.push(card);
+            p.addQueued(card, board);
             return card.number;
           });
           return { id, number };
