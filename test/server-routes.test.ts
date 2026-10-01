@@ -48,3 +48,38 @@ test("routes-unknown-project unknown or missing project is refused and writes no
   expect(existsSync(join(other, "nightshift.json"))).toBe(false);
   expect(existsSync(join(srv.tmp, "nightshift.json"))).toBe(false);
 });
+
+const putBoard = (body: object) => srv.call("/api/board", { method: "PUT", body: { project: dir, ...body } });
+
+test("routes-validation board: no column, held cards, malformed or duplicate columns are refused", async () => {
+  const none = await putBoard({ columns: [] });
+  expect(none.status).toBe(400);
+  expect((await none.json()).error).toBe("A board needs at least one column");
+
+  const board = (await snapshot()).board;
+  const first = board.columns[0];
+  const added = await putBoard({ columns: [{ id: first.id, name: first.name, type: "inert" }, { name: "Extra" }] });
+  expect(added.status).toBe(200);
+  const cols = (await added.json()).board.columns;
+  const extra = cols.find((c: { name: string }) => c.name === "Extra");
+  const made = await srv.call("/api/cards", { body: { project: dir, columnId: extra.id, title: "held" } });
+  expect(made.status).toBe(200);
+  const drop = await putBoard({ columns: cols.filter((c: { id: string }) => c.id !== extra.id) });
+  expect(drop.status).toBe(400);
+  expect((await drop.json()).error).toMatch(/Column still holds cards/);
+
+  for (const columns of [[null], ["x"], [[]], [{ name: "A", instructions: 3 }], [{ id: 5, name: "A" }]]) {
+    const r = await putBoard({ columns });
+    expect(r.status).toBe(400);
+    expect((await r.json()).error).toMatch(/Column 1/);
+  }
+  const dup = await putBoard({
+    columns: [
+      { id: "same", name: "A" },
+      { id: "same", name: "B" },
+    ],
+  });
+  expect(dup.status).toBe(400);
+  expect((await dup.json()).error).toBe('Duplicate column id "same"');
+  expect((await snapshot()).board.columns.map((c: { id: string }) => c.id)).toEqual(cols.map((c: { id: string }) => c.id));
+});

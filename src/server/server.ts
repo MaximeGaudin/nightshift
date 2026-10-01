@@ -139,7 +139,11 @@ export function startServer({ port, development, agents = true }: { port: number
           p.mutate((board) => {
             if (typeof b.name === "string" && b.name.trim()) board.name = b.name.trim();
             if (Array.isArray(b.columns)) {
-              const userCols: Column[] = b.columns.map((c: any) => {
+              const userCols: Column[] = b.columns.map((c: any, i: number) => {
+                if (typeof c !== "object" || c === null || Array.isArray(c)) throw new Error(`Column ${i + 1} must be an object`);
+                for (const key of ["id", "name", "skill", "instructions", "model"]) {
+                  if (c[key] != null && typeof c[key] !== "string") throw new Error(`Column ${i + 1}: ${key} must be a string`);
+                }
                 const type: ColumnType = c.type === "skill" ? "skill" : "inert";
                 const maxParallel = normalizeColumnParallel(type, c.maxParallel);
                 const emoji = normalizeColumnEmoji(c.emoji);
@@ -155,6 +159,11 @@ export function startServer({ port, development, agents = true }: { port: number
                   ...(emoji !== undefined ? { emoji } : {}),
                 };
               });
+              const seen = new Set<string>();
+              for (const c of userCols) {
+                if (seen.has(c.id)) throw new Error(`Duplicate column id "${c.id}"`);
+                seen.add(c.id);
+              }
               if (userCols.filter((c) => !isDoneColumn(c)).length === 0) throw new Error("A board needs at least one column");
               const cols = ensureDoneColumn(userCols);
               const ids = new Set(cols.map((c) => c.id));
