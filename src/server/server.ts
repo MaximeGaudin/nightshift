@@ -7,7 +7,7 @@ import { ensureDoneColumn, isDoneColumn, normalizeColumnParallel, type Column, t
 import { Orchestrator } from "./orchestrator.ts";
 import { getSettings, updateSettings } from "./settings.ts";
 import { COLUMN_KEYS, newId, unknownFields } from "./store.ts";
-import { resolveScreenshot } from "./screenshots.ts";
+import { removeScreenshots, resolveScreenshot } from "./screenshots.ts";
 import { createSkill, listSkills, readSkill, saveSkill } from "./skills.ts";
 
 export function startServer({ port, development, agents = true }: { port: number; development?: boolean; agents?: boolean }) {
@@ -155,6 +155,7 @@ export function startServer({ port, development, agents = true }: { port: number
           p.mutate((board) => {
             board.cards = board.cards.filter((c) => c.id !== req.params.id);
           });
+          removeScreenshots(req.params.id!);
         }),
       },
       "/api/cards/:id/move": {
@@ -173,7 +174,7 @@ export function startServer({ port, development, agents = true }: { port: number
         GET: h((_b, url, req) => {
           const card = project({}, url).card(req.params.id!);
           if (!card) throw new Error("Unknown card");
-          const file = resolveScreenshot(card.description, url.searchParams.get("file") ?? "");
+          const file = resolveScreenshot(card.description, url.searchParams.get("file") ?? "", card.id);
           return new Response(Bun.file(file), { headers: { "content-type": "image/png" } });
         }),
       },
