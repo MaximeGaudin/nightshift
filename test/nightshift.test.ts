@@ -963,7 +963,16 @@ test("defaultBoard has the Nightshift pipeline", () => {
 
 test("defaultBoard emojis match nightshift.json and survive normalization", () => {
   const b = defaultBoard("x");
-  expect(b.columns.map((c) => c.emoji)).toEqual([undefined, "\u{1F525}", "\u{1F5FA}\uFE0F", "\u{1F9D1}\u200D\u{1F4BB}", "\u{1F9D0}", "\u{1FAB2}", "\u{1F389}", undefined]);
+  expect(b.columns.map((c) => c.emoji)).toEqual([
+    undefined,
+    "\u{1F525}",
+    "\u{1F5FA}\uFE0F",
+    "\u{1F9D1}\u200D\u{1F4BB}",
+    "\u{1F9D0}",
+    "\u{1FAB2}",
+    "\u{1F389}",
+    undefined,
+  ]);
   expect(JSON.stringify(normalizeBoard(b, "x"))).toBe(JSON.stringify(b));
 });
 
@@ -1116,7 +1125,11 @@ test("done column: nextColumn from col_done is undefined", () => {
 
 /** Project where a card runs through "Work" and lands in the inert "To Test", ready to receive feedback. */
 async function feedbackBoard(extra: object[] = []) {
-  const b = await attentionBoard([{ name: "Work", type: "skill", skill: "enrich" }, { name: "To Test", type: "inert", emoji: "🪲" }, ...extra]);
+  const b = await attentionBoard([
+    { name: "Work", type: "skill", skill: "enrich" },
+    { name: "To Test", type: "inert", emoji: "🪲" },
+    ...extra,
+  ]);
   const [work, toTest] = b.cols;
   const landed = async (title: string) => {
     const { id } = await post("/api/cards", { project: b.dir, columnId: work.id, title });
