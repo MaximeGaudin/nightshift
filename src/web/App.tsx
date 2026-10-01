@@ -6,6 +6,7 @@ import { ColumnsEditor } from "./ColumnsEditor.tsx";
 import { ProjectPicker } from "./ProjectPicker.tsx";
 import { SettingsModal } from "./SettingsModal.tsx";
 import { SkillsModal } from "./SkillsModal.tsx";
+import { installAudioUnlock, notifyAttention } from "./sound.ts";
 import { ErrorBanner } from "./ui.tsx";
 
 function useProjectParam(): [string | null, (p: string | null) => void] {
@@ -42,6 +43,14 @@ export function App() {
       })
       .catch((e) => setError(e.message));
   }, [project]);
+
+  useEffect(() => installAudioUnlock(), []);
+
+  // useServerEvents always calls the latest closure, so `settings` is read at receipt time.
+  // Attention events from every project ring; settings not loaded yet count as on.
+  useServerEvents((e) => {
+    if (e.type === "attention" && settings?.soundNotifications !== false) notifyAttention(e.kind);
+  });
 
   useServerEvents((e) => {
     if (e.type === "board" && snap && e.project === snap.path) setSnap(e.snapshot);
