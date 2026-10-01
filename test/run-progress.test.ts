@@ -18,7 +18,7 @@ if (!CHILD) {
     const [out, err, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);
     if (code !== 0) console.error(out + err);
     expect(code).toBe(0);
-    for (const name of ["run-progress-live", "run-progress-cleared", "run-progress-todo-fallback", "prompt-mentions-marker"]) {
+    for (const name of ["run-progress-live", "run-progress-cleared", "run-progress-todo-fallback", "run-progress-ignores-subagents", "prompt-mentions-marker"]) {
       expect(out + err).toContain(`(pass) ${name}`);
     }
   }, 60000);
@@ -107,6 +107,15 @@ test("run-progress-todo-fallback: TodoWrite alone gives source todo", async () =
   await waitFor(async () => !!(await getProject(dir)).progress?.[id]);
   const s = await getProject(dir);
   expect(stripAt(s.progress[id])).toEqual({ step: 1, total: 2, label: "Tâche 1 en cours", source: "todo" });
+  await waitFor(async () => (await getProject(dir)).live[id] === undefined);
+});
+
+test("run-progress-ignores-subagents: subagent marker and TodoWrite do not override", async () => {
+  const { dir, id } = await setup("progress-subagent");
+  await waitFor(async () => !!(await getProject(dir)).progress?.[id]);
+  await Bun.sleep(200);
+  const s = await getProject(dir);
+  expect(stripAt(s.progress[id])).toEqual({ step: 1, total: 2, label: "Principal", source: "marker" });
   await waitFor(async () => (await getProject(dir)).live[id] === undefined);
 });
 

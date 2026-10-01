@@ -568,17 +568,19 @@ export class Orchestrator {
     const p = job.project;
     const cardId = job.cardId;
     if (ev.type === "assistant") {
+      // Subagent messages carry parent_tool_use_id: they are logged but never drive the card's progress.
+      const own = !ev.parent_tool_use_id;
       for (const block of ev.message?.content ?? []) {
         if (block.type === "text" && block.text?.trim()) {
           this.log(p, cardId, "text", block.text.trim());
-          const m = parseProgressMarker(block.text);
+          const m = own ? parseProgressMarker(block.text) : undefined;
           if (m) {
             job.markerSeen = true;
             this.setProgress(job, m, "marker");
           }
         } else if (block.type === "tool_use" && block.name !== "StructuredOutput") {
           this.log(p, cardId, "tool", summarizeToolInput(block.name, block.input));
-          if (block.name === "TodoWrite" && !job.markerSeen) {
+          if (own && block.name === "TodoWrite" && !job.markerSeen) {
             const t = progressFromTodos(block.input);
             if (t) this.setProgress(job, t, "todo");
           }

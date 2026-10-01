@@ -2,7 +2,8 @@
 // Stand-in for the `claude` CLI: emits stream-json events and a structured result.
 // FAKE_DELAY_MS controls run duration; a card titled "fail" produces an error result,
 // "slow" sleeps ~5 s before the normal result, "stay" returns move "stay",
-// "progress" emits a TodoWrite, a progress marker, then another TodoWrite; "progress-todo" only a TodoWrite.
+// "progress" emits a TodoWrite, a progress marker, then another TodoWrite; "progress-todo" only a TodoWrite,
+// "progress-subagent" a marker then subagent events that must be ignored.
 // FAKE_ARGS_LOG, when set, receives one JSON line per run: { title, resumed, model }.
 import { appendFileSync } from "node:fs";
 // Nightshift sends the prompt on stdin (never argv).
@@ -28,6 +29,11 @@ if (title === "progress") {
   emit(todos("in_progress", "pending"));
   emit({ type: "assistant", message: { content: [{ type: "text", text: "[nightshift-progress] 2/3 Deuxième" }] } });
   emit(todos("completed", "in_progress")); // ignored: the marker has priority
+} else if (title === "progress-subagent") {
+  emit({ type: "assistant", message: { content: [{ type: "text", text: "[nightshift-progress] 1/2 Principal" }] } });
+  // Subagent events (parent_tool_use_id set) must not drive the card's progress.
+  emit({ ...todos("completed", "in_progress"), parent_tool_use_id: "toolu_1" });
+  emit({ type: "assistant", parent_tool_use_id: "toolu_1", message: { content: [{ type: "text", text: "[nightshift-progress] 5/9 Sous-agent" }] } });
 } else if (title === "progress-todo") {
   emit(todos("in_progress", "pending"));
 }
