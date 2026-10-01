@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { sequenceLabel } from "../shared/sequence.ts";
 import { resolveNextColumn, skippedColumns } from "../shared/skip.ts";
 import { type Card, type Column, columnMaxParallel, DONE_COLUMN_ID, isDoneColumn, type ProjectSnapshot } from "../shared/types.ts";
 import { api, useServerEvents, useSettings } from "./api.ts";
@@ -128,6 +129,7 @@ export function App() {
           )}
         </div>
         <nav className="actions">
+          <SequenceControl snap={snap} guard={guard} />
           <button type="button" className="ghost" onClick={() => setModal("columns")}>
             Colonnes
           </button>
@@ -161,6 +163,7 @@ export function App() {
           live={snap.live[card.id]}
           progress={snap.progress?.[card.id]}
           testing={snap.testing?.includes(card.id) ?? false}
+          sequential={isSequential(snap, card.id)}
           onClose={() => setOpenCard(null)}
           onError={setError}
         />
@@ -185,6 +188,35 @@ export function App() {
         </div>
       )}
     </div>
+  );
+}
+
+/** True when the sequential mode is running or paused on this card. */
+export function isSequential(snap: Pick<ProjectSnapshot, "sequence">, cardId: string): boolean {
+  return snap.sequence.status !== "stopped" && snap.sequence.cardId === cardId;
+}
+
+export function SequenceControl({ snap, guard }: { snap: ProjectSnapshot; guard: (p: Promise<unknown>) => void }) {
+  const active = snap.sequence.status === "active";
+  const label = sequenceLabel(snap.sequence, snap.board);
+  return (
+    <>
+      <button
+        type="button"
+        className="ghost sequence-toggle"
+        title={label}
+        aria-label={label}
+        disabled={snap.agentsDisabled || !!snap.lockedBy}
+        onClick={() => guard(active ? api.sequencePause(snap.path) : api.sequencePlay(snap.path))}
+      >
+        <Icon name={active ? "pause" : "play"} size={14} />
+      </button>
+      {snap.sequence.notice && (
+        <span className="sequence-notice" role="status">
+          {snap.sequence.notice}
+        </span>
+      )}
+    </>
   );
 }
 
@@ -240,6 +272,7 @@ function Board({ snap, onOpen, guard }: { snap: ProjectSnapshot; onOpen: (id: st
         skipped={skippedColumns(snap.board.columns, card).map((c) => c.name)}
         onSendNext={next ? () => sendNext(card, next.id) : undefined}
         sending={sending.has(card.id)}
+        sequential={isSequential(snap, card.id)}
         onOpen={() => onOpen(card.id)}
         onDragStart={() => setDrag(card.id)}
         onDragEnd={() => {
