@@ -94,10 +94,6 @@ textarea.card-desc-body { resize: none; font: var(--fs-md)/1.55 var(--font-mono)
 .test-panel textarea { min-height: 60px; }
 .test-command { margin: 0; padding: var(--sp-2) var(--sp-3); border-radius: var(--radius-sm); background: var(--surface); font: var(--fs-sm)/1.5 var(--font-mono); white-space: pre-wrap; word-break: break-all; }
 .test-panel a { color: var(--accent); font-size: var(--fs-md); }
-.test-shots { display: flex; flex-direction: column; gap: var(--sp-3); }
-.test-shots figure { margin: 0; }
-.test-shots img { width: 100%; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface); }
-.test-shots figcaption { font-size: var(--fs-sm); color: var(--muted); }
 .test-toggle { align-self: flex-start; border: 0; height: auto; background: none; padding: 0; color: var(--muted); font-size: var(--fs-sm); }
 .test-toggle:hover:not(:disabled) { background: none; color: var(--text); }
 .test-output { max-height: 180px; flex: none; background: var(--surface); }

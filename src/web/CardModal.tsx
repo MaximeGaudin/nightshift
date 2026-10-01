@@ -3,6 +3,8 @@ import { cardRef, type Board, type Card, type LiveStatus, type LogLine } from ".
 import { api, useServerEvents } from "./api.ts";
 import { StatusIcon } from "./icons.tsx";
 import { Markdown } from "./markdown.tsx";
+import { NextColumnButton } from "./NextColumnButton.tsx";
+import { renderCardImage } from "./Screenshot.tsx";
 import { TestPanel } from "./TestPanel.tsx";
 import { ErrorBanner, Modal, timeAgo } from "./ui.tsx";
 
@@ -67,8 +69,8 @@ export function CardModal({
   }, [log.length, tab]);
 
   const guard = (p: Promise<unknown>) => p.catch((e) => setError(e.message));
-  const save = () =>
-    guard(api.updateCard(project, card.id, { title, description }).then(() => setBase({ title, description })));
+  const saveOrThrow = () => api.updateCard(project, card.id, { title, description }).then(() => setBase({ title, description }));
+  const save = () => guard(saveOrThrow());
   const lr = card.lastRun;
 
   return (
@@ -98,6 +100,13 @@ export function CardModal({
           {column?.type === "skill" && live !== "running" && (
             <button onClick={() => guard(api.retry(project, card.id))}>{lr?.columnId === card.columnId ? "Relancer" : "Lancer"}</button>
           )}
+          <NextColumnButton
+            project={project}
+            card={card}
+            board={board}
+            beforeMove={() => (dirty ? saveOrThrow() : undefined)}
+            onError={setError}
+          />
           <button className="primary" disabled={!dirty} onClick={save}>
             Enregistrer
           </button>
@@ -143,7 +152,7 @@ export function CardModal({
                 onDoubleClick={editDescription}
               >
                 {description.trim() ? (
-                  <Markdown source={description} />
+                  <Markdown source={description} renderImage={renderCardImage(project, card.id)} />
                 ) : (
                   <p className="muted">Aucune description. Double-cliquer pour en écrire une.</p>
                 )}
