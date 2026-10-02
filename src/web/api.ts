@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { CardImageStored, CardImageUpload } from "../shared/screenshots.ts";
 import type { SequenceState } from "../shared/sequence.ts";
 import type { LogLine, ProjectSnapshot, ServerEvent, Settings, SkillInfo, WorktreePolicy } from "../shared/types.ts";
 
@@ -11,6 +12,15 @@ async function call<T = unknown>(method: string, url: string, body?: unknown): P
   const data: { error?: string } = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error ?? res.statusText);
   return data as T;
+}
+
+/** Base64 of a blob's raw bytes, without a `data:` prefix. */
+async function toBase64(blob: Blob): Promise<string> {
+  const bytes = new Uint8Array(await blob.arrayBuffer());
+  let bin = "";
+  // Chunks keep String.fromCharCode under the engine's argument limit.
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
 }
 
 const q = (project: string) => `project=${encodeURIComponent(project)}`;
@@ -42,6 +52,9 @@ export const api = {
       models?: Record<string, string> | null;
     },
   ) => call("PATCH", `/api/cards/${id}`, { project, ...patch }),
+  /** Stores a pasted image in the card's folder; the answer is its absolute path. */
+  uploadCardImage: async (project: string, id: string, image: Blob) =>
+    call<CardImageStored>("POST", `/api/cards/${id}/images`, { project, data: await toBase64(image) } satisfies CardImageUpload),
   deleteCard: (project: string, id: string) => call("DELETE", `/api/cards/${id}?${q(project)}`),
   moveCard: (project: string, id: string, columnId: string, index?: number) =>
     call("POST", `/api/cards/${id}/move`, { project, columnId, index }),

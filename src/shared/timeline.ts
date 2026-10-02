@@ -5,6 +5,8 @@ import {
   DONE_COLUMN_ID,
   DONE_COLUMN_NAME,
   type HistoryEntry,
+  isBacklogColumn,
+  isDoneColumn,
   type TimeCursor,
   type TimePart,
   type TimeSlice,
@@ -90,7 +92,7 @@ export function replayHistory(base: TimeState | undefined, entries: HistoryEntry
   return { totals: [...totals.values()], ...(cursor ? { cursor } : {}) };
 }
 
-/** Time per (column, part) of a card at `nowMs`, in board order then deleted columns, Done and zero slices excluded. */
+/** Time per (column, part) of a card at `nowMs`, in board order then deleted columns, inert columns (Backlog, Done, To Test…) and zero slices excluded. */
 export function cardTimeSlices(card: Card, columns: Column[], nowMs: number): TimeSlice[] {
   const state = replayHistory(card.timeBase, card.history, card.createdAt);
   const raw = [...state.totals];
@@ -115,10 +117,9 @@ export function cardTimeSlices(card: Card, columns: Column[], nowMs: number): Ti
     let col = s.columnId !== undefined ? byId.get(s.columnId) : byName.get(s.columnName);
     let id = col?.id;
     const name = col?.name ?? s.columnName;
-    let part = s.part;
+    const part = s.part;
     if (col) {
-      if (col.id === DONE_COLUMN_ID) continue;
-      if (part === "legacy" && col.type === "inert") part = "inert";
+      if (col.type === "inert") continue;
     } else {
       id = s.columnId;
       col = undefined;
@@ -143,6 +144,18 @@ export function cardTimeSlices(card: Card, columns: Column[], nowMs: number): Ti
   for (const c of columns) pick(`board:${c.id}`);
   for (const dk of deletedOrder) pick(`del:${dk}`);
   return out;
+}
+
+/**
+ * Chronos shown on a board tile: `totalMs` is the time spent in non-inert columns, `stepMs` the time in the
+ * current column. Null for a card in an inert column (Backlog, Done, To Test…). Never negative or NaN.
+ */
+export function cardTimers(card: Card, columns: Column[], nowMs: number): { totalMs: number; stepMs: number } | null {
+  const current = columns.find((c) => c.id === card.columnId);
+  if (isBacklogColumn(card.columnId) || isDoneColumn(card.columnId) || current?.type === "inert") return null;
+  const totalMs = cardTimeSlices(card, columns, nowMs).reduce((sum, s) => sum + s.ms, 0);
+  const step = nowMs - Date.parse(card.enteredColumnAt);
+  return { totalMs, stepMs: Number.isFinite(step) && step > 0 ? step : 0 };
 }
 
 /** Unit suffixes of formatDuration; the web passes translated ones, the default is French. */

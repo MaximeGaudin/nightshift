@@ -317,6 +317,7 @@ export function Board({
         sending={sending.has(card.id)}
         sequential={isSequential(snap, card.id)}
         column={columns.find((c) => c.id === card.columnId)}
+        columns={columns}
         settings={settings}
         onOpen={() => onOpen(card.id)}
         {...extra}

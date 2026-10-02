@@ -4,6 +4,7 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import type { Server, ServerWebSocket } from "bun";
 import { dependencyCycle, describeCycle, releaseReason, resolveDependencyRefs, unmetDependencies } from "../shared/dependencies.ts";
 import { describeModelChanges, diffModels, validateModelsStrict } from "../shared/models.ts";
+import { type CardImageStored, cardImageType } from "../shared/screenshots.ts";
 import { normalizeSkipColumnIds, skippedColumns } from "../shared/skip.ts";
 import {
   BACKLOG_COLUMN_ID,
@@ -26,7 +27,7 @@ import { safeHttpUrl } from "../shared/urls.ts";
 import index from "../web/index.html";
 import { checkRequest, HttpError } from "./guard.ts";
 import { Orchestrator } from "./orchestrator.ts";
-import { removeScreenshots, resolveScreenshot } from "./screenshots.ts";
+import { removeScreenshots, resolveScreenshot, storeCardImage } from "./screenshots.ts";
 import { getSettings, updateSettings } from "./settings.ts";
 import { createSkill, listSkills, readSkill, saveSkill } from "./skills.ts";
 import { BOARD_FILE, COLUMN_KEYS, isRaw, newId, type Project, type Raw, remapColumnId, unknownFields } from "./store.ts";
@@ -436,7 +437,15 @@ export function startServer({ port, development, agents = true }: { port: number
           const card = project({}, url).card(req.params.id);
           if (!card) throw new HttpError(404, "Unknown card");
           const file = resolveScreenshot(card.description, url.searchParams.get("file") ?? "", card.id);
-          return new Response(Bun.file(file), { headers: { "content-type": "image/png" } });
+          return new Response(Bun.file(file), { headers: { "content-type": cardImageType(file) ?? "application/octet-stream" } });
+        }),
+      },
+      "/api/cards/:id/images": {
+        POST: h((b, url, req) => {
+          const card = project(b, url).card(req.params.id);
+          if (!card) throw new HttpError(404, "Unknown card");
+          if (typeof b.data !== "string") throw new Error("data must be a string");
+          return { path: storeCardImage(card.id, b.data) } satisfies CardImageStored;
         }),
       },
       "/api/cards/:id/resume": {
