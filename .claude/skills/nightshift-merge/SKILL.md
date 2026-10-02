@@ -68,6 +68,10 @@ Progress marker: at the start of each step, write `[nightshift-progress] N/M lab
 
 Follow extra column instructions in the worker prompt when they do not contradict the steps above.
 
+## Updating the card
+
+Return only what changes, in the structured output's `sections` list: `{"heading": "Result", "content": "…"}` replaces (or adds) the `## Result` section, `"op": "append"` adds lines to a section, `"op": "delete"` removes one. Do not return `description`: Nightshift keeps every section you do not name, byte for byte, and re-emitting the whole note costs minutes of generation. Use `description` only to restructure the whole note.
+
 ## Conflicts
 
 When `git merge` stops with conflicts, fix them before aborting.
@@ -118,7 +122,7 @@ Human intervention (`move` is `stay`, one question per unresolved file):
 ```json
 {
   "title": "current title",
-  "description": "the note plus ## Questions, three blank lines under each question",
+  "sections": [{"heading": "Merge", "content": "…"}, {"heading": "Questions", "content": "…three blank lines under each question…"}],
   "move": "stay",
   "summary": "Conflict in 2 files. Merge aborted. Human decision needed.",
   "questions": [
@@ -132,7 +136,7 @@ Done:
 ```json
 {
   "title": "current title",
-  "description": "the note plus ## Merge",
+  "sections": [{"heading": "Merge", "content": "…"}, {"heading": "Questions", "op": "delete"}],
   "move": "next",
   "summary": "Merged nightshift/<card-id> into WIP, pushed origin/WIP and removed the worktree.",
   "questions": []
