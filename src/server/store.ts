@@ -1,5 +1,6 @@
 import { copyFileSync, existsSync, type FSWatcher, readFileSync, statSync, watch } from "node:fs";
 import { basename, join } from "node:path";
+import { sanitizeModels } from "../shared/models.ts";
 import { needsRun } from "../shared/needs-run.ts";
 import { normalizeSkipColumnIds, resolveNextColumn } from "../shared/skip.ts";
 import { replayHistory } from "../shared/timeline.ts";
@@ -101,7 +102,7 @@ export function systemColumnsChanged(raw: unknown, board: Board): boolean {
   return JSON.stringify(rawCols) !== JSON.stringify(board.columns);
 }
 
-export const COLUMN_KEYS = ["id", "name", "type", "skill", "instructions", "model", "maxParallel", "emoji"];
+export const COLUMN_KEYS = ["id", "name", "type", "skill", "instructions", "model", "lockModel", "maxParallel", "emoji"];
 const CARD_KEYS = [
   "id",
   "number",
@@ -117,6 +118,7 @@ const CARD_KEYS = [
   "skipColumnIds",
   "history",
   "timeBase",
+  "models",
 ];
 const BOARD_KEYS = ["version", "name", "columns", "cards", "nextCardNumber", "favoriteSkills"];
 
@@ -200,6 +202,7 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
             ...(c.skill ? { skill: String(c.skill) } : {}),
             ...(c.instructions ? { instructions: String(c.instructions) } : {}),
             ...(typeof c.model === "string" && c.model.trim() ? { model: c.model.trim() } : {}),
+            ...(type === "skill" && c.lockModel === true ? { lockModel: true as const } : {}),
             ...(maxParallel !== undefined ? { maxParallel } : {}),
             ...(emoji !== undefined ? { emoji } : {}),
           };
@@ -225,6 +228,7 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
     // Entries cut by the cap are folded into the checkpoint first, so their time is not lost.
     if (rawHistory.length > 50) timeBase = replayHistory(timeBase, rawHistory.slice(0, -50), asString(c.createdAt) ?? now());
     const skipColumnIds = normalizeSkipColumnIds(columns, c.skipColumnIds);
+    const { models } = sanitizeModels(c.models);
     return {
       ...unknownFields(c, CARD_KEYS),
       id: c.id,
@@ -242,6 +246,7 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
         ? { test: { command: c.test.command, ...(c.test.url ? { url: String(c.test.url) } : {}) } }
         : {}),
       ...(skipColumnIds ? { skipColumnIds } : {}),
+      ...(models ? { models } : {}),
       history: rawHistory.slice(-50),
       ...(timeBase ? { timeBase } : {}),
     };

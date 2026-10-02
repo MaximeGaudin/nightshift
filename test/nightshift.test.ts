@@ -86,9 +86,9 @@ test("resolveModel priority", () => {
     soundNotifications: true,
     language: "auto",
   });
-  expect(resolveModel(col("opus"), settings("sonnet"))).toBe("opus");
-  expect(resolveModel(col(), settings(" sonnet "))).toBe("sonnet");
-  expect(resolveModel(col(), settings(""))).toBeUndefined();
+  expect(resolveModel(col("opus"), settings("sonnet")).model).toBe("opus");
+  expect(resolveModel(col(), settings(" sonnet ")).model).toBe("sonnet");
+  expect(resolveModel(col(), settings("")).model).toBeUndefined();
 });
 
 test("project skills shadow user skills", () => {

@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Subprocess } from "bun";
+import { resolveModel } from "../shared/models.ts";
 import { resolveNextColumn } from "../shared/skip.ts";
 import type {
   AttentionKind,
@@ -17,7 +18,6 @@ import type {
   RunProgress,
   RunStatus,
   ServerEvent,
-  Settings,
 } from "../shared/types.ts";
 import { canSendFeedback, cardRef, columnMaxParallel, isDoneColumn } from "../shared/types.ts";
 import { safeHttpUrl } from "../shared/urls.ts";
@@ -304,9 +304,7 @@ const ANSI_COLOR_RE = /\x1b\[[0-9;]*m/g;
 // Not "quick-…": those are the log files of quick runs, never served as a card log.
 const CARD_ID_RE = /^(?!quick-)[A-Za-z0-9_-]+$/;
 
-export function resolveModel(column: Column, settings: Settings): string | undefined {
-  return column.model?.trim() || settings.model.trim() || undefined;
-}
+export { resolveModel } from "../shared/models.ts";
 
 export class Orchestrator {
   private projects = new Map<string, Project>();
@@ -968,7 +966,7 @@ export class Orchestrator {
     return {
       name: `nightshift: ${card.title}`.slice(0, 80),
       schema: RESULT_SCHEMA,
-      model: resolveModel(column, getSettings()),
+      model: resolveModel(column, getSettings()).model,
       log: (kind, text) => this.log(p, card.id, kind, text),
       setProgress: (v, source) => this.setProgress(job, v, source),
       startMessage: (model, permissionMode) =>
