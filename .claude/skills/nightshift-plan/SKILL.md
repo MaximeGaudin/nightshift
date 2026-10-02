@@ -83,6 +83,7 @@ Lock the shared contract. Later tasks import it and do not redesign it.
 Owns: the modules that define the contract.
 Hard part: the invariant or transition that is easy to get wrong.
 Done when: the contract is in the tree and the tests below that cover it pass.
+Model: opus — the contract every later task builds on.
 
 ### Wave 1 — parallel
 
@@ -93,12 +94,14 @@ Owns: <modules or paths>.
 Depends on: Task 0.
 Hard part: <the non-obvious behavior>.
 Done when: <observable outcome>.
+Model: <haiku | sonnet | opus> — <the reason, one clause>.
 
 #### Task 2 — <name>
 Owns: <modules or paths>.
 Depends on: Task 0.
 Hard part: <the non-obvious behavior>.
 Done when: <observable outcome>.
+Model: <haiku | sonnet | opus> — <the reason, one clause>.
 
 ## Tests
 
@@ -153,6 +156,26 @@ On the next run, the answer is the text under that question, down to the next nu
 
 ```
 
+## Models
+
+Pick a model per task from its difficulty, write it on the task's `Model:` line, and pick the card's models. A model that is too weak costs a repair loop; one that is too strong costs time and money on every line. Judge the task, not the card.
+
+- `haiku`: mechanical and fully specified. A rename, a text or copy change, a config value, deleting code the task lists by path, docs.
+- `sonnet` (the default): one module, page or endpoint that follows a pattern the project already has, with its tests.
+- `opus`: a wrong guess breaks something silently or for good. Concurrency or async ordering, state shared across processes or replicas, security, authentication or secrets, a data migration or an irreversible operation, a refactor across modules, or a `Hard part` whose invariant is easy to break.
+
+Then add the card's models at the end of the specification:
+
+```markdown
+## Models
+
+- nightshift-implement: <sonnet, or opus when any task is opus>
+- nightshift-review: <sonnet, or opus when any task is opus>
+- nightshift-merge: sonnet
+```
+
+When the structured output accepts a `models` field (Nightshift with per-card models), also return the same values there, keyed by skill name. Otherwise the `## Models` section is enough: `nightshift-implement` reads the task lines.
+
 ## Output
 
 Question round (`move` is `stay` whenever `questions` is non-empty):
@@ -187,5 +210,6 @@ Plan ready (`questions` empty, `move` is `next`):
 - [ ] `## Progress` has one unchecked numbered line per task, from 1, in wave order
 - [ ] Parallel tasks are in a wave marked parallel, with no shared owned path
 - [ ] Tests cover the hard behavior, and Definition of done is observable
+- [ ] Every task has a `Model:` line, and `## Models` names the card's models (see Models)
 - [ ] The specification does not contain function bodies or routine implementation steps
 - [ ] `move` is `next` and `questions` is empty, or `move` is `stay` because product questions are still open

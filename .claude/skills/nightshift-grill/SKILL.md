@@ -33,7 +33,8 @@ Progress marker: at the start of each step, write `[nightshift-progress] N/M lab
    - When both are empty, decide it yourself. Do not ask that question again.
    - Fold the answers into the note, delete `## Questions`, then repeat from step 3.
    - Ask again only when an answer opens a new blocking gap. Put every new gap in that next list, all at once, each with blank lines under it.
-7. When no blocking gap remains, set `move` to `next` and return `questions` as an empty array. Stop. Do not write spec files and do not edit application code.
+7. When no blocking gap remains, make sure the note ends with `## Acceptance`: checkable criteria, each one observable in a test or on a screen. Write them from the note when they are missing; they are what implement and review check against.
+8. Route the card (see Route), return `questions` as an empty array, and stop. Do not write spec files and do not edit application code.
 
 Follow extra column instructions in the worker prompt when they do not contradict the steps above.
 
@@ -74,6 +75,20 @@ The note is ready to specify when an agent could build this card without inventi
 - **Boundaries are explicit.** The note says what is out of scope or deferred.
 - **Claims are testable.** Words such as elegant, simple, fast, or accessible name something observable.
 - **No dangling references.** Anything mentioned in passing is specified in the note or parked under `## Open questions`.
+- **Acceptance is checkable.** `## Acceptance` lists criteria a test or a screen can show.
+
+## Route
+
+Most cards do not need a written plan: the implement agent plans small work itself. Send the card past `nightshift-plan` unless one of these holds:
+
+- it changes two or more modules that must agree on a new contract (an API and its consumer, a schema and its UI, a protocol and both ends);
+- it touches persistent or shared state: a data migration, a storage format, state shared across processes or replicas;
+- it involves concurrency or async ordering, security, authentication or secrets;
+- it removes or replaces a feature other code uses;
+- it is large: more than about five files of new logic, or other cards of a series depend on its design;
+- the note asks for a plan.
+
+When one holds, set `move` to `next` (the plan column). Otherwise set `move` to the id of the column whose skill is `nightshift-implement`, read from the board columns in the worker prompt; when no such column exists, use `next`. Write the decision as the last line before `## Acceptance`: `Route: plan — <the rule that holds>` or `Route: implement — no plan needed (<one clause>)`.
 
 ## Writing the note
 
@@ -103,7 +118,7 @@ Question round (`move` is `stay` whenever `questions` is non-empty):
 }
 ```
 
-Ready (`questions` empty, `move` is `next`):
+Ready, needs a plan (`questions` empty, `move` is `next`):
 
 ```json
 {
@@ -115,8 +130,21 @@ Ready (`questions` empty, `move` is `next`):
 }
 ```
 
+Ready, small enough to skip the plan (`move` is the implement column's id):
+
+```json
+{
+  "title": "current title",
+  "description": "full markdown note, Route line, ## Acceptance",
+  "move": "col_implement_id",
+  "summary": "Note is ready. No plan needed: one module, existing pattern. Sent to Implement.",
+  "questions": []
+}
+```
+
 ## Done when
 
+- [ ] The ready note ends with `## Acceptance` and a `Route:` line, and `move` follows Route
 - [ ] Every blocking gap is in the current `questions` list, or the list is empty because the note clears the readiness bar
 - [ ] `move` is `stay` when `questions` is non-empty, and `next` only when the bar is clear
 - [ ] On a question round, `## Questions` ends the note and each question has three blank lines under it
