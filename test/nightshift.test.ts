@@ -77,7 +77,6 @@ test("normalizeBoard keeps a trimmed model and drops empty ones", () => {
 test("resolveModel priority", () => {
   const col = (model?: string): Column => ({ id: "a", name: "A", type: "skill", skill: "s", ...(model ? { model } : {}) });
   const settings = (model: string): Settings => ({
-    maxParallel: 1,
     claudePath: "claude",
     permissionMode: "auto",
     model,
@@ -109,7 +108,7 @@ let base = "";
 const proj = tempDir("ns-e2e-");
 
 beforeAll(() => {
-  updateSettings({ claudePath: join(import.meta.dir, "fake-claude.ts"), maxParallel: 2 });
+  updateSettings({ claudePath: join(import.meta.dir, "fake-claude.ts") });
   srv = startServer({ port: 0 });
   base = `http://localhost:${srv.server.port}`;
   mkdirSync(join(userSkills, "enrich"), { recursive: true });
@@ -144,7 +143,7 @@ test("pipeline: skill column without maxParallel runs one card at a time, respec
     maxRunning = Math.max(maxRunning, Object.values(s.live).filter((v) => v === "running").length);
     return Object.keys(s.live).length === 0;
   });
-  // No maxParallel on the column: default 1, even though the global cap is 2.
+  // No maxParallel on the column: default 1, even though the project cap is higher.
   expect(maxRunning).toBe(1);
 
   const file = JSON.parse(readFileSync(join(proj, "nightshift.json"), "utf8"));
@@ -278,13 +277,14 @@ test("column maxParallel > 1 runs several cards", async () => {
   expect(maxRunning).toBe(2);
 });
 
-test("global cap cuts below the sum of column limits", async () => {
-  const p = tempDir("ns-globalcap-");
+test("project cap cuts below the sum of column limits", async () => {
+  const p = tempDir("ns-projectcap-");
   await post("/api/projects/open", { path: p });
   const res = await post(
     "/api/board",
     {
       project: p,
+      maxParallel: 2,
       columns: [
         { name: "A", type: "skill", skill: "enrich", maxParallel: 2 },
         { name: "B", type: "skill", skill: "enrich", maxParallel: 2 },
@@ -302,7 +302,7 @@ test("global cap cuts below the sum of column limits", async () => {
     maxRunning = Math.max(maxRunning, s.running);
     return s.idle && s.board.cards.length === 6 && s.board.cards.every((c: Card) => c.columnId === done.id);
   }, 15000);
-  // Column limits sum to 4, but the global cap (2) bounds the total.
+  // Column limits sum to 4, but the project cap (2) bounds the total.
   expect(maxRunning).toBeLessThanOrEqual(2);
   expect(maxRunning).toBeGreaterThan(0);
 });
@@ -877,7 +877,7 @@ type AttentionEvent = { type: "attention"; project: string; cardId: string; kind
 
 /** Fresh project with the given columns; collects the attention events of that project only. */
 async function attentionBoard(columns: object[]) {
-  updateSettings({ claudePath: join(import.meta.dir, "fake-claude.ts"), maxParallel: 2 });
+  updateSettings({ claudePath: join(import.meta.dir, "fake-claude.ts") });
   const dir = tempDir("ns-attn-");
   await post("/api/projects/open", { path: dir });
   const res = await post("/api/board", { project: dir, columns }, "PUT");
@@ -1330,7 +1330,6 @@ test("feedback question in inert column can be answered", async () => {
 });
 
 test("feedback in inert column ignores the column limit and survives cancelStaleJobs", async () => {
-  updateSettings({ maxParallel: 3 });
   const b = await feedbackBoard();
   try {
     const ids = [await b.landed("go1"), await b.landed("go2")];
@@ -1351,7 +1350,6 @@ test("feedback in inert column ignores the column limit and survives cancelStale
       expect(log.some((l: LogLine) => l.text.includes("stopping agent"))).toBe(false);
     }
   } finally {
-    updateSettings({ maxParallel: 2 });
     b.stop();
   }
 });

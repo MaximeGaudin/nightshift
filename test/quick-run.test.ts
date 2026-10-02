@@ -13,7 +13,7 @@ const NAMES = [
   "quick-run-success",
   "quick-run-errors",
   "quick-run-rejects",
-  "quick-run-global-cap",
+  "quick-run-project-cap",
   "quick-run-cancel",
   "quick-run-progress",
   "quick-run-log-retention",
@@ -50,7 +50,7 @@ if (!CHILD) {
   const events: ServerEvent[] = [];
 
   beforeAll(() => {
-    updateSettings({ claudePath: join(import.meta.dir, "fake-claude.ts"), maxParallel: 3 });
+    updateSettings({ claudePath: join(import.meta.dir, "fake-claude.ts") });
     srv = startServer({ port: 0 });
     base = `http://localhost:${srv.server.port}`;
     srv.orch.on((e) => events.push(e));
@@ -164,75 +164,67 @@ if (!CHILD) {
     expect((await call("/api/quick-runs", { project: locked, skill: "deploy" })).status).toBe(409);
   });
 
-  test("quick-run-global-cap", async () => {
-    updateSettings({ maxParallel: 1 });
-    try {
-      const dir = await setup(["deploy", "other"]);
-      writeSkill(dir, "enrich");
-      const first = await run(dir, "other", "FAKE_QUICK_SLOW");
-      await waitFor(async () => (await runState(dir, first.id))?.status === "running");
-      const second = await run(dir, "deploy", "second");
-      const board = await post(
-        "/api/board",
-        {
-          project: dir,
-          columns: [
-            { name: "Work", type: "skill", skill: "enrich" },
-            { name: "Done", type: "inert" },
-          ],
-        },
-        "PUT",
-      );
-      const card = await post("/api/cards", { project: dir, columnId: board.board.columns[1].id, title: "waiting" });
-      expect((await runState(dir, second.id))?.status).toBe("queued");
-      expect((await snap(dir)).live[card.id]).toBe("queued");
-      expect((await waitResult(first.id)).status).toBe("success");
-      // The queued quick run gets the freed slot before the card that has been waiting.
-      await waitFor(async () => (await runState(dir, second.id))?.status === "running");
-      expect((await snap(dir)).live[card.id]).toBe("queued");
-      expect((await waitResult(second.id)).status).toBe("success");
-      await waitFor(async () => (await snap(dir)).live[card.id] === "running");
-    } finally {
-      updateSettings({ maxParallel: 3 });
-    }
+  test("quick-run-project-cap", async () => {
+    const dir = await setup(["deploy", "other"]);
+    writeSkill(dir, "enrich");
+    await post("/api/board", { project: dir, maxParallel: 1 }, "PUT");
+    const first = await run(dir, "other", "FAKE_QUICK_SLOW");
+    await waitFor(async () => (await runState(dir, first.id))?.status === "running");
+    const second = await run(dir, "deploy", "second");
+    const board = await post(
+      "/api/board",
+      {
+        project: dir,
+        columns: [
+          { name: "Work", type: "skill", skill: "enrich" },
+          { name: "Done", type: "inert" },
+        ],
+      },
+      "PUT",
+    );
+    const card = await post("/api/cards", { project: dir, columnId: board.board.columns[1].id, title: "waiting" });
+    expect((await runState(dir, second.id))?.status).toBe("queued");
+    expect((await snap(dir)).live[card.id]).toBe("queued");
+    expect((await waitResult(first.id)).status).toBe("success");
+    // The queued quick run gets the freed slot before the card that has been waiting.
+    await waitFor(async () => (await runState(dir, second.id))?.status === "running");
+    expect((await snap(dir)).live[card.id]).toBe("queued");
+    expect((await waitResult(second.id)).status).toBe("success");
+    await waitFor(async () => (await snap(dir)).live[card.id] === "running");
   }, 30000);
 
   test("quick-run-cancel", async () => {
-    updateSettings({ maxParallel: 2 });
-    try {
-      const dir = await setup(["deploy", "other"]);
-      writeSkill(dir, "enrich");
-      const board = await post(
-        "/api/board",
-        {
-          project: dir,
-          columns: [
-            { name: "Work", type: "skill", skill: "enrich" },
-            { name: "Done", type: "inert" },
-          ],
-        },
-        "PUT",
-      );
-      const card = await post("/api/cards", { project: dir, columnId: board.board.columns[1].id, title: "slow" });
-      await waitFor(async () => (await snap(dir)).live[card.id] === "running");
-      const running = await run(dir, "other", "FAKE_QUICK_SLOW");
-      await waitFor(async () => (await runState(dir, running.id))?.status === "running");
-      const queued = await run(dir, "deploy", "later");
-      expect((await runState(dir, queued.id))?.status).toBe("queued");
+    const dir = await setup(["deploy", "other"]);
+    writeSkill(dir, "enrich");
+    await post("/api/board", { project: dir, maxParallel: 2 }, "PUT");
+    const board = await post(
+      "/api/board",
+      {
+        project: dir,
+        columns: [
+          { name: "Work", type: "skill", skill: "enrich" },
+          { name: "Done", type: "inert" },
+        ],
+      },
+      "PUT",
+    );
+    const card = await post("/api/cards", { project: dir, columnId: board.board.columns[1].id, title: "slow" });
+    await waitFor(async () => (await snap(dir)).live[card.id] === "running");
+    const running = await run(dir, "other", "FAKE_QUICK_SLOW");
+    await waitFor(async () => (await runState(dir, running.id))?.status === "running");
+    const queued = await run(dir, "deploy", "later");
+    expect((await runState(dir, queued.id))?.status).toBe("queued");
 
-      expect(await post(`/api/quick-runs/${queued.id}/cancel`, { project: dir })).toEqual({ ok: true });
-      expect((await waitResult(queued.id)).status).toBe("cancelled");
-      expect(await post(`/api/quick-runs/${running.id}/cancel`, { project: dir })).toEqual({ ok: true });
-      expect((await waitResult(running.id)).status).toBe("cancelled");
-      expect(await post("/api/quick-runs/qr_unknown/cancel", { project: dir })).toEqual({ ok: false });
+    expect(await post(`/api/quick-runs/${queued.id}/cancel`, { project: dir })).toEqual({ ok: true });
+    expect((await waitResult(queued.id)).status).toBe("cancelled");
+    expect(await post(`/api/quick-runs/${running.id}/cancel`, { project: dir })).toEqual({ ok: true });
+    expect((await waitResult(running.id)).status).toBe("cancelled");
+    expect(await post("/api/quick-runs/qr_unknown/cancel", { project: dir })).toEqual({ ok: false });
 
-      // The card's own agent was not touched.
-      expect((await snap(dir)).live[card.id]).toBe("running");
-      await waitFor(async () => (await snap(dir)).board.cards.find((c) => c.id === card.id)?.lastRun?.status === "success");
-      expect((await snap(dir)).quickRuns).toEqual([]);
-    } finally {
-      updateSettings({ maxParallel: 3 });
-    }
+    // The card's own agent was not touched.
+    expect((await snap(dir)).live[card.id]).toBe("running");
+    await waitFor(async () => (await snap(dir)).board.cards.find((c) => c.id === card.id)?.lastRun?.status === "success");
+    expect((await snap(dir)).quickRuns).toEqual([]);
   }, 30000);
 
   test("quick-run-progress", async () => {

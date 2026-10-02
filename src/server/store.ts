@@ -1,5 +1,6 @@
 import { copyFileSync, existsSync, type FSWatcher, readFileSync, statSync, watch } from "node:fs";
 import { basename, join } from "node:path";
+import { normalizeDependsOn, releaseTarget } from "../shared/dependencies.ts";
 import { sanitizeModels } from "../shared/models.ts";
 import { needsRun } from "../shared/needs-run.ts";
 import { normalizeSkipColumnIds, resolveNextColumn } from "../shared/skip.ts";
@@ -11,14 +12,18 @@ import {
   type Card,
   type Column,
   type ColumnType,
+  DEFAULT_WORKTREE_POLICY,
   doneColumn,
   ensureSystemColumns,
   type HistoryEntry,
   type LastRun,
   normalizeColumnEmoji,
   normalizeColumnParallel,
+  normalizeProjectParallel,
   type TimePart,
   type TimeState,
+  WORKTREE_POLICIES,
+  type WorktreePolicy,
 } from "../shared/types.ts";
 
 import { writeFileAtomic } from "./fsutil.ts";
@@ -116,12 +121,13 @@ const CARD_KEYS = [
   "pendingAnswer",
   "test",
   "skipColumnIds",
+  "dependsOn",
   "sessionId",
   "history",
   "timeBase",
   "models",
 ];
-const BOARD_KEYS = ["version", "name", "columns", "cards", "nextCardNumber", "favoriteSkills"];
+const BOARD_KEYS = ["version", "name", "columns", "cards", "nextCardNumber", "maxParallel", "favoriteSkills", "worktreePolicy"];
 
 /**
  * Fields this version does not know, kept as they are. Several Nightshift versions write the same file
@@ -183,6 +189,11 @@ function normalizeFavoriteSkills(value: unknown): string[] | undefined {
   const names = new Set<string>();
   for (const v of value) if (typeof v === "string" && v.trim()) names.add(v.trim());
   return names.size > 0 ? [...names] : undefined;
+}
+
+/** A non-default policy from the file; the default and anything unknown give undefined (field omitted). */
+function normalizeWorktreePolicy(value: unknown): WorktreePolicy | undefined {
+  return WORKTREE_POLICIES.includes(value as WorktreePolicy) && value !== DEFAULT_WORKTREE_POLICY ? (value as WorktreePolicy) : undefined;
 }
 
 /** Normalizes a parsed board so the rest of the code can trust its shape. */
@@ -254,12 +265,20 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
       ...(timeBase ? { timeBase } : {}),
     };
   });
+  // Second pass: dependencies can only be checked once every card id is known.
+  const cardIds = new Set(cards.map((c) => c.id));
+  for (const [i, card] of cards.entries()) {
+    const dependsOn = normalizeDependsOn(cardIds, card.id, rawCards[i]?.dependsOn);
+    if (dependsOn) card.dependsOn = dependsOn;
+  }
   const nextCardNumber = assignNumbers(
     cards,
     rawCards.map((c) => c.number),
     r.nextCardNumber,
   );
   const favoriteSkills = normalizeFavoriteSkills(r.favoriteSkills);
+  const maxParallel = normalizeProjectParallel(r.maxParallel);
+  const worktreePolicy = normalizeWorktreePolicy(r.worktreePolicy);
   return {
     ...unknownFields(raw, BOARD_KEYS),
     version: 1,
@@ -267,7 +286,9 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
     columns,
     cards,
     nextCardNumber,
+    ...(maxParallel !== undefined ? { maxParallel } : {}),
     ...(favoriteSkills ? { favoriteSkills } : {}),
+    ...(worktreePolicy ? { worktreePolicy } : {}),
   };
 }
 
@@ -422,6 +443,16 @@ export class Project {
   addQueued(card: Card, board: Board = this.board) {
     if (!needsRun(board, card)) return;
     this.addHistory(card, "queued", `Queued in ${this.column(card.columnId)?.name}`, card.columnId);
+  }
+
+  /**
+   * Releases a card held by its dependencies: drops `dependsOn` (so it is never released twice) and moves it to
+   * the first column after Backlog it does not skip. `reason` starts the history entry of the move.
+   */
+  releaseDependencies(board: Board, card: Card, reason: string) {
+    const target = releaseTarget(board.columns, card);
+    delete card.dependsOn;
+    if (target) this.moveCard(board, card.id, target.id, undefined, reason);
   }
 
   /** Moves a card to a column at an index (end when omitted). Resets its run state for that column. */

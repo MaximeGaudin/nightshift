@@ -19,7 +19,7 @@ let srv: ReturnType<typeof startServer>;
 let base = "";
 
 beforeAll(() => {
-  updateSettings({ claudePath: join(import.meta.dir, "fake-claude.ts"), maxParallel: 2, model: "settings-model" });
+  updateSettings({ claudePath: join(import.meta.dir, "fake-claude.ts"), model: "settings-model" });
   srv = startServer({ port: 0 });
   base = `http://localhost:${srv.server.port}`;
   for (const name of ["nightshift-plan", "nightshift-implement", "nightshift-review"]) {

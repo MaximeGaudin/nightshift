@@ -1,32 +1,37 @@
 import { useState } from "react";
-import type { Column } from "../shared/types.ts";
+import type { Card, Column } from "../shared/types.ts";
 import { skipOptions, submitAddCard } from "./AddCard.tsx";
 import { AppDialog } from "./components/app-dialog.tsx";
 import { Button } from "./components/ui/button.tsx";
 import { Input } from "./components/ui/input.tsx";
+import { DependencyPicker } from "./DependencyPicker.tsx";
 import { useT } from "./i18n/index.ts";
 import { SkipColumnsPicker } from "./SkipColumnsPicker.tsx";
 
 /** Create a card in the first column (Backlog), same rules as the inline add-card form. */
 export function NewCardDialog({
   columns,
+  cards = [],
   initialTitle = "",
   onAdd,
   onClose,
 }: {
   columns: Column[];
+  /** Cards the new one can depend on. */
+  cards?: Card[];
   initialTitle?: string;
-  onAdd: (title: string, skip: string[]) => void;
+  onAdd: (title: string, skip: string[], dependsOn: string[]) => void;
   onClose: () => void;
 }) {
   const { t } = useT();
   const first = columns[0];
   const [title, setTitle] = useState(initialTitle);
   const [skip, setSkip] = useState<string[]>([]);
+  const [dependsOn, setDependsOn] = useState<string[]>([]);
   if (!first) return null;
   const submit = () => {
     if (!title.trim()) return;
-    submitAddCard(title, skip, onAdd);
+    submitAddCard(title, skip, (t, s) => onAdd(t, s, dependsOn));
     onClose();
   };
   return (
@@ -61,6 +66,7 @@ export function NewCardDialog({
           }}
         />
         <SkipColumnsPicker columns={skipOptions(columns, first.id)} value={skip} onChange={setSkip} />
+        <DependencyPicker cards={cards} columns={columns} value={dependsOn} onChange={setDependsOn} />
       </div>
     </AppDialog>
   );

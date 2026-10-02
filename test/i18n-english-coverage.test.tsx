@@ -74,13 +74,13 @@ const board = { version: 1, name: "Demo", columns, cards, nextCardNumber: 5 } as
 const snap = {
   path: "/tmp/demo",
   board,
+  maxParallel: 3,
   live: { c2: "running", c3: "queued" },
   testing: [],
   progress: {},
   sequence: { status: "paused", cardId: "c1" },
 } as unknown as ProjectSnapshot;
 const settings: Settings = {
-  maxParallel: 3,
   claudePath: "claude",
   permissionMode: "bypassPermissions",
   model: "",

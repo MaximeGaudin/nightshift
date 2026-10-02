@@ -59,4 +59,7 @@ export const card: Record<keyof typeof enCard, string> = {
   "card.models.unused": "{skill} (inutilisé)",
   "card.models.clearAll": "Tout effacer",
   "card.models.save": "Enregistrer les modèles",
+  "card.deps.heading": "Dépendances",
+  "card.deps.readonly": "Modifiables seulement dans Backlog",
+  "card.deps.open": "Ouvrir {ref}",
 };

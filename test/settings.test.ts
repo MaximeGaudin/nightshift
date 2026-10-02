@@ -41,7 +41,6 @@ test("settings-reject", async () => {
     { recentProjects: "x" },
     { recentProjects: [1] },
     { model: 5 },
-    { maxParallel: "abc" },
     { soundNotifications: "yes" },
     { permissionMode: "nope" },
   ]) {
@@ -51,11 +50,34 @@ test("settings-reject", async () => {
   expect(getSettings()).toEqual(ok);
 });
 
-test("settings-clamp-max-parallel", async () => {
-  const { updateSettings } = await load();
-  expect(updateSettings({ maxParallel: 0 }).maxParallel).toBe(1);
-  expect(updateSettings({ maxParallel: 999 }).maxParallel).toBe(32);
-  expect(updateSettings({ maxParallel: 4.7 }).maxParallel).toBe(4);
+test("settings-put-ignores-maxParallel: the former global cap is dropped from any patch", async () => {
+  const { updateSettings, getSettings } = await load();
+  const before = getSettings();
+  for (const value of [5, "many", null]) {
+    const next = updateSettings({ maxParallel: value } as unknown as Partial<Settings>);
+    expect(next).toEqual(before);
+    expect("maxParallel" in next).toBe(false);
+  }
+  expect(() => updateSettings({ nope: 1 } as unknown as Partial<Settings>)).toThrow("Unknown setting: nope");
+});
+
+test("legacy-default: the file's maxParallel is the project fallback, else 3", async () => {
+  expect((await load(JSON.stringify({ maxParallel: 2 }))).legacyMaxParallel()).toBe(2);
+  expect((await load(JSON.stringify({ maxParallel: 0 }))).legacyMaxParallel()).toBe(1);
+  expect((await load(JSON.stringify({ maxParallel: "abc" }))).legacyMaxParallel()).toBe(3);
+  expect((await load(JSON.stringify({ model: "m" }))).legacyMaxParallel()).toBe(3);
+  expect((await load()).legacyMaxParallel()).toBe(3);
+});
+
+test("legacy-key-preserved: saving other settings keeps the file's maxParallel untouched", async () => {
+  const { updateSettings, getSettings, legacyMaxParallel } = await load(JSON.stringify({ maxParallel: 2, model: "" }));
+  expect("maxParallel" in getSettings()).toBe(false);
+  updateSettings({ model: "x" });
+  updateSettings({ maxParallel: 9 } as unknown as Partial<Settings>);
+  const file = JSON.parse(readFileSync(join(home, "settings.json"), "utf8"));
+  expect(file.maxParallel).toBe(2);
+  expect(file.model).toBe("x");
+  expect(legacyMaxParallel()).toBe(2);
 });
 
 test("settings-load-legacy", async () => {
@@ -80,9 +102,9 @@ test("settings-read-only: a --no-agents instance never writes the settings file"
   const original = `${JSON.stringify({ claudePath: "claude", maxParallel: 3, recentProjects: ["/real"] }, null, 2)}\n`;
   const { updateSettings, getSettings, rememberProject, setSettingsReadOnly } = await load(original);
   setSettingsReadOnly(true);
-  updateSettings({ maxParallel: 7 });
+  updateSettings({ model: "m" });
   rememberProject("/tmp/nightshift-test-card_x");
-  expect(getSettings().maxParallel).toBe(7);
+  expect(getSettings().model).toBe("m");
   expect(getSettings().recentProjects).toEqual(["/real"]);
   expect(readFileSync(join(home, "settings.json"), "utf8")).toBe(original);
 });
@@ -108,5 +130,5 @@ test("settings-language: defaults to auto, persists, rejects unknown values", as
 test("settings-language: an invalid value in the file falls back to auto", async () => {
   const { getSettings } = await load(JSON.stringify({ language: "de", maxParallel: 5 }));
   expect(getSettings().language).toBe("auto");
-  expect(getSettings().maxParallel).toBe(5);
+  expect(getSettings().model).toBe("");
 });
