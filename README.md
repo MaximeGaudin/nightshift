@@ -11,7 +11,7 @@
 - **Skill columns**: every card entering a column is processed by the skill you chose, in your project folder.
 - **Batched questions**: a blocked agent returns all its questions at once; answering resumes the same session.
 - **Feedback and resume**: send free-text feedback to the agent from any card.
-- **Sequential mode**: a play/pause button moves cards one at a time.
+- **Fast forward and pause**: one button sends every ready Backlog card through the board in parallel, another pauses automatic runs.
 - **Dependencies**: a card can wait in Backlog until other cards are done, then start on its own.
 - **One committable file**: the whole board is a single `nightshift.json`.
 - **Template skills shipped**: grill, plan, implement, review and merge, copied into new projects.
@@ -52,7 +52,7 @@ bun start ~/code/my-project                                  # open a board for 
 - When done, the agent returns structured output (`--json-schema`): updated title/description, `move` (`next`, `stay` or a column id) and a summary. Nightshift applies it to the card and, if moved into another skill column, the next skill starts automatically.
 - **Session per card**: a column continues the card's Claude session (`claude --resume`) unless it has "Fresh session" ticked, which starts a new session there (the columns after it continue that new one). New skill columns, and the default board, have "Fresh session" ticked: the card description carries what each skill needs, and the context does not grow from column to column. Untick it on a column to keep the earlier context. Boards already on disk keep their columns as they are. If the card's session cannot be resumed (deleted, or created on another machine), the step starts a new one.
 - **Questions**: when an agent is blocked on human decisions, it returns all its `questions` at once and the card waits in its column. Answering in the card resumes the same Claude session (`claude --resume`) with every Q/A pair. `AskUserQuestion` is disabled for agents.
-- **Dependencies**: a card in Backlog can depend on other cards of the board (`dependsOn`), chosen in the new card dialog or the card's detail. While one of them is not in Done, the card is held in Backlog (its tile shows "waiting #12, #15"). As soon as they are all in Done, Nightshift moves it to the first column after Backlog that it does not skip, and the column's agent starts as for a manual move; the history records "Dependencies done (#12, #15): Backlog → Grill" and the list is cleared, so a dependency leaving Done afterwards changes nothing. Dependencies can be edited only while the card is in Backlog, and a change that would create a cycle is refused. Removing the last unmet dependency, or deleting the card it waited for (a deleted dependency counts as met and is recorded as "Dependency #12 deleted"), releases the card at once. A card dragged out of Backlog by hand keeps its list but is never moved by it. Only the instance that runs the project's agents releases cards when a dependency reaches Done (never a `--no-agents` one); on opening a project it releases the cards whose dependencies finished meanwhile. The sequential mode skips held cards.
+- **Dependencies**: a card in Backlog can depend on other cards of the board (`dependsOn`), chosen in the new card dialog or the card's detail. While one of them is not in Done, the card is held in Backlog (its tile shows "waiting #12, #15"). As soon as they are all in Done, Nightshift moves it to the first column after Backlog that it does not skip, and the column's agent starts as for a manual move; the history records "Dependencies done (#12, #15): Backlog → Grill" and the list is cleared, so a dependency leaving Done afterwards changes nothing. Dependencies can be edited only while the card is in Backlog, and a change that would create a cycle is refused. Removing the last unmet dependency, or deleting the card it waited for (a deleted dependency counts as met and is recorded as "Dependency #12 deleted"), releases the card at once. A card dragged out of Backlog by hand keeps its list but is never moved by it. Only the instance that runs the project's agents releases cards when a dependency reaches Done (never a `--no-agents` one); on opening a project it releases the cards whose dependencies finished meanwhile. Fast forward skips held cards.
 - **Feedback**: from a card's detail, in any column (inert too), you can send free-text feedback to the agent. It resumes the card's last Claude session (`claude --resume`) with your text and the current card; the agent returns `move` (`stay`, `next` = the column after the card's current column, or a column id) and may ask questions as usual. A failed or cancelled run leaves the card in place and the feedback can be sent again.
 - A card is (re)run when it enters a skill column; the rerun button forces a new run. Moving or deleting a card during a run stops its agent.
 - **Progression**: a running card shows live progress (step N/M and a label). Agents emit a line `[nightshift-progress] N/M label` at each step (a numbered `## Progress` section in the card sets numbering and total); until a marker is seen, the agent's TodoWrite list is used instead. Last value wins, it resets at each (re)start of the agent and is never saved in `nightshift.json`.
@@ -85,9 +85,26 @@ Nightshift ships six template skills in the repository's own `.claude/skills/` f
 - Customize a skill by editing its project copy, or in the Skills modal.
 - If a copy fails, the board is still created and a toast names the skills that were not copied.
 
-## Sequential mode
+## Fast forward and pause
 
-A play/pause button on the board moves cards one at a time. "Play" moves the first card of the first column (the backlog) into the second one, skips inert columns (except Done), then starts the next card once the current one reaches Done. "Pause" lets the running card finish but does not start the next one. The sequence stops (with a message) if the backlog is empty, if the card is deleted or moved back to the backlog, or if its run fails, is cancelled or leaves the card in place; a pending question does not stop it. Pressing play again resumes the stopped card. The state is kept in memory (never in `nightshift.json`); the routes are `POST /api/sequence/play` and `/api/sequence/pause` (`{project}`), rejected with 409 on an instance without agents.
+Two buttons in the board header, per project.
+
+**Fast forward** (double arrow, off by default). When on, Nightshift moves every Backlog card that is not held by its dependencies out of the Backlog at once, in Backlog order, to the first column after it that the card does not skip. Each of these cards also skips the inert columns (except Done), so it goes all the way to Done without a human step. The orchestrator then runs as many of them as the project and column limits allow; the others wait as "queued". Fast forward stays on until you turn it off: a card created in, moved back to or released into the Backlog later is taken at once, and a card released by its dependencies while fast forward is on gets the same inert skips. A failed, cancelled or kept card only stops itself; the others go on.
+
+**Pause** (play by default). While paused, no automatic agent run starts in the project. A running agent finishes its work, its card moves where the result says, and then waits there with a "Paused" badge until you press play again. On play, waiting cards start in `enteredColumnAt` order within the usual limits. Fast forward does not move Backlog cards while paused.
+
+| Trigger | While paused |
+|---|---|
+| Card moved by an agent into a skill column | waits |
+| Card released by its dependencies | moves, its run waits |
+| Card dragged by hand into a skill column | moves, its run waits |
+| Retry button | starts |
+| Feedback sent from the card | starts |
+| Answer to an agent question | starts |
+
+An explicit action that starts during a pause still respects the parallel limits. Quick runs from the command palette are not paused.
+
+Both states are kept in memory (never in `nightshift.json`): after a restart, the project plays and fast forward is off. The routes are `POST /api/flow/fast-forward/on`, `/api/flow/fast-forward/off`, `/api/flow/pause` and `/api/flow/play` (`{project}`), each returning `{ flow: { fastForward, paused } }`, and rejected with 409 on an instance without agents or a project whose agents another process runs.
 
 ## Language
 
