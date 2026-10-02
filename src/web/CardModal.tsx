@@ -1,5 +1,5 @@
 import { Loader2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   BACKLOG_COLUMN_ID,
   type Board,
@@ -28,6 +28,7 @@ import { DependencyPicker } from "./DependencyPicker.tsx";
 import { FeedbackForm } from "./FeedbackForm.tsx";
 import { formatTime, useT } from "./i18n/index.ts";
 import { StatusIcon } from "./icons.tsx";
+import { dragHasFiles, handleImageTransfer, type ImagePasteDeps, type Selection } from "./imagePaste.ts";
 import { cn } from "./lib/utils.ts";
 import { Markdown } from "./markdown.tsx";
 import { NextColumnButton } from "./NextColumnButton.tsx";
@@ -334,6 +335,16 @@ export function CardModalContent({
   const [descMode, setDescMode] = useState<"preview" | "edit">(card.description.trim() ? "preview" : "edit");
   const descRef = useRef<HTMLTextAreaElement>(null);
   const focusDesc = useRef(false);
+  // Pasted images: uploads in flight (for the hint) and where to put the cursor once their references are inserted.
+  const [uploading, setUploading] = useState(0);
+  const pasteCursor = useRef<number | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: description is the trigger (the inserted references were rendered); the effect only moves the cursor
+  useLayoutEffect(() => {
+    const at = pasteCursor.current;
+    if (at === null) return;
+    pasteCursor.current = null;
+    descRef.current?.setSelectionRange(at, at);
+  }, [description]);
   // Skipped columns are saved on each change; the display follows the board snapshot (the server value wins on every update).
   const serverSkip = card.skipColumnIds ?? [];
   const [skip, setSkip] = useState(serverSkip);
@@ -350,6 +361,24 @@ export function CardModalContent({
   const editDescription = () => {
     focusDesc.current = true;
     setDescMode("edit");
+  };
+  const imageDeps: ImagePasteDeps = {
+    upload: (image) => api.uploadCardImage(project, card.id, image),
+    apply: (edit) =>
+      setDescription((text) => {
+        const next = edit(text);
+        pasteCursor.current = next.cursor;
+        return next.text;
+      }),
+    onError: notifyError,
+    busy: (delta) => setUploading((n) => n + delta),
+  };
+  // Images go where the editor's selection is; from the preview, at the end of the text, and the editor opens.
+  const imageTarget = (): Selection => {
+    const el = descRef.current;
+    if (descMode === "edit" && el) return { start: el.selectionStart, end: el.selectionEnd };
+    editDescription();
+    return { start: description.length, end: description.length };
   };
 
   useEffect(() => {
@@ -389,11 +418,32 @@ export function CardModalContent({
           </Label>
           <Input id="card-title" value={title} onChange={(e) => setTitle(e.target.value)} />
         </div>
-        <div className="card-desc flex min-h-[220px] min-w-0 flex-1 flex-col gap-1.5">
+        {/* Paste and drop work on the whole description, editor and preview alike. */}
+        {/* biome-ignore lint/a11y/noStaticElementInteractions: paste and drop handlers only; the editor and preview inside stay keyboard accessible */}
+        <div
+          className="card-desc flex min-h-[220px] min-w-0 flex-1 flex-col gap-1.5"
+          onPaste={(e) => void handleImageTransfer(e, e.clipboardData, imageTarget, imageDeps)}
+          onDragOver={(e) => {
+            if (!dragHasFiles(e.dataTransfer)) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "copy";
+          }}
+          onDrop={(e) => {
+            if (!dragHasFiles(e.dataTransfer)) return;
+            // A dropped file that is not an image must not be opened by the browser either (it would leave the board).
+            e.preventDefault();
+            if (!handleImageTransfer(e, e.dataTransfer, imageTarget, imageDeps)) notifyError(t("card.imageUnsupported"));
+          }}
+        >
           <div className="flex items-center justify-between gap-3">
             <span id="card-desc-label" className="text-xs font-medium text-muted-foreground">
               {t("card.descriptionLabel")}
             </span>
+            {uploading > 0 && (
+              <span className="card-desc-uploading mr-auto text-xs text-muted-foreground" role="status">
+                {t("card.uploadingImage")}
+              </span>
+            )}
             <Tabs value={descMode} onValueChange={(v) => (v === "edit" ? editDescription() : setDescMode("preview"))}>
               <TabsList aria-labelledby="card-desc-label">
                 <TabsTrigger value="preview">{t("card.preview")}</TabsTrigger>
@@ -420,7 +470,8 @@ export function CardModalContent({
               onDoubleClick={editDescription}
             >
               {description.trim() ? (
-                <Markdown source={description} renderImage={renderCardImage(project, card.id)} />
+                // Keyed on the saved version: an image pasted then previewed before Save is refused until saved, and must load again after.
+                <Markdown key={card.updatedAt} source={description} renderImage={renderCardImage(project, card.id)} />
               ) : (
                 <p className="text-muted-foreground">{t("card.noDescription")}</p>
               )}
