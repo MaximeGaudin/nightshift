@@ -37,6 +37,14 @@ test("total excludes Backlog, step counts from the last entry", () => {
   expect(cardTimers(card(plan, 3 * DAY + 300), columns, now)).toEqual({ totalMs: 360_000, stepMs: 60_000 });
 });
 
+test("total leaves out time spent in a custom inert column", () => {
+  const toTest: Column = { id: "totest", name: "To Test", type: "inert" };
+  const cols = [backlog, grill, toTest, plan, doneColumn()];
+  const h = history([0, "created", grill], [100, "moved", toTest], [1000, "moved", plan]);
+  const c = { ...card(plan, 1000), history: h } as Card;
+  expect(cardTimers(c, cols, T0 + 1060 * 1000)?.totalMs).toBe(160_000);
+});
+
 test("back to Backlog and out again: neither chrono nor chart counts Backlog", () => {
   const h = history([0, "created", grill], [100, "moved", backlog], [1000, "moved", grill]);
   const c = { ...card(grill, 1000), history: h } as Card;
@@ -46,7 +54,9 @@ test("back to Backlog and out again: neither chrono nor chart counts Backlog", (
   expect(cardTimers(c, columns, now)?.totalMs).toBe(sum);
 });
 
-test("no timers in Backlog or Done", () => {
+test("no timers in an inert column: Backlog, Done or To Test", () => {
+  const toTest: Column = { id: "totest", name: "To Test", type: "inert" };
+  expect(cardTimers(card(toTest, 0), [...columns, toTest], T0 + 1000)).toBeNull();
   expect(cardTimers(card(backlog, 0), columns, T0 + 1000)).toBeNull();
   expect(cardTimers(card(doneColumn(), 0), columns, T0 + 1000)).toBeNull();
 });

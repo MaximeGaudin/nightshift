@@ -59,6 +59,14 @@ test("Backlog time is never a slice, even from a legacy entry named Backlog", ()
   expect(cardTimeSlices(card([created(0, backlog)]), columns, T0 + s(30))).toEqual([]);
 });
 
+test("time in any inert column (To Test) is never a slice", () => {
+  const toTest: Column = { id: "totest", name: "To Test", type: "inert" };
+  const cols = [backlog, grill, toTest, plan, doneColumn()];
+  const h = [created(0, grill), moved(10, grill, toTest), moved(40, toTest, plan)];
+  expect(view(cardTimeSlices(card(h), cols, T0 + s(50)))).toEqual(["Grill/inert/10000", "Plan/inert/10000"]);
+  expect(view(cardTimeSlices(card([oldMoved(10, "To Test", "Plan")]), cols, T0 + s(30)))).toEqual(["Plan/legacy/20000"]);
+});
+
 test("detailed replay splits inert, queued, running and human time", () => {
   const h = [
     created(0, backlog),
@@ -101,7 +109,7 @@ test("a rerun stops human waiting at queued", () => {
   expect(view(cardTimeSlices(card(h), columns, T0 + s(50)))).toEqual(["Plan/queued/7000", "Plan/running/13000", "Plan/human/30000"]);
 });
 
-test("old cards give legacy slices for skill columns and inert for inert ones", () => {
+test("old cards give legacy slices for skill columns and nothing for inert ones", () => {
   const h: HistoryEntry[] = [
     { at: at(0), kind: "created", text: "Created in Backlog" },
     oldMoved(10, "Backlog", "Grill"),
