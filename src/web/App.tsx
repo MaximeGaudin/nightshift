@@ -222,7 +222,7 @@ export function App() {
   }
   if (!snap) return <BoardSkeleton />;
 
-  const running = Object.values(snap.live).filter((s) => s === "running").length;
+  const { running, max } = activeAgents(snap);
   const queued = Object.values(snap.live).filter((s) => s === "queued").length;
   const questions = snap.board.cards.filter(
     (c) => !snap.live[c.id] && c.lastRun?.status === "question" && c.lastRun.columnId === c.columnId,
@@ -247,7 +247,7 @@ export function App() {
         </div>
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground" aria-live="polite">
           <span className={`size-1.5 rounded-full ${running ? "bg-ok" : "bg-muted-foreground/40"}`} aria-hidden="true" />
-          {t("board.app.agentsActive", { running, max: settings?.maxParallel ?? "?" })}
+          {t("board.app.agentsActive", { running, max })}
           {queued > 0 && <span> · {t("board.app.queued", { count: queued })}</span>}
           {questions > 0 && <span className="font-medium text-warn">· {tn("board.app.questions", questions)}</span>}
         </div>
@@ -309,6 +309,7 @@ export function App() {
         <SettingsModal
           settings={settings}
           currentProject={snap.path}
+          projectMaxParallel={snap.maxParallel}
           onOpenProject={(p) => {
             setModal(null);
             setProject(p);
@@ -351,6 +352,13 @@ export function App() {
       )}
     </div>
   );
+}
+
+/** Header counter: this project's running card agents and quick runs, against this project's cap (same scope). */
+export function activeAgents(snap: Pick<ProjectSnapshot, "live" | "quickRuns" | "maxParallel">): { running: number; max: number } {
+  const cards = Object.values(snap.live).filter((s) => s === "running").length;
+  const quick = snap.quickRuns.filter((q) => q.status === "running").length;
+  return { running: cards + quick, max: snap.maxParallel };
 }
 
 /** True when the sequential mode is running or paused on this card. */
