@@ -460,7 +460,7 @@ export function CardModalContent({
             />
           ) : (
             <div
-              className="card-desc-body card-desc-preview min-h-0 min-w-0 flex-1 cursor-text overflow-auto rounded-md border bg-card px-3 py-2 transition-colors duration-150 hover:border-input"
+              className="card-desc-body card-desc-preview min-h-0 min-w-0 flex-1 cursor-text overflow-auto rounded-lg border bg-lane px-3 py-2 transition-colors duration-150 hover:border-input"
               role="tabpanel"
               // biome-ignore lint/a11y/noNoninteractiveTabindex: the scrollable preview must be reachable by keyboard
               tabIndex={0}
@@ -497,7 +497,7 @@ export function CardModalContent({
         <CardModelsEditor key={card.id} project={project} card={card} board={board} settings={settings} />
         {asking && lr && (
           <form
-            className="question flex max-h-[60%] min-w-0 shrink-0 flex-col gap-3 overflow-auto rounded-md border border-warn/30 bg-warn-soft p-3"
+            className="question flex max-h-[60%] min-w-0 shrink-0 flex-col gap-3 overflow-auto rounded-lg border border-warn/30 bg-warn-soft p-3"
             onSubmit={(e) => {
               e.preventDefault();
               if (answers.some((a) => a.trim()))
@@ -573,7 +573,7 @@ export function CardModalContent({
         </Tabs>
         {tab === "log" && <RunProgress progress={progress} live={live} />}
         <div
-          className="log min-h-[320px] flex-[1_0_320px] overflow-auto rounded-md border bg-card px-3 py-2 font-mono text-xs leading-relaxed"
+          className="log min-h-[320px] flex-[1_0_320px] overflow-auto rounded-lg border bg-lane px-3 py-2 font-mono text-xs leading-relaxed"
           ref={logRef}
         >
           {tab === "log" ? (
@@ -651,7 +651,7 @@ function CopyRef({ card }: { card: Card }) {
   return (
     <button
       type="button"
-      className="card-ref-copy cursor-pointer rounded-sm px-0.5 font-normal text-muted-foreground tabular-nums hover:text-foreground hover:underline"
+      className="card-ref-copy cursor-pointer rounded-md px-0.5 font-normal text-muted-foreground tabular-nums hover:text-foreground hover:underline"
       title={t("card.copyRef")}
       onClick={(e) => {
         e.stopPropagation();

@@ -5,6 +5,7 @@ import { Button } from "./components/ui/button.tsx";
 import { Input } from "./components/ui/input.tsx";
 import { useT } from "./i18n/index.ts";
 import { Logo } from "./Logo.tsx";
+import { cn } from "./lib/utils.ts";
 
 export function ProjectPicker({
   recent,
@@ -60,7 +61,7 @@ export function ProjectPicker({
       <section className="flex flex-col gap-2">
         <h2 className="text-[15px] font-semibold">{t("board.picker.recent")}</h2>
         {recent.length > 0 ? (
-          <ul className="flex flex-col rounded-lg border bg-card p-1">
+          <ul className={cn("flex flex-col rounded-lg border p-1", embedded ? "bg-lane" : "bg-card")}>
             {recent.map((p) => (
               <li key={p}>
                 <button type="button" className={`${row} ${p === current ? "bg-secondary" : ""}`} onClick={() => onPick(p)}>
@@ -112,7 +113,7 @@ export function ProjectPicker({
           </p>
         )}
         {browse && (
-          <ul className="flex max-h-64 flex-col overflow-y-auto rounded-lg border bg-card p-1">
+          <ul className={cn("flex max-h-64 flex-col overflow-y-auto rounded-lg border p-1", embedded ? "bg-lane" : "bg-card")}>
             {browse.parent && (
               <li>
                 <button type="button" className={row} onClick={() => go(browse.parent ?? undefined)}>

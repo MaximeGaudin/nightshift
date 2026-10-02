@@ -107,7 +107,7 @@ function SortableColumnRow({ col, skills, skillsLoading, cardCount, reducedMotio
     <li
       ref={setNodeRef}
       style={style}
-      className={`${col.type} rounded-md border bg-card ${isDragging ? "relative z-10 opacity-80 shadow-xs" : ""}`}
+      className={`${col.type} rounded-lg border bg-lane ${isDragging ? "relative z-10 opacity-80 shadow-xs" : ""}`}
     >
       <Collapsible open={open} onOpenChange={setOpen}>
         <div className="col-editor-row flex flex-wrap items-center gap-2 px-2 py-1.5">
@@ -254,7 +254,7 @@ function SortableColumnRow({ col, skills, skillsLoading, cardCount, reducedMotio
 function LockedSystemRow({ col, name, onPatch }: { col: Draft; name: string; onPatch: (p: Partial<Column>) => void }) {
   const { t } = useT();
   return (
-    <li className="locked rounded-md border bg-secondary">
+    <li className="locked rounded-lg border bg-secondary">
       <div className="col-editor-row flex items-center gap-2 px-2 py-1.5">
         <span className="flex size-7 shrink-0 items-center justify-center text-muted-foreground">
           <Lock className="size-3.5" aria-hidden="true" />

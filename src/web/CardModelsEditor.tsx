@@ -101,7 +101,7 @@ export function CardModelsEditor({
   };
   const overrides = Object.keys(buildModels(server)).length;
   return (
-    <details className="card-models min-w-0 rounded-md border p-3">
+    <details className="card-models min-w-0 rounded-lg border bg-lane p-3">
       <summary className="cursor-pointer text-xs font-medium select-none hover:text-foreground">
         {t("card.models.title")}
         {overrides > 0 ? ` (${overrides})` : ""}

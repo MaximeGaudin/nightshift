@@ -137,7 +137,7 @@ export function TestPanel({
           </Button>
         )}
       </div>
-      <pre className="test-command m-0 rounded-sm bg-secondary px-2 py-1.5 font-mono text-xs leading-normal break-all whitespace-pre-wrap">
+      <pre className="test-command m-0 rounded-md bg-secondary px-2 py-1.5 font-mono text-xs leading-normal break-all whitespace-pre-wrap">
         {card.test?.command}
       </pre>
       {linkUrl && (
@@ -156,7 +156,7 @@ export function TestPanel({
       )}
       {showOutput && lines.length > 0 && (
         <div
-          className="log test-output max-h-[180px] min-h-0 flex-none overflow-auto rounded-sm bg-secondary px-2 py-1.5 font-mono text-xs leading-relaxed"
+          className="log test-output max-h-[180px] min-h-0 flex-none overflow-auto rounded-md bg-secondary px-2 py-1.5 font-mono text-xs leading-relaxed"
           ref={outRef}
         >
           {lines.map((l, i) => (
