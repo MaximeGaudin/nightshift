@@ -141,7 +141,9 @@ export function App() {
   // On load, open the other stored tabs so their counters are live; with no project in the URL, show the first tab.
   // biome-ignore lint/correctness/useExhaustiveDependencies: runs once, with the tabs read from storage
   useEffect(() => {
-    const current = readProjectParam();
+    const first = tabsRef.current.tabs[0];
+    // The active project is opened by the effect above: with no project in the URL, that is the first tab.
+    const current = readProjectParam() ?? first;
     for (const path of tabsRef.current.tabs) {
       if (path === current) continue;
       api
@@ -149,8 +151,7 @@ export function App() {
         .then((s) => setTabsState((st) => tabOpened(st, path, s)))
         .catch((e) => setTabsState((st) => tabOpenFailed(st, path, e.message)));
     }
-    const first = tabsRef.current.tabs[0];
-    if (!current && first) setProject(first);
+    if (!readProjectParam() && first) setProject(first);
   }, []);
 
   // Dialogs, the open card and the palette belong to the project they were opened on.
