@@ -372,7 +372,7 @@ export function Board({
                 <CompactColumnBand col={col} onAdd={() => setExpanded(col.id)} />
               ) : (
                 <>
-                  <header className="column-head group/head flex min-w-0 items-center gap-2 px-1.5 pt-0.5 pb-2">
+                  <header className="column-head group/head relative flex min-w-0 items-center gap-2 px-1.5 pt-0.5 pb-2">
                     <div className="column-title flex max-w-[60%] min-w-0 shrink-0 items-center gap-2">
                       <ColumnGlyph col={col} />
                       <h2 className="truncate text-[13px] font-medium">{col.name}</h2>
@@ -388,7 +388,12 @@ export function Board({
                     </div>
                     {col.type === "skill" ? (
                       <div className="column-badges ml-auto flex min-w-0 gap-1">
-                        <Badge variant="default" dot="primary" className="badge skill min-w-0 shrink" title={col.instructions || undefined}>
+                        <Badge
+                          variant="default"
+                          dot="primary"
+                          className="badge skill min-w-0 shrink gap-1 px-1.5"
+                          title={col.instructions || undefined}
+                        >
                           <span className="truncate">{col.skill || t("board.column.noSkill")}</span>
                         </Badge>
                         {col.model && (
@@ -454,10 +459,9 @@ export function Board({
 function ColumnHeadActions({ onEdit, onAdd }: { onEdit?: () => void; onAdd: () => void }) {
   const { t } = useT();
   const stop = (e: { stopPropagation: () => void }) => e.stopPropagation();
-  const reveal =
-    "size-6 text-muted-foreground opacity-0 hover:text-foreground group-hover/head:opacity-100 group-focus-within/head:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100";
+  const reveal = "size-6 text-muted-foreground hover:text-foreground";
   return (
-    <div className="column-actions flex shrink-0 items-center gap-0.5">
+    <div className="column-actions pointer-events-none absolute top-0 right-1 flex items-center gap-0.5 rounded-md bg-lane pl-1 opacity-0 transition-opacity duration-150 group-hover/head:pointer-events-auto group-hover/head:opacity-100 group-focus-within/head:pointer-events-auto group-focus-within/head:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:static [@media(hover:none)]:opacity-100">
       {onEdit && (
         <IconButton
           label={t("board.column.edit")}
