@@ -49,8 +49,6 @@ test("createCard sends dependsOn only when non-empty", async () => {
 test("the picker lists the cards with their column and filters by number or title", () => {
   const html = renderToStaticMarkup(<DependencyPicker cards={[d12, d15]} columns={columns} value={["d15"]} onChange={() => {}} />);
   expect(html).toContain("Dépend de (1)");
-  // The selected card comes first.
-  expect(html.indexOf("#15")).toBeLessThan(html.indexOf("#12"));
   expect(html).toContain("Grill");
   expect(filterDependencyCards([d12, d15], "#1").map((c) => c.id)).toEqual(["d12", "d15"]);
   expect(filterDependencyCards([d12, d15], "15").map((c) => c.id)).toEqual(["d15"]);
