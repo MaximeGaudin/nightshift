@@ -179,7 +179,13 @@ test("palette-skill-description-first", () => {
   };
   // A description-only skill match still beats the card title.
   expect(score("skill:lint", "grill")).toBeGreaterThan(score("card:card_5", "grill"));
-  expect(orderGroups([...groups], cmds.filter((c) => c.id !== "skill:nightshift-grill"), "grill")[0]).toBe("skills");
+  expect(
+    orderGroups(
+      [...groups],
+      cmds.filter((c) => c.id !== "skill:nightshift-grill"),
+      "grill",
+    )[0],
+  ).toBe("skills");
   expect(score("skill:nightshift-grill", "grill")).toBeGreaterThan(score("skill:lint", "grill"));
   // Keyword match ("lancer") puts skills first.
   expect(orderGroups([...groups], cmds, "lancer")[0]).toBe("skills");
