@@ -16,3 +16,9 @@ test("template-skills-worktree-policy: implement and merge describe the three po
   expect(merge).toContain("Decide from `## Result`");
   expect(merge).toContain("never `--force`");
 });
+
+test("template-skills-worktree-policy: review handles a card committed on the base without a worktree", () => {
+  const review = skill("nightshift-review");
+  expect(review).toContain("Worktree: none");
+  expect(review).toContain("Skip the next two bullets");
+});

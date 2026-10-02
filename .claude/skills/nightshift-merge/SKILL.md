@@ -25,7 +25,7 @@ Progress marker: at the start of each step, write `[nightshift-progress] N/M lab
 
 1. Read the card. Branch is `nightshift/<card-id>`. Worktree path is the `Worktree` line under `## Result`. If that line is missing, find the path with `git worktree list`.
    - If the prompt has no card: set `move` to `stay`, ask one question for the card id, and stop.
-   - When `## Result` has `Worktree: none`: the card has no branch and no worktree. Take the lock (step 2), stop the card's test environment (step 3), then do the no-worktree merge below instead of steps 4 to 9, and remove the lock.
+   - When `## Result` has `Worktree: none`: the card has no branch and no worktree. Take the lock (step 2), stop the card's test environment (step 3), then do the no-worktree merge below instead of the next bullet and steps 4 to 9 (there is no branch to look for), and remove the lock.
      1. The base is the `Base` line under `## Result` (a retried run keeps the `Into:` of an earlier `## Merge`). Without a usable branch name, ask once (see Questions).
      2. Check the card's commits are on it: the `Commits` line under `## Result` lists them, and each must satisfy `git merge-base --is-ancestor <sha> <base>`. A missing one: set `move` to `stay`, write which under `## Merge`, and stop. Do not cherry-pick.
      3. Push the base as in step 8: `git push <remote> <base>` to the remote of its upstream, never `--force`, never `--no-verify`; no upstream means `Pushed: skipped, no upstream`. A rejection or error follows step 8 (no step 7 to go back to: fetch, and if the remote moved, fast-forward the base to it when the checkout is clean, then push once more).
