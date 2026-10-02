@@ -1,6 +1,8 @@
 import { Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { unmetDependencies } from "../shared/dependencies.ts";
 import {
+  BACKLOG_COLUMN_ID,
   type Board,
   type Card,
   canSendFeedback,
@@ -23,6 +25,7 @@ import { Label } from "./components/ui/label.tsx";
 import { Skeleton } from "./components/ui/skeleton.tsx";
 import { Tabs, TabsList, TabsTrigger } from "./components/ui/tabs.tsx";
 import { Textarea } from "./components/ui/textarea.tsx";
+import { DependencyPicker } from "./DependencyPicker.tsx";
 import { FeedbackForm } from "./FeedbackForm.tsx";
 import { formatTime, useT } from "./i18n/index.ts";
 import { StatusIcon } from "./icons.tsx";
@@ -60,6 +63,112 @@ export async function saveSkipColumns({
   }
 }
 
+/** Saves the card's dependencies at once, on their own; the server answer (a cycle…) goes to `onError`. */
+export async function saveDependencies({
+  project,
+  cardId,
+  ids,
+  onError,
+  update = api.updateCard,
+}: {
+  project: string;
+  cardId: string;
+  ids: string[];
+  onError: (message: string) => void;
+  update?: (project: string, id: string, patch: { dependsOn: string[] }) => Promise<unknown>;
+}): Promise<boolean> {
+  try {
+    await update(project, cardId, { dependsOn: ids });
+    return true;
+  } catch (e) {
+    onError(e instanceof Error ? e.message : String(e));
+    return false;
+  }
+}
+
+/**
+ * The cards this card waits for, with their current column. Editable only while the card is in Backlog;
+ * a refused change (cycle, card no longer in Backlog) is shown here and the list goes back to the server value.
+ */
+export function DependenciesSection({
+  project,
+  card,
+  board,
+  onOpenCard,
+  update,
+}: {
+  project: string;
+  card: Card;
+  board: Board;
+  onOpenCard?: (id: string) => void;
+  update?: (project: string, id: string, patch: { dependsOn: string[] }) => Promise<unknown>;
+}) {
+  const { t } = useT();
+  const serverDeps = card.dependsOn ?? [];
+  const [deps, setDeps] = useState(serverDeps);
+  const [error, setError] = useState<string | null>(null);
+  const depsKey = serverDeps.join(",");
+  // biome-ignore lint/correctness/useExhaustiveDependencies: depsKey is the trigger (the server list changed); serverDeps is derived from it
+  useEffect(() => setDeps(serverDeps), [depsKey]);
+  const editable = card.columnId === BACKLOG_COLUMN_ID;
+  if (!editable && serverDeps.length === 0) return null;
+  const unmet = new Set(unmetDependencies(board, card).map((c) => c.id));
+  const listed = serverDeps.flatMap((id) => {
+    const dep = board.cards.find((c) => c.id === id);
+    return dep ? [dep] : [];
+  });
+  return (
+    <section className="card-deps flex flex-col gap-1.5 text-xs">
+      <span className="font-medium text-muted-foreground">{t("card.deps.heading")}</span>
+      {listed.length > 0 && (
+        <ul className="card-deps-list m-0 flex list-none flex-col gap-0.5 p-0">
+          {listed.map((dep) => {
+            const column = board.columns.find((c) => c.id === dep.columnId);
+            return (
+              <li key={dep.id} className="flex min-w-0 items-center gap-1.5">
+                <button
+                  type="button"
+                  className="card-deps-ref cursor-pointer tabular-nums text-primary hover:underline"
+                  aria-label={t("card.deps.open", { ref: cardRef(dep) })}
+                  onClick={() => onOpenCard?.(dep.id)}
+                >
+                  {cardRef(dep)}
+                </button>
+                <span className="min-w-0 flex-1 truncate">{dep.title}</span>
+                <span className="shrink-0 text-muted-foreground">
+                  {column?.name}
+                  {!unmet.has(dep.id) ? ` · ${t("card.deps.done")}` : ""}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {editable ? (
+        <DependencyPicker
+          cards={board.cards.filter((c) => c.id !== card.id)}
+          columns={board.columns}
+          value={deps}
+          onChange={(ids) => {
+            setDeps(ids);
+            setError(null);
+            void saveDependencies({ project, cardId: card.id, ids, onError: setError, update }).then((ok) => {
+              if (!ok) setDeps(serverDeps);
+            });
+          }}
+        />
+      ) : (
+        <span className="card-deps-readonly text-muted-foreground">{t("card.deps.readonly")}</span>
+      )}
+      {error && (
+        <Alert variant="destructive" className="card-deps-error">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+    </section>
+  );
+}
+
 type CardModalProps = {
   project: string;
   card: Card;
@@ -70,6 +179,8 @@ type CardModalProps = {
   /** The sequential mode is working on this card. */
   sequential?: boolean;
   onClose: () => void;
+  /** Opens another card of the board (a dependency). */
+  onOpenCard?: (id: string) => void;
   /** Receives errors that happen after the card is closed (a failed save), to show them in the application banner. */
   onError: (message: string) => void;
 };
@@ -209,6 +320,7 @@ export function CardModalContent({
   progress,
   testing,
   draft,
+  onOpenCard,
 }: CardModalProps & {
   draft: CardDraft;
 }) {
@@ -334,6 +446,7 @@ export function CardModalContent({
             });
           }}
         />
+        <DependenciesSection project={project} card={card} board={board} onOpenCard={onOpenCard} />
         <CardModelsEditor project={project} card={card} board={board} settings={settings} />
         {asking && lr && (
           <form

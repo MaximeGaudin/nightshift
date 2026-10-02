@@ -26,6 +26,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { isHeld, unmetDependencies } from "../shared/dependencies.ts";
 import { resolveNextColumn, skippedColumns } from "../shared/skip.ts";
 import { type Card, type Column, cardRef, columnMaxParallel, isDoneColumn, type ProjectSnapshot } from "../shared/types.ts";
 import { AddCard, skipOptions } from "./AddCard.tsx";
@@ -311,6 +312,7 @@ export function Board({
         progress={snap.progress?.[card.id]}
         next={next ? { name: next.name } : undefined}
         skipped={skippedColumns(columns, card).map((c) => c.name)}
+        waitingFor={isHeld(card) ? unmetDependencies(snap.board, card).map(cardRef) : undefined}
         onSendNext={next ? () => sendNext(card, next.id) : undefined}
         sending={sending.has(card.id)}
         sequential={isSequential(snap, card.id)}
