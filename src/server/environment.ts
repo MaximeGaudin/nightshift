@@ -32,6 +32,7 @@ function oneLine(s: string): string {
 function marker(card: Card, live: Record<string, LiveStatus>): string {
   if (live[card.id] === "running") return " [running]";
   if (live[card.id] === "queued") return " [queued]";
+  if (live[card.id] === "paused") return " [paused]";
   return agentBlocker(card) === "question" ? " [question]" : "";
 }
 

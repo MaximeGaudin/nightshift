@@ -43,14 +43,16 @@ test("environment other cards: caps at 20, marks states, hides current card, Don
     mk("run", 1, "impl"),
     mk("ask", 2, "impl", { lastRun: { status: "question", columnId: "impl" } as Card["lastRun"] }),
     mk("done", 3, DONE_COLUMN_ID),
+    mk("wait", 5, "impl"),
   ];
   const current = mk("cur", 4, "plan");
-  const out = buildEnvironment(boardWith([...cards, current]), current, { run: "running" });
+  const out = buildEnvironment(boardWith([...cards, current]), current, { run: "running", wait: "paused" });
   expect(out).toContain("#100 title 100");
   expect(out).toContain("#119 title 119");
   expect(out).not.toContain("#120 ");
   expect(out).toContain("… and 5 more");
   expect(out).toContain("#1 title 1 [running]");
+  expect(out).toContain("#5 title 5 [paused]");
   expect(out).toContain("#2 title 2 [question]");
   expect(out).not.toContain("#3 title 3");
   expect(out).not.toContain("#4 title 4");
