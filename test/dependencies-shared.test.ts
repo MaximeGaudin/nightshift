@@ -10,7 +10,7 @@ import {
   unmetDependencies,
   wouldCreateCycle,
 } from "../src/shared/dependencies.ts";
-import { topSourceCard } from "../src/shared/sequence.ts";
+import { fastForwardCandidates } from "../src/shared/flow.ts";
 import { BACKLOG_COLUMN_ID, type Board, type Card, type Column, DONE_COLUMN_ID } from "../src/shared/types.ts";
 
 const columns: Column[] = [
@@ -79,10 +79,10 @@ test("releaseTarget is the first column after Backlog the card does not skip", (
   expect(releaseTarget(columns, { skipColumnIds: ["col_grill", "col_plan"] })?.id).toBe(DONE_COLUMN_ID);
 });
 
-test("topSourceCard skips cards held by their dependencies", () => {
+test("fastForwardCandidates skips cards held by their dependencies", () => {
   const held = card("h", 1, { dependsOn: ["d"] });
   const free = card("f", 2);
   const dep = card("d", 3, { columnId: "col_grill" });
-  expect(topSourceCard(board([held, free, dep]))?.id).toBe("f");
-  expect(topSourceCard(board([held, dep]))).toBeUndefined();
+  expect(fastForwardCandidates(board([held, free, dep])).map((c) => c.id)).toEqual(["f"]);
+  expect(fastForwardCandidates(board([held, dep]))).toEqual([]);
 });

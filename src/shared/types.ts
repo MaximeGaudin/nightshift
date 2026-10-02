@@ -1,6 +1,6 @@
 // Types shared by the server and the web client.
 
-import type { SequenceState } from "./sequence.ts";
+import type { FlowState } from "./flow.ts";
 
 export type ColumnType = "inert" | "skill";
 
@@ -304,8 +304,8 @@ export interface SkillInfo {
   path: string;
 }
 
-/** Live (non-persisted) state of a card in the run queue. */
-export type LiveStatus = "queued" | "running";
+/** Live (non-persisted) state of a card in the run queue; "paused" waits for the project to leave pause. */
+export type LiveStatus = "queued" | "running" | "paused";
 
 /** Whether the user may send free feedback to the card's last session. */
 export function canSendFeedback(card: Card, live?: LiveStatus): boolean {
@@ -394,8 +394,8 @@ export interface ProjectSnapshot {
   progress: Record<string, RunProgress>;
   /** Quick runs not finished yet, sorted by createdAt. */
   quickRuns: QuickRun[];
-  /** Sequential mode: cards of the first column are fed one at a time into the second. */
-  sequence: SequenceState;
+  /** Fast forward and pause, in memory per project. */
+  flow: FlowState;
 }
 
 /** Why a card needs a human: it reached an inert column, asks questions, or its run failed. */
