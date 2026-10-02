@@ -34,7 +34,7 @@ claude -p "hi"                                               # check Claude Code
 bun start ~/code/my-project                                  # open a board for your project (opens http://localhost:4545)
 ```
 
-1. On first launch Nightshift creates `nightshift.json` in your project and copies the 5 template skills into `<project>/.claude/skills/`. There is no skill install step.
+1. On first launch Nightshift creates `nightshift.json` in your project and copies the 6 template skills into `<project>/.claude/skills/`. There is no skill install step.
 2. Create a card in Backlog with a one-sentence request.
 3. Drag it into Grill.
 
@@ -72,7 +72,7 @@ Errors are `{ "error": "..." }`: 400 for an invalid body, 404 when the project h
 
 ## Template skills
 
-Nightshift ships five template skills in the repository's own `.claude/skills/` folder: `nightshift-grill`, `nightshift-plan`, `nightshift-implement`, `nightshift-review` and `nightshift-merge`. They are both the skills Nightshift runs on its own board and the templates for other projects: edit them there.
+Nightshift ships six template skills in the repository's own `.claude/skills/` folder: `nightshift-grill`, `nightshift-plan`, `nightshift-implement`, `nightshift-review`, `nightshift-merge`, and `nightshift-submit` (lets an agent add a card to the project's backlog through `POST /api/backlog`). They are both the skills Nightshift runs on its own board and the templates for other projects: edit them there.
 
 - When a new project gets its `nightshift.json` (the first time you open a folder), they are copied into `<project>/.claude/skills/`. A skill folder that already exists is never overwritten, and existing projects are left untouched.
 - Project skills shadow the skills in `~/.claude/skills` (`NIGHTSHIFT_USER_SKILLS` overrides that user directory). Delete `<project>/.claude/skills/<name>` to fall back to your user skill of the same name.

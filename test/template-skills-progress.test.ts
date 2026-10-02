@@ -3,7 +3,9 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const SKILLS = join(import.meta.dir, "..", ".claude", "skills");
-const dirs = readdirSync(SKILLS).filter((d) => d.startsWith("nightshift-"));
+// Column skills only: nightshift-submit is called from any chat or agent to add a card, never by a column run.
+const NOT_COLUMN_SKILLS = ["nightshift-submit"];
+const dirs = readdirSync(SKILLS).filter((d) => d.startsWith("nightshift-") && !NOT_COLUMN_SKILLS.includes(d));
 
 function stepsSection(md: string): string {
   const start = md.indexOf("\n## Steps\n");

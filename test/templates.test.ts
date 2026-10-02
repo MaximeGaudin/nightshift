@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { type ChildServer, removeTempDirs, startChildServer, tempDir } from "./helpers.ts";
 
 const REPO_SKILLS = join(import.meta.dir, "..", ".claude", "skills");
-const NAMES = ["nightshift-grill", "nightshift-implement", "nightshift-merge", "nightshift-plan", "nightshift-review"];
+const NAMES = ["nightshift-grill", "nightshift-implement", "nightshift-merge", "nightshift-plan", "nightshift-review", "nightshift-submit"];
 
 let srv: ChildServer;
 beforeAll(async () => {
