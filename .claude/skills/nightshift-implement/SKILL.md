@@ -1,15 +1,15 @@
 ---
 name: nightshift-implement
-description: Implements a Nightshift card from its specification, in its own git worktree. Launches one agent per parallel task, captures result screenshots, and checks the definition of done. Use when a Nightshift skill column implements a specified card.
+description: Implements a Nightshift card from its specification, in its own git worktree. Runs every task in one agent session, captures result screenshots, and checks the definition of done. Use when a Nightshift skill column implements a specified card.
 ---
 
 # Nightshift Implement
 
-Take a specified brief and implement it using as many parallel agents as specified in the ticket.
+Take a specified brief and implement it with one agent session that runs every task of the ticket, in order.
 
-The ticket is the card description: the specification from `nightshift-plan`, with `## Tasks` waves. A wave whose heading contains `parallel` gets one agent per task in that wave, all started together. A `sequential` wave gets one agent at a time. Do not add agents. Do not collapse a parallel wave into one agent.
+The ticket is the card description: the specification from `nightshift-plan`, with `## Tasks` waves. Tasks run in wave order, then in task order inside the wave, all in the same agent session. `parallel` in a wave heading only says the tasks are independent: they still run one after another. Start one agent for the whole card, never one per task.
 
-You are the orchestrator. Other implementation cards may run on this repository at the same time. This run uses its own git worktree. Task agents each use another worktree. Nobody edits the shared checkout.
+You are the orchestrator. Other implementation cards may run on this repository at the same time. This run uses its own git worktree, and the agent session works in that same worktree. Nobody edits the shared checkout.
 
 ## Prerequisites
 
@@ -25,19 +25,16 @@ Progress marker: at the start of each step, write `[nightshift-progress] N/M lab
 
 1. Read the card. List every wave in order, and every task under it (`Owns`, `Hard part`, `Done when`, `Depends on`).
    - If the prompt has no card: set `move` to `stay`, ask one question for the specification, and stop.
-2. If a parallel task has no `Owns`, or two tasks in the same parallel wave list the same path, do not implement. Ask every blocker at once. See Questions.
-   - When `## Tasks` is missing, the card skipped `nightshift-plan` (grill's `Route: implement`): plan it yourself, briefly, without asking. Add to the description `## Plan` (the approach in a few lines, the files you expect to touch, the risk to watch), `## Progress` with one line `- [ ] 1. <card title>`, and `## Definition of done` built from `## Acceptance` (plus "affected tests pass" and "full suite: deferred to review"). Then implement it as one sequential task **yourself, in this run's worktree**: no task branch, no task worktree, no merge. When the work is above your model (see `nightshift-plan`'s Models: an `opus` kind of task while you run a smaller model), launch one agent with `opus` in this run's worktree instead.
+2. If `## Tasks` is missing and the card does not say `Route: implement`, do not implement. Ask every blocker at once. See Questions.
+   - When `## Tasks` is missing and the card says `Route: implement`, the card skipped `nightshift-plan`: plan it yourself, briefly, without asking. Add to the description `## Plan` (the approach in a few lines, the files you expect to touch, the risk to watch), `## Progress` with one line `- [ ] 1. <card title>`, and `## Definition of done` built from `## Acceptance` (plus "affected tests pass" and "full suite: deferred to review"). Then implement it as one sequential task **yourself, in this run's worktree**: no task branch, no task worktree, no merge. When the work is above your model (see `nightshift-plan`'s Models: an `opus` kind of task while you run a smaller model), launch one agent with `opus` in this run's worktree instead.
 3. Create this run's worktree before any commit, test, or edit. First record the base: the branch checked out in the shared checkout (`git symbolic-ref --short HEAD`, for example `WIP` or `main`) and its SHA (`git rev-parse HEAD`). On a detached `HEAD`, the base is `detached`. The card starts from that branch and `nightshift-merge` merges it back into it. Branch `nightshift/<card-id>`, directory from `mktemp -d`, then `git worktree add -b nightshift/<card-id> <dir> HEAD`. On failure: delete nothing, write the command and the error under `## Result`, set `move` to `stay`, and stop. Every command from here runs in that directory. Leave pending files in the shared checkout as they are.
    - Seed the test selection cache: when the board project keeps one that git ignores (for example `.testmondata` for pytest-testmon), copy it to the same path in the worktree (`cp`, never a link). It tells the runner which tests each piece of code runs, so the affected-tests command runs in seconds instead of running everything.
 4. In the worktree, commit any pending changes before changing anything. Run `git status --porcelain`. If the output is empty, skip the commit. Otherwise commit those paths, except `.env` and credential files, in one commit: `chore: save pending work before implementation`. Do not use `--no-verify` and do not amend. If the hook changes files, add them in a new commit.
 5. Do not run the full test suite: it runs once, at the end of `nightshift-review`. Record the starting point instead: run the affected-tests command (see Tests) once, against the base SHA, before any implementation. With no change yet it runs only the tests that already fail on the base, or the tests of the area the card touches: their failures are the baseline, written under `## Result`. Continue even when some fail; the card must not add new failures.
-6. For each wave, in order:
-   - Create one branch `nightshift/<card-id>/<task-slug>` and one worktree outside the repository (`mktemp -d`, then `git worktree add -b <branch> <dir> nightshift/<card-id>`). The task agent works only in that directory. On failure: delete nothing, write the command and the error under `## Result`, set `move` to `stay`, and stop.
-   - Start the agents for this wave. Parallel: every task in one step, before any of them returns. Sequential: the next task starts only after the previous task's agent has returned and its checks passed.
-   - Wait for the wave. From this run's worktree, merge each task branch into `nightshift/<card-id>` in task order (`git merge --no-edit`). On a conflict, keep the file for the task whose `Owns` lists it. If neither task owns the file, keep both unique hunks and do not drop tests.
-   - After a task merges, check its line in `## Progress` (`- [ ]` becomes `- [x]`). Leave every later line unchecked. On a stop, return the description with only the merged lines checked.
-   - Remove the task worktree (`git worktree remove`) only after that branch is merged. On a failed task, leave the worktree and record its path.
-7. Run the affected-tests command (see Tests) in this run's worktree, against the base SHA. Then the items of `## Definition of done` and the tests of `## Tests` that this command does not cover, except the full suite gate (the project's whole check or test command): write "deferred to review" next to that item instead of running it. A new failure (not in the baseline of step 5): repair once with a new agent in that task's worktree, merge again, re-run the affected tests. A second failure: set `move` to `stay`, write the command and the output under `## Result`, and stop. Do not commit a red tree.
+6. Run every task in one agent session, in this run's worktree. No task branch, no task worktree, no task merge. Follow the Session protocol below: choose the model, choose the transport, send task 1 with the session rules, then every following task as a message to the same session, in wave order.
+   - Between messages, check the task: the tests that name it in `## Tests` pass, the reply lists new commits on `nightshift/<card-id>` (verify with `git log`), and `git status --porcelain` is clean. Then check its line in `## Progress` (`- [ ]` becomes `- [x]`) and send the next task. Leave every later line unchecked. On a stop, return the description with only the finished lines checked.
+   - A failing check: send one repair message to the same session (the failing command and its output), then check again. A second failure of the same check: set `move` to `stay`, write the command and the output under `## Result`, and stop.
+7. Run the affected-tests command (see Tests) in this run's worktree, against the base SHA. Then the items of `## Definition of done` and the tests of `## Tests` that this command does not cover, except the full suite gate (the project's whole check or test command): write "deferred to review" next to that item instead of running it. A new failure (not in the baseline of step 5): send one repair message to the same session, then re-run the affected tests. A second failure of that check: set `move` to `stay`, write the command and the output under `## Result`, and stop. Do not commit a red tree.
 8. In this run's worktree, commit everything still uncommitted, in small modular commits: one cohesive behavior per commit, not one commit for the whole tree. Do not stage `.env` or credential files. When those commits change code (`git rev-parse HEAD^{tree}` differs from the tree of step 7), re-run the affected tests; a failure follows step 7.
    - Record it: the `Tests` line of `## Result` names the affected-tests command, its exit code and the failing tests (none, or the baseline's). The full suite is not run here: `nightshift-review` runs it.
 9. `git status --porcelain` in this run's worktree must be empty except ignored secrets. The shared checkout must be unchanged by this run. Tick the definition-of-done items that passed. Append `## Result`. Keep this run's worktree. Set `move` to `next` and `questions` to an empty array.
@@ -46,38 +43,52 @@ Progress marker: at the start of each step, write `[nightshift-progress] N/M lab
 
 Follow extra column instructions in the worker prompt when they do not contradict the steps above.
 
-## Agent prompt
+## Session protocol
 
-Paste this to each agent. Fill the bracketed lines. One task per agent.
+State you hold: `sessionId` (the agent id, the `claude -p` session id, or `orchestrator`), `model`, `replacementUsed` (false at the start).
+
+1. Choose the model before the first task. Read the optional `Model:` line of every task. Rank `haiku` < `sonnet` < `opus`; a full model id ranks by its family; ignore unknown names. The session runs on the highest one found. None found: pass no `model` parameter, so the session inherits the column model. One session means one model.
+2. Choose the transport, in this order:
+   - Agent tool present: if `SendMessage` is a deferred tool, load it with `ToolSearch` (`select:SendMessage`) before deciding it is unavailable. With both, start the session with `Agent` for task 1 and keep the agent id it returns; send every later task and every repair with `SendMessage` to that id.
+   - Agent tool present but `SendMessage` unavailable after the `ToolSearch`: implement every task yourself in this run's worktree, following the same session rules. `sessionId` is `orchestrator`.
+   - No Agent tool: run `claude -p --output-format json` in the worktree for task 1 (with `--model` when a model was chosen) and read `session_id` from the output. Every later task and repair: `claude -p --resume <session_id>`. Foreground, one process at a time, never in the background, never a fresh process per task.
+3. The first message is the session rules plus task 1. Every later message is only that task, plus "The previous tasks are committed on this branch; build on them."
+4. Never start a second agent while the session is alive.
+5. The session dies when the Agent or `SendMessage` call errors, or when a `claude -p` process exits without a result. If `replacementUsed` is false, start exactly one replacement agent (same transport, same model) whose first message is the session rules, a summary of the tasks already done (from `git log nightshift/<card-id>` and the ticked `## Progress` lines), and the next unfinished task. Update `sessionId`, set `replacementUsed`, and send the remaining tasks to it. A death is not a repair and does not use a repair. If the replacement dies too: set `move` to `stay`, write the error under `## Result`, and stop.
+
+## Session rules
+
+Send this as the first message of the session, with task 1 after it. Fill the bracketed lines.
 
 ```text
-Implement only the task below. Do not talk to the user. Do not ask questions. Do not edit nightshift.json, skills, or files outside Owns.
+You implement the tasks of one card, one message at a time. Do not talk to the user. Do not ask questions. Do not edit nightshift.json or skills.
 
-Worktree: [path]
-Branch: [branch]
+Worktree: [path of this run's worktree]
+Branch: nightshift/[card-id]
 Affected-tests command: [the command from Tests]
-Specification sections to obey: Brief, Architecture, this task, and the tests that name this task.
-
-Task:
-[paste the task, including Owns, Hard part, Done when]
-
-Tests:
-[paste only the tests that cover this task]
+Specification sections to obey: Brief, Architecture, the current task, and the tests that name it.
 
 Rules:
+- Work only in the worktree path above, on that branch, for the whole card. Do not read or write the shared checkout.
 - Write the real behavior. No TODO, FIXME, stub, skipped test, or empty body that only throws.
-- Stay inside Owns. Do not reformat or rewrite a file you do not own.
-- Commit as you go, in small modular commits: one cohesive behavior per commit, only owned files. Do not save the whole task for a single commit at the end.
-- Work only in the worktree path above. Do not read or write the shared checkout.
+- Owns is a guide. Stay inside Owns by default. Edit another path only when the task cannot be done otherwise, and list it in your reply. Never reformat or rewrite unrelated files.
+- Commit as you go, in small modular commits: one cohesive behavior per commit. Do not save the whole task for a single commit at the end.
 - Commit only after the tests that cover that behavior pass. Run only those tests: the affected-tests command above, or the project's test runner on your test files. Never the full suite: it runs once at the end of the review.
 - Do not use --no-verify and do not amend. If the hook changes files, add them in a new commit. Do not commit .env or credential files.
-Return: branch, commit SHAs, paths written, commands run, exit codes.
-If a check still fails, return the command and the error. Do not leave a failing commit.
+- Keep what you learn about the code: the next tasks build on it.
+Reply to each task with: commit SHAs, paths written (mark those outside Owns), commands run, exit codes.
+If a check still fails, reply with the command and the error. Do not leave a failing commit.
+
+Task 1:
+[task name, Owns, Hard part, Done when]
+
+Tests:
+[only the tests that cover this task]
 ```
 
-Launch each agent with the model on its task's `Model:` line (`haiku`, `sonnet` or `opus`: the Agent tool's `model` parameter, or `--model` for `claude -p`). A task without a `Model:` line gets `sonnet`. A repair agent (step 7) uses the next model up (`haiku` → `sonnet` → `opus`). Your own model, the orchestrator's, comes from the column or the card; do not change it.
+Each following task message holds only: the task name, `Owns`, `Hard part`, `Done when`, the tests that name it, and "The previous tasks are committed on this branch; build on them."
 
-Launch agents with the host subagent tool (Agent in Claude Code). On a missing tool: run one `claude -p` per worktree, all of them in the background for a parallel wave, and wait for every process. If a process exits without a result, retry that task once. A second failure follows step 7. The repair agent uses the task worktree, not the shared checkout.
+A repair message holds: which check failed, the command, its output, and "Fix it in this worktree and commit; reply as for a task."
 
 ## Tests
 
@@ -142,13 +153,13 @@ Use this only in step 2. Ask in two places, same questions, same order. Under ea
 ```markdown
 ## Questions
 
-1. Two tasks in the same parallel wave own the shared types module. Which task keeps it? Recommended: move the card back to plan — parallel tasks must not share a module.
+1. The card has no `## Tasks` section. Which tasks should be implemented, and in what order? Recommended: move the card back to plan.
 
 
 
 ```
 
-On the next run, the answer is the text under that question. Ignore blank lines. When that text is empty and the resume prompt has an answer, use it. When both are empty, do not guess a shared path: set `move` to `stay` and stop.
+On the next run, the answer is the text under that question. Ignore blank lines. When that text is empty and the resume prompt has an answer, use it. When both are empty, do not guess: set `move` to `stay` and stop.
 
 ## Result
 
@@ -162,9 +173,9 @@ Append this to the specification. Do not delete `## Brief`, `## Progress`, `## A
 - Base: <branch the card started from, or detached> at <sha>
 - Shared checkout: untouched
 - Baseline: pending work commit <sha or "clean">, affected tests → exit <code>, failing: <none, or the tests already failing on the base>
-- Waves: <n> sequential, <n> parallel (<n> agents in the largest wave)
-- Models: <task → model, in order; repairs marked>
-- Tasks merged: <names, in order>
+- Waves: <n> (<n> tasks), one agent session <id> (the agent id, the `claude -p` session id, or `orchestrator`)
+- Models: <session model, or "column default">; repairs: <n>; replacement agent: <yes or no>
+- Tasks done: <names, in order>
 - Tests: <affected-tests command> → exit <code>, failing: <none, or the baseline's>; full suite: deferred to review
 - Commits: <shas, in order>
 - Test: <test command>
@@ -192,7 +203,7 @@ Done:
   "title": "current title",
   "description": "the specification plus ## Result, definition of done ticked",
   "move": "next",
-  "summary": "Implemented 3 tasks with 2 parallel agents. Definition of done passed.",
+  "summary": "Implemented 3 tasks in one agent session. Definition of done passed.",
   "questions": [],
   "test": { "command": "cd <worktree> && (test -d node_modules || bun install) && bun run dev --port 4546", "url": "http://localhost:4546" }
 }
@@ -200,12 +211,12 @@ Done:
 
 ## Done when
 
-- [ ] This run and every task agent used a worktree, and the shared checkout was not edited
+- [ ] This run used one worktree, and the shared checkout was not edited
 - [ ] The baseline (affected tests on the untouched worktree) was recorded before the first implementation edit, and the full suite was not run
 - [ ] Pending changes inside that worktree were committed before that edit
 - [ ] Implementation landed as small modular commits, and that worktree is clean except ignored secrets
 - [ ] The affected tests passed after the last commit, with no failure beyond the baseline
-- [ ] Agent count in each parallel wave equals the task count in that wave
+- [ ] Every task ran in the same agent session, in this run's worktree
 - [ ] `test.command` runs this run's worktree on a free port, and `test.url` is set when it starts a server
 - [ ] `## Screenshots` lists one image per captured screen, or says there is no screen to capture
 - [ ] `move` is `next` only when those checks passed
