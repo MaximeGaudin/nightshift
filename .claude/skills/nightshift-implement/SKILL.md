@@ -98,6 +98,7 @@ The affected-tests command runs only the tests a change touches since a base com
 - When the project has none, run the project's test runner on the test files that cover the changed files (`git diff --name-only <base sha>`): most runners take file paths or have a related-tests mode (`vitest related`, `jest --findRelatedTests`, `bun test <files>`, `pytest <files>`). Run the full suite only when the runner cannot select tests.
 - Write the command you used under `## Result`, so `nightshift-review` and `nightshift-merge` run the same one.
 
+## Test command
 
 Nightshift runs `test.command` with `sh -c` from the board project folder when the human clicks "Tester", and stops its whole process group on "Arrêter". Build it so it runs this run's worktree, never the shared checkout.
 
