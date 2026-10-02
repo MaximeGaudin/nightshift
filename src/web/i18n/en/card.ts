@@ -52,4 +52,9 @@ export const card = {
   "card.noRun": "No run for this card.",
   "card.copyRef": "Copy the reference",
   "card.copied": "Copied",
+  "card.models.title": "Models per skill",
+  "card.models.skillRow": "{skill} ({columns})",
+  "card.models.unused": "{skill} (unused)",
+  "card.models.clearAll": "Clear all",
+  "card.models.save": "Save models",
 } as const;

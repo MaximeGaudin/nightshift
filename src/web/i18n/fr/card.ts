@@ -54,4 +54,9 @@ export const card: Record<keyof typeof enCard, string> = {
   "card.noRun": "Aucun run pour cette fiche.",
   "card.copyRef": "Copier la référence",
   "card.copied": "Copié",
+  "card.models.title": "Modèles par skill",
+  "card.models.skillRow": "{skill} ({columns})",
+  "card.models.unused": "{skill} (inutilisé)",
+  "card.models.clearAll": "Tout effacer",
+  "card.models.save": "Enregistrer les modèles",
 };

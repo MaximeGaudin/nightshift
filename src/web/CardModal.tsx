@@ -11,7 +11,8 @@ import {
   type LogLine,
   type RunProgress as RunProgressData,
 } from "../shared/types.ts";
-import { api, useServerEvents } from "./api.ts";
+import { api, useServerEvents, useSettings } from "./api.ts";
+import { CardModelsEditor } from "./CardModelsEditor.tsx";
 import { SequenceBadge } from "./CardTile.tsx";
 import { attempt, deleteThenClose, sendThenClear } from "./cardActions.ts";
 import { AppDialog } from "./components/app-dialog.tsx";
@@ -213,6 +214,7 @@ export function CardModalContent({
 }) {
   const { title, setTitle, description, setDescription, dirty } = draft;
   const { t, tn } = useT();
+  const settings = useSettings();
   const [log, setLog] = useState<LogLine[]>([]);
   const [logLoaded, setLogLoaded] = useState(false);
   const [tab, setTab] = useState<"log" | "history" | "time">("log");
@@ -330,6 +332,7 @@ export function CardModalContent({
             });
           }}
         />
+        <CardModelsEditor project={project} card={card} board={board} settings={settings} />
         {asking && lr && (
           <form
             className="question flex max-h-[60%] min-w-0 shrink-0 flex-col gap-3 overflow-auto rounded-md border border-warn/30 bg-warn-soft p-3"
