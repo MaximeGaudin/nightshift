@@ -12,6 +12,7 @@
 - **Batched questions**: a blocked agent returns all its questions at once; answering resumes the same session.
 - **Feedback and resume**: send free-text feedback to the agent from any card.
 - **Sequential mode**: a play/pause button moves cards one at a time.
+- **Dependencies**: a card can wait in Backlog until other cards are done, then start on its own.
 - **One committable file**: the whole board is a single `nightshift.json`.
 - **Template skills shipped**: grill, plan, implement, review and merge, copied into new projects.
 - **Local only**: the server listens on `127.0.0.1` only.
@@ -51,6 +52,7 @@ bun start ~/code/my-project                                  # open a board for 
 - When done, the agent returns structured output (`--json-schema`): updated title/description, `move` (`next`, `stay` or a column id) and a summary. Nightshift applies it to the card and, if moved into another skill column, the next skill starts automatically.
 - **One session per card**: the Claude session a card starts in its first skill column is continued by every later column (`claude --resume`), so plan, implement, review and merge keep the context of the earlier steps. Tick "Fresh session" on a column to start a new session there instead; the columns after it continue that new one. If the card's session cannot be resumed (deleted, or created on another machine), the step starts a new one.
 - **Questions**: when an agent is blocked on human decisions, it returns all its `questions` at once and the card waits in its column. Answering in the card resumes the same Claude session (`claude --resume`) with every Q/A pair. `AskUserQuestion` is disabled for agents.
+- **Dependencies**: a card in Backlog can depend on other cards of the board (`dependsOn`), chosen in the new card dialog or the card's detail. While one of them is not in Done, the card is held in Backlog (its tile shows "waiting #12, #15"). As soon as they are all in Done, Nightshift moves it to the first column after Backlog that it does not skip, and the column's agent starts as for a manual move; the history records "Dependencies done (#12, #15): Backlog → Grill" and the list is cleared, so a dependency leaving Done afterwards changes nothing. Dependencies can be edited only while the card is in Backlog, and a change that would create a cycle is refused. Removing the last unmet dependency, or deleting the card it waited for (a deleted dependency counts as met and is recorded as "Dependency #12 deleted"), releases the card at once. A card dragged out of Backlog by hand keeps its list but is never moved by it. Only the instance that runs the project's agents releases cards when a dependency reaches Done (never a `--no-agents` one); on opening a project it releases the cards whose dependencies finished meanwhile. The sequential mode skips held cards.
 - **Feedback**: from a card's detail, in any column (inert too), you can send free-text feedback to the agent. It resumes the card's last Claude session (`claude --resume`) with your text and the current card; the agent returns `move` (`stay`, `next` = the column after the card's current column, or a column id) and may ask questions as usual. A failed or cancelled run leaves the card in place and the feedback can be sent again.
 - A card is (re)run when it enters a skill column; the rerun button forces a new run. Moving or deleting a card during a run stops its agent.
 - **Progression**: a running card shows live progress (step N/M and a label). Agents emit a line `[nightshift-progress] N/M label` at each step (a numbered `## Progress` section in the card sets numbering and total); until a marker is seen, the agent's TodoWrite list is used instead. Last value wins, it resets at each (re)start of the agent and is never saved in `nightshift.json`.
@@ -67,9 +69,11 @@ curl -X POST http://localhost:4545/api/backlog \
 # 201 {"id":"card_...","number":12,"ref":"#12"}
 ```
 
-Fields: `project` (required, absolute path, no `~`), `title` (required, not blank), `description` (optional), `skipColumnIds` (optional array of column ids), `source` (optional, up to 100 characters, recorded in the card history as "Created in Backlog by <source>"). Other fields, including `columnId`, are ignored: the card always goes to Backlog.
+Fields: `project` (required, absolute path, no `~`), `title` (required, not blank), `description` (optional), `skipColumnIds` (optional array of column ids), `dependsOn` (optional array of the cards it waits for: refs `"#12"`, numbers `12` or card ids; see Dependencies above), `source` (optional, up to 100 characters, recorded in the card history as "Created in Backlog by <source>"). Other fields, including `columnId`, are ignored: the card always goes to Backlog.
 
-Errors are `{ "error": "..." }`: 400 for an invalid body, 404 when the project has no `nightshift.json` (a board is never created this way). A project that has a board but is not open yet is opened automatically. The server must be running (default port 4545) and only listens on `127.0.0.1`; the request needs a local `Host`/`Origin` and `Content-Type: application/json`. It also works with `--no-agents`.
+`POST /api/cards` accepts the same `dependsOn` (only for a card created in Backlog), and `PATCH /api/cards/:id` replaces it (`[]` clears it) while the card is in Backlog: elsewhere, or when the change would create a cycle, it answers 400.
+
+Errors are `{ "error": "..." }`: 400 for an invalid body (including an unknown card or the card itself in `dependsOn`), 404 when the project has no `nightshift.json` (a board is never created this way). A project that has a board but is not open yet is opened automatically. The server must be running (default port 4545) and only listens on `127.0.0.1`; the request needs a local `Host`/`Origin` and `Content-Type: application/json`. It also works with `--no-agents`.
 
 ## Template skills
 
