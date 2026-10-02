@@ -59,11 +59,16 @@ export function SettingsContent({
   onChange,
   currentProject,
   onOpenProject,
+  projectMaxParallel,
+  onProjectMaxParallelChange,
 }: {
   value: Settings;
   onChange: (s: Settings) => void;
   currentProject?: string;
   onOpenProject?: (path: string) => void;
+  /** Agent cap of the open project (draft value); the "This project" section shows only with a project. */
+  projectMaxParallel?: number;
+  onProjectMaxParallelChange?: (n: number) => void;
 }) {
   const s = value;
   const { t } = useT();
@@ -88,20 +93,25 @@ export function SettingsContent({
       </Section>
 
       <Section title={t("settings.agents.title")} description={t("settings.agents.description")}>
-        <Row id="set-max-parallel" label={t("settings.maxParallel.label")} help={t("settings.maxParallel.help")}>
-          <Input
-            id="set-max-parallel"
-            type="number"
-            min={1}
-            max={MAX_PARALLEL}
-            value={s.maxParallel}
-            onChange={(e) => onChange({ ...s, maxParallel: Number(e.target.value) })}
-          />
-        </Row>
         <Row id="set-sound" label={t("settings.sound.label")} help={t("settings.sound.help")}>
           <Switch id="set-sound" checked={s.soundNotifications} onCheckedChange={(v) => onChange({ ...s, soundNotifications: v })} />
         </Row>
       </Section>
+
+      {currentProject && projectMaxParallel !== undefined && (
+        <Section title={t("settings.project.title")} description={t("settings.project.description", { path: currentProject })}>
+          <Row id="set-project-parallel" label={t("settings.projectParallel.label")} help={t("settings.projectParallel.help")}>
+            <Input
+              id="set-project-parallel"
+              type="number"
+              min={1}
+              max={MAX_PARALLEL}
+              value={projectMaxParallel}
+              onChange={(e) => onProjectMaxParallelChange?.(Number(e.target.value))}
+            />
+          </Row>
+        </Section>
+      )}
 
       <Section title={t("settings.claude.title")} description={t("settings.claude.description")}>
         <Row id="set-permission" label={t("settings.permission.label")} help={t("settings.permission.help")}>
@@ -172,11 +182,24 @@ export function SettingsContent({
   );
 }
 
-const EDITABLE = ["maxParallel", "claudePath", "permissionMode", "model", "extraArgs", "soundNotifications", "language"] as const;
+const EDITABLE = ["claudePath", "permissionMode", "model", "extraArgs", "soundNotifications", "language"] as const;
 
-/** True when the form differs from the saved settings on any editable field. */
-export function settingsDirty(saved: Settings, draft: Settings): boolean {
-  return EDITABLE.some((k) => saved[k] !== draft[k]);
+/** True when the form differs from the saved settings on any editable field, or the project cap changed. */
+export function settingsDirty(saved: Settings, draft: Settings, savedCap?: number, draftCap?: number): boolean {
+  return EDITABLE.some((k) => saved[k] !== draft[k]) || savedCap !== draftCap;
+}
+
+/**
+ * Saves the global settings, then the open project's cap into its nightshift.json, only when it changed.
+ * Rejects on the first failed write.
+ */
+export async function saveSettingsAndProject(
+  client: Pick<typeof api, "saveSettings" | "saveBoard">,
+  draft: Settings,
+  project?: { path: string; saved: number; draft: number },
+): Promise<void> {
+  await client.saveSettings(Object.fromEntries(EDITABLE.map((k) => [k, draft[k]])) as Partial<Settings>);
+  if (project && project.draft !== project.saved) await client.saveBoard(project.path, { maxParallel: project.draft });
 }
 
 export function SettingsModal({
@@ -184,26 +207,26 @@ export function SettingsModal({
   onClose,
   currentProject,
   onOpenProject,
+  projectMaxParallel,
 }: {
   settings: Settings;
   onClose: () => void;
   /** Path of the open project (marked in the recent list) and the action to open another one. */
   currentProject?: string;
   onOpenProject?: (path: string) => void;
+  /** Effective agent cap of the open project, from its snapshot. */
+  projectMaxParallel?: number;
 }) {
   const { t } = useT();
   const [s, setS] = useState(settings);
+  const [cap, setCap] = useState(projectMaxParallel);
+  const project =
+    currentProject && projectMaxParallel !== undefined && cap !== undefined
+      ? { path: currentProject, saved: projectMaxParallel, draft: cap }
+      : undefined;
+  // On a failed write the dialog stays open with the draft.
   const save = () =>
-    api
-      .saveSettings({
-        maxParallel: s.maxParallel,
-        claudePath: s.claudePath,
-        permissionMode: s.permissionMode,
-        model: s.model,
-        extraArgs: s.extraArgs,
-        soundNotifications: s.soundNotifications,
-        language: s.language,
-      })
+    saveSettingsAndProject(api, s, project)
       .then(onClose)
       .catch((e) => notifyError(e.message));
 
@@ -228,10 +251,12 @@ export function SettingsModal({
         value={s}
         onChange={setS}
         currentProject={currentProject}
+        projectMaxParallel={cap}
+        onProjectMaxParallelChange={setCap}
         onOpenProject={
           onOpenProject &&
           ((path) => {
-            if (settingsDirty(settings, s) && !confirm(t("settings.discardChanges"))) return;
+            if (settingsDirty(settings, s, projectMaxParallel, cap) && !confirm(t("settings.discardChanges"))) return;
             onClose();
             onOpenProject(path);
           })
