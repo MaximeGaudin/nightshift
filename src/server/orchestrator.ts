@@ -557,13 +557,9 @@ export class Orchestrator {
 
   private tick() {
     if (!this.agents) return;
-    const max = getSettings().maxParallel;
-    if (this.running() >= max) return;
-    let started = this.startQueuedQuickRuns(max);
-    if (this.running() >= max) {
-      if (started) this.broadcastAll();
-      return;
-    }
+    // Each project has its own cap: a full project only makes its own cards and quick runs wait.
+    const full = (p: Project) => this.runningInProject(p) >= this.projectMaxParallel(p);
+    let started = this.startQueuedQuickRuns(full);
     const candidates: { p: Project; card: Card }[] = [];
     for (const p of this.projects.values()) {
       if (this.lockedBy.has(p.path)) continue;
@@ -573,12 +569,11 @@ export class Orchestrator {
     }
     candidates.sort((a, b) => a.card.enteredColumnAt.localeCompare(b.card.enteredColumnAt));
     for (const { p, card } of candidates) {
-      // Global cap over all projects: nothing else can start.
-      if (this.running() >= max) break;
-      // Full column: this card waits, cards of other columns can still start.
+      // Full project or full column: this card waits, cards of other projects and columns can still start.
+      if (full(p)) continue;
       const column = p.column(card.columnId);
       if (!column) continue;
-      // The per-column limit only concerns skill columns; a job in an inert column (feedback) only counts globally.
+      // The per-column limit only concerns skill columns; a job in an inert column (feedback) only counts for its project.
       if (column.type === "skill" && this.runningIn(p, card.columnId) >= columnMaxParallel(column)) continue;
       this.start(p, card);
       started = true;
@@ -590,21 +585,25 @@ export class Orchestrator {
     for (const p of this.projects.values()) this.broadcast({ type: "board", project: p.path, snapshot: this.snapshot(p) });
   }
 
-  /** Agents running now, over all projects: card jobs and running quick runs share the same cap. */
-  private running() {
-    let n = this.jobs.size;
-    for (const q of this.quickRuns.values()) if (q.status === "running") n++;
+  /** Agents running now in this project: its card jobs and its running quick runs share the project's cap. */
+  private runningInProject(p: Project) {
+    let n = 0;
+    for (const job of this.jobs.values()) if (job.project === p) n++;
+    for (const q of this.quickRuns.values()) if (q.project === p && q.status === "running") n++;
     return n;
   }
 
-  /** Starts queued quick runs, oldest first, before any card. They ignore column caps. Returns whether one started. */
-  private startQueuedQuickRuns(max: number): boolean {
+  /**
+   * Starts queued quick runs, oldest first, before any card of their project. They ignore column caps but not
+   * their project's cap. Returns whether one started.
+   */
+  private startQueuedQuickRuns(full: (p: Project) => boolean): boolean {
     const queued = [...this.quickRuns.values()]
       .filter((q) => q.status === "queued" && !this.lockedBy.has(q.project.path))
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     let started = false;
     for (const q of queued) {
-      if (this.running() >= max) break;
+      if (full(q.project)) continue;
       this.startQuick(q);
       started = true;
     }

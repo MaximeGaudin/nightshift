@@ -143,7 +143,7 @@ test("pipeline: skill column without maxParallel runs one card at a time, respec
     maxRunning = Math.max(maxRunning, Object.values(s.live).filter((v) => v === "running").length);
     return Object.keys(s.live).length === 0;
   });
-  // No maxParallel on the column: default 1, even though the global cap is 2.
+  // No maxParallel on the column: default 1, even though the project cap is higher.
   expect(maxRunning).toBe(1);
 
   const file = JSON.parse(readFileSync(join(proj, "nightshift.json"), "utf8"));
@@ -277,13 +277,14 @@ test("column maxParallel > 1 runs several cards", async () => {
   expect(maxRunning).toBe(2);
 });
 
-test("global cap cuts below the sum of column limits", async () => {
-  const p = tempDir("ns-globalcap-");
+test("project cap cuts below the sum of column limits", async () => {
+  const p = tempDir("ns-projectcap-");
   await post("/api/projects/open", { path: p });
   const res = await post(
     "/api/board",
     {
       project: p,
+      maxParallel: 2,
       columns: [
         { name: "A", type: "skill", skill: "enrich", maxParallel: 2 },
         { name: "B", type: "skill", skill: "enrich", maxParallel: 2 },
@@ -301,7 +302,7 @@ test("global cap cuts below the sum of column limits", async () => {
     maxRunning = Math.max(maxRunning, s.running);
     return s.idle && s.board.cards.length === 6 && s.board.cards.every((c: Card) => c.columnId === done.id);
   }, 15000);
-  // Column limits sum to 4, but the global cap (2) bounds the total.
+  // Column limits sum to 4, but the project cap (2) bounds the total.
   expect(maxRunning).toBeLessThanOrEqual(2);
   expect(maxRunning).toBeGreaterThan(0);
 });
