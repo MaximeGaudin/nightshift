@@ -24,6 +24,7 @@ test("shared accepts the four image types", () => {
   expect(cardImageType("/x/a.webp")).toBe("image/webp");
   expect(cardImageType("/x.png/a")).toBeNull();
   expect(cardImageType("/x/a.svg")).toBeNull();
+  expect(cardImageType("/x/a.constructor")).toBeNull();
 });
 
 test("shared-is-card-screenshot cardScreenshots and screenshotUrl", () => {

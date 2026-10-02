@@ -21,7 +21,8 @@ export type CardImageStored = { path: string };
 export function cardImageType(path: string): string | null {
   const dot = path.lastIndexOf(".");
   if (dot < 0 || path.indexOf("/", dot) >= 0) return null;
-  return CARD_IMAGE_TYPES[path.slice(dot + 1).toLowerCase()] ?? null;
+  const ext = path.slice(dot + 1).toLowerCase();
+  return Object.hasOwn(CARD_IMAGE_TYPES, ext) ? CARD_IMAGE_TYPES[ext] : null;
 }
 
 /** True when `dest` is an absolute local image path that is a capture of card `cardId`. */
