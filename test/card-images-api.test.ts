@@ -20,7 +20,10 @@ const JPEG = withHeader([0xff, 0xd8, 0xff, 0xe0]);
 const GIF = withHeader("GIF89a");
 const WEBP = (() => {
   const out = withHeader("RIFF");
-  out.set(Array.from("WEBP", (c) => c.charCodeAt(0)), 8);
+  out.set(
+    Array.from("WEBP", (c) => c.charCodeAt(0)),
+    8,
+  );
   return out;
 })();
 

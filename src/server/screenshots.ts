@@ -93,7 +93,11 @@ const BASE64_RE = /^[A-Za-z0-9+/]*={0,2}$/;
 /** Extension of an image from its first bytes, null when it is not PNG, JPEG, GIF or WebP. */
 export function sniffImage(bytes: Uint8Array): "png" | "jpg" | "gif" | "webp" | null {
   const at = (offset: number, sig: number[]) => sig.every((b, i) => bytes[offset + i] === b);
-  const ascii = (offset: number, text: string) => at(offset, Array.from(text, (c) => c.charCodeAt(0)));
+  const ascii = (offset: number, text: string) =>
+    at(
+      offset,
+      Array.from(text, (c) => c.charCodeAt(0)),
+    );
   if (at(0, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return "png";
   if (at(0, [0xff, 0xd8, 0xff])) return "jpg";
   if (ascii(0, "GIF87a") || ascii(0, "GIF89a")) return "gif";
