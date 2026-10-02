@@ -185,6 +185,7 @@ function CardModalFooter({
         board={board}
         beforeMove={() => (draft.dirty ? draft.saveOrThrow() : undefined)}
         onError={notifyError}
+        onMoved={onClose}
         live={live}
       />
       <Button type="button" disabled={!draft.dirty} onClick={() => guard(draft.saveOrThrow())}>

@@ -17,6 +17,8 @@ export interface SendToNextArgs {
   target: Column;
   beforeMove: () => Promise<void> | void;
   onError: (message: string) => void;
+  /** Called once the card has moved, never on failure. */
+  onMoved?: () => void;
   moveCard?: (project: string, id: string, columnId: string, index?: number) => Promise<unknown>;
 }
 
@@ -27,11 +29,13 @@ export async function sendToNext({
   target,
   beforeMove,
   onError,
+  onMoved,
   moveCard = api.moveCard,
 }: SendToNextArgs): Promise<boolean> {
   try {
     await beforeMove();
     await moveCard(project, card.id, target.id);
+    onMoved?.();
     return true;
   } catch (e) {
     onError(e instanceof Error ? e.message : String(e));
@@ -48,6 +52,7 @@ export function NextColumnButton({
   board,
   beforeMove,
   onError,
+  onMoved,
   live,
 }: {
   project: string;
@@ -55,6 +60,7 @@ export function NextColumnButton({
   board: Board;
   beforeMove: () => Promise<void> | void;
   onError: (message: string) => void;
+  onMoved?: () => void;
   live?: LiveStatus;
 }) {
   const { t } = useT();
@@ -70,7 +76,7 @@ export function NextColumnButton({
       onClick={async () => {
         setBusy(true);
         try {
-          await sendToNext({ project, card, target, beforeMove, onError });
+          await sendToNext({ project, card, target, beforeMove, onError, onMoved });
         } finally {
           setBusy(false);
         }
