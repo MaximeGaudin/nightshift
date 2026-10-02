@@ -2,10 +2,13 @@
 
 import { t } from "./i18n/index.ts";
 
-export type Shortcut = "palette" | "newCard" | "help";
+/** `{ tab: n }` activates the n-th project tab (1-based). */
+export type Shortcut = "palette" | "newCard" | "help" | { tab: number };
 
 export interface ShortcutEvent {
   key: string;
+  /** Physical key (`Digit1`…): with ⌥ on macOS, `key` is a special character instead of the digit. */
+  code?: string;
   metaKey: boolean;
   ctrlKey: boolean;
   altKey: boolean;
@@ -36,6 +39,9 @@ export function isEditableTarget(target: unknown): boolean {
 export function shortcutFor(e: ShortcutEvent, ctx: { dialogOpen: boolean }): Shortcut | null {
   if (ctx.dialogOpen || isEditableTarget(e.target)) return null;
   if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === "k") return "palette";
+  const digit = /^Digit([1-9])$/.exec(e.code ?? "")?.[1] ?? (/^[1-9]$/.test(e.key) ? e.key : undefined);
+  // ⌘N / Ctrl+N (often kept by the browser for its own tabs) and ⌥N, which always reaches the page.
+  if (digit && [e.metaKey, e.ctrlKey, e.altKey].filter(Boolean).length === 1) return { tab: Number(digit) };
   if (e.metaKey || e.ctrlKey || e.altKey) return null;
   if (e.key === "c" || e.key === "C") return "newCard";
   if (e.key === "?") return "help";
@@ -46,6 +52,7 @@ export function shortcutFor(e: ShortcutEvent, ctx: { dialogOpen: boolean }): Sho
 export function shortcutHelpRows(): { keys: string[]; label: string }[] {
   return [
     { keys: ["⌘ K", "Ctrl K"], label: t("shortcuts.palette") },
+    { keys: ["⌘ 1–9", "⌥ 1–9"], label: t("shortcuts.tab") },
     { keys: ["C"], label: t("shortcuts.newCard") },
     { keys: ["?"], label: t("shortcuts.help") },
     { keys: [t("shortcuts.keyEscape")], label: t("shortcuts.close") },

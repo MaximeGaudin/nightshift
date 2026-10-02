@@ -6,6 +6,7 @@ export const shortcuts: Record<keyof typeof enShortcuts, string> = {
   "shortcuts.palette": "Ouvrir la palette de commandes",
   "shortcuts.newCard": "Nouvelle carte dans la première colonne",
   "shortcuts.help": "Afficher cette aide",
+  "shortcuts.tab": "Aller à l'onglet de projet 1 à 9",
   "shortcuts.close": "Fermer la fenêtre ou la palette",
   "shortcuts.drag": "Saisir ou déposer une carte (glisser au clavier)",
   "shortcuts.move": "Déplacer la carte saisie",

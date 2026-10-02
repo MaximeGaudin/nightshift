@@ -38,3 +38,15 @@ test("shortcuts-map", () => {
   expect(shortcutFor(key("Escape"), free)).toBeNull();
   for (const e of [key("k", { ctrlKey: true }), key("c"), key("?")]) expect(shortcutFor(e, { dialogOpen: true })).toBeNull();
 });
+
+test("shortcuts: tab digits", () => {
+  expect(shortcutFor(key("1", { metaKey: true }), free)).toEqual({ tab: 1 });
+  expect(shortcutFor(key("3", { ctrlKey: true }), free)).toEqual({ tab: 3 });
+  // macOS ⌥2 types "™": the physical key decides.
+  expect(shortcutFor({ ...key("™", { altKey: true }), code: "Digit2" }, free)).toEqual({ tab: 2 });
+  expect(shortcutFor(key("0", { metaKey: true }), free)).toBeNull();
+  expect(shortcutFor(key("1"), free)).toBeNull();
+  expect(shortcutFor(key("1", { metaKey: true, altKey: true }), free)).toBeNull();
+  expect(shortcutFor(key("1", { metaKey: true }), { dialogOpen: true })).toBeNull();
+  expect(shortcutFor(key("1", { metaKey: true }, { tagName: "INPUT" }), free)).toBeNull();
+});
