@@ -202,7 +202,8 @@ export function commandLabel(c: PaletteCommand, search: string): string {
 }
 
 /**
- * cmdk filter: "#<digits>" is an exact card number; otherwise a case and accent insensitive substring of value + keywords.
+ * cmdk filter: "#<digits>" is an exact card number; a skill name match scores 4 (exact or followed by an instruction), 3 (prefix)
+ * or 2 (substring); otherwise a case and accent insensitive substring of value + keywords scores 1.
  * The "create a card" item always matches free text (low score, so it comes after real matches).
  */
 export function paletteFilter(value: string, search: string, keywords?: string[]): number {
@@ -210,11 +211,16 @@ export function paletteFilter(value: string, search: string, keywords?: string[]
   if (!term) return 1;
   const ref = /^#(\d+)$/.exec(term);
   if (ref) return new RegExp(`^#${ref[1]}(\\s|$)`).test(value) ? 1 : 0;
-  const hay = normalize([value, ...(keywords ?? [])].join(" "));
-  if (hay.includes(normalize(term))) return 1;
   if (value.startsWith(SKILL_PREFIX)) {
     const name = value.slice(SKILL_PREFIX.length).split(" ")[0] ?? "";
-    if (quickRunInstruction(name, term) !== "") return 1;
+    const n = normalize(name);
+    const text = normalize(term);
+    // A skill named by the text beats any other match, so Enter runs it: exact or name + instruction, then prefix, then substring.
+    if (text === n || quickRunInstruction(name, term) !== "") return 4;
+    if (n.startsWith(text)) return 3;
+    if (n.includes(text)) return 2;
   }
+  const hay = normalize([value, ...(keywords ?? [])].join(" "));
+  if (hay.includes(normalize(term))) return 1;
   return isFreeText(term) && normalize(value).startsWith(normalize(newCardPrefix())) ? 0.01 : 0;
 }

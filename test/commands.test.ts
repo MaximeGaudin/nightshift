@@ -117,7 +117,9 @@ test("palette-instruction", () => {
   expect(quickRunInstruction("deploy-prod", "deploy-production x")).toBe("");
   const c = buildCommands(skillCtx()).find((x) => x.group === "skills");
   if (!c) throw new Error("missing skill entry");
-  for (const search of ["deploy-prod v1.4", "depl", "lancer"]) expect(paletteFilter(c.value, search, c.keywords)).toBe(1);
+  expect(paletteFilter(c.value, "deploy-prod v1.4", c.keywords)).toBe(4);
+  expect(paletteFilter(c.value, "depl", c.keywords)).toBe(3);
+  expect(paletteFilter(c.value, "lancer", c.keywords)).toBe(1);
   expect(commandLabel(c, "deploy-prod v1.4")).toContain("“v1.4”");
   expect(commandLabel(c, "depl")).toBe("deploy-prod");
 });
@@ -130,4 +132,32 @@ test("palette-skill-before-create", () => {
   // Disabled skills do not move up; the order is unchanged without a search.
   expect(orderGroups([...groups], buildCommands(skillCtx({ agentsDisabled: true })), "deploy-prod v1.4")[0]).not.toBe("skills");
   expect(orderGroups([...groups], cmds, "")).toEqual([...groups]);
+});
+
+test("palette-skill-name-first", () => {
+  const groups = ["cards", "actions", "skills", "navigation", "projects"] as const;
+  const withCard = {
+    ...ctx({ board: { name: "b", columns, cards: [card(5, "Revoir grill")], favoriteSkills: ["nightshift-grill", "lint"] } }),
+    skills: [
+      { ...skillInfo("nightshift-grill"), description: "Interroge" },
+      { ...skillInfo("lint"), description: "grill du code" },
+    ],
+  };
+  const cmds = buildCommands(withCard);
+  const score = (id: string, search: string) => {
+    const c = cmds.find((x) => x.id === id);
+    if (!c) throw new Error(`missing ${id}`);
+    return paletteFilter(c.value, search, c.keywords);
+  };
+  // Name substring beats the card title, so the skills group comes first.
+  expect(score("skill:nightshift-grill", "grill")).toBe(2);
+  expect(score("card:card_5", "grill")).toBe(1);
+  expect(orderGroups([...groups], cmds, "grill")[0]).toBe("skills");
+  // Exact > prefix > substring > description-only.
+  expect(score("skill:nightshift-grill", "nightshift-grill")).toBe(4);
+  expect(score("skill:nightshift-grill", "nights")).toBe(3);
+  expect(score("skill:lint", "grill")).toBe(1);
+  expect(orderGroups([...groups], cmds, "nights")[0]).toBe("skills");
+  // No skill name matches: order unchanged.
+  expect(orderGroups([...groups], cmds, "revoir")[0]).toBe("cards");
 });
