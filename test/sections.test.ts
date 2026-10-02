@@ -77,6 +77,21 @@ describe("applySections", () => {
     expect(applySections("## Result\n\nx\n", [edit("result", "y")]).applied).toEqual(["result (replace)"]);
   });
 
+  test("trailing line breaks of the content do not pile up blank lines", () => {
+    const n = "## A\n\nx\n\n## B\n";
+    const once = applySections(n, [edit("A", "y\n\n")]).text;
+    expect(once).toBe("## A\n\ny\n\n## B\n");
+    expect(applySections(once, [edit("A", "y\n\n")]).text).toBe(once);
+    expect(applySections(n, [edit("A", "z\n", "append")]).text).toBe("## A\n\nx\nz\n\n## B\n");
+  });
+
+  test("lines outside the edited section keep their own line endings in a mixed note", () => {
+    const n = "## A\r\n\r\nx\n\n## B\r\n\r\ny\r\n";
+    expect(applySections(n, [edit("B", "z")]).text).toBe("## A\r\n\r\nx\n\n## B\r\n\r\nz\r\n");
+    expect(applySections("## A\r\n\r\nx", [edit("A", "y", "append")]).text).toBe("## A\r\n\r\nx\r\ny");
+    expect(applySections("## A\r\n\r\nx", [edit("B", "y")]).text).toBe("## A\r\n\r\nx\r\n\r\n## B\r\n\r\ny");
+  });
+
   test("edits apply in order", () => {
     const r = applySections("## A\n\nx\n", [edit("A", "1"), edit("A", "2", "append")]);
     expect(r.text).toBe("## A\n\n1\n2\n");

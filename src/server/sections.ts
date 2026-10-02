@@ -99,7 +99,14 @@ export function applySections(text: string, edits: SectionEdit[]): SectionsResul
   let lines = text.split("\n");
   const applied: string[] = [];
   const logs: string[] = [];
-  const bodyLines = (content: string) => content.split(/\r?\n/).map((l) => l + cr);
+  // Trailing line breaks of the content are dropped: the section keeps its own separator, so repeated edits stay stable.
+  const bodyLines = (content: string) =>
+    content
+      .replace(/(\r?\n)+$/, "")
+      .split(/\r?\n/)
+      .map((l) => l + cr);
+  // A kept line that gets new lines after it needs the document's line ending.
+  const terminate = (l: string) => (crlf && !l.endsWith("\r") ? `${l}\r` : l);
   const isBlank = (l: string | undefined) => l !== undefined && l.trim() === "";
 
   for (const edit of edits) {
@@ -115,6 +122,7 @@ export function applySections(text: string, edits: SectionEdit[]): SectionsResul
       const hadFinalNewline = lines.length > 1 && lines[lines.length - 1] === "";
       while (lines.length > 0 && isBlank(lines[lines.length - 1])) lines.pop();
       const add = [`## ${edit.heading}${cr}`, `${cr}`, ...bodyLines(edit.content)];
+      if (lines.length > 0) lines[lines.length - 1] = terminate(lines[lines.length - 1] as string);
       lines = [...lines, ...(lines.length > 0 ? [cr] : []), ...add, ...(hadFinalNewline ? [""] : [])];
       applied.push(`${edit.heading} (${edit.op})`);
       continue;
@@ -124,23 +132,22 @@ export function applySections(text: string, edits: SectionEdit[]): SectionsResul
     while (bodyEnd > sec.start + 1 && isBlank(lines[bodyEnd - 1])) bodyEnd--;
     const before = lines.slice(0, sec.start);
     const after = lines.slice(sec.end);
-    const heading = lines[sec.start] as string;
+    const heading = terminate(lines[sec.start] as string);
     const trailing = lines.slice(bodyEnd, sec.end);
     if (edit.op === "delete") {
       lines = [...before, ...after];
     } else if (edit.op === "append") {
-      lines = [...before, ...lines.slice(sec.start, bodyEnd), ...bodyLines(edit.content), ...trailing, ...after];
+      const kept = lines.slice(sec.start, bodyEnd).map(terminate);
+      lines = [...before, ...kept, ...bodyLines(edit.content), ...trailing, ...after];
     } else {
       const body = edit.content === "" ? [] : [cr, ...bodyLines(edit.content)];
       lines = [...before, heading, ...body, ...trailing, ...after];
     }
     applied.push(`${edit.heading} (${edit.op})`);
   }
-  if (crlf) {
-    // Lines inserted before the last one must carry the CR of the document's line endings.
-    lines = lines.map((l, i) => (i < lines.length - 1 && !l.endsWith("\r") ? `${l}\r` : l));
-    // A lone CR left last (the note ended with a section that was deleted) is the final line break, not a line.
-    if (lines[lines.length - 1] === "\r") lines[lines.length - 1] = "";
-  }
+  // The last line has no line break: a CR left there (inserted content at the end of the note, or a blank line
+  // left by deleting the last section) is dropped, unless the note itself ended with a bare CR.
+  const last = lines[lines.length - 1] as string;
+  if (crlf && last.endsWith("\r") && !text.endsWith("\r")) lines[lines.length - 1] = last.slice(0, -1);
   return { text: lines.join("\n"), applied, logs };
 }
