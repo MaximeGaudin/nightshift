@@ -2,7 +2,7 @@ import { Columns3, Info, Pause, Play, Settings as SettingsIcon, Sparkles, Triang
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { type SequenceNotice as Notice, sequenceLabel } from "../shared/sequence.ts";
-import type { ProjectSnapshot, SkillInfo } from "../shared/types.ts";
+import { type ProjectSnapshot, type SkillInfo, worktreePolicyOf } from "../shared/types.ts";
 import { api, useServerEvents, useSettings } from "./api.ts";
 import { Board } from "./Board.tsx";
 import { CardModal } from "./CardModal.tsx";
@@ -309,6 +309,7 @@ export function App() {
         <SettingsModal
           settings={settings}
           currentProject={snap.path}
+          worktreePolicy={worktreePolicyOf(snap.board)}
           onOpenProject={(p) => {
             setModal(null);
             setProject(p);

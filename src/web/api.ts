@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { SequenceState } from "../shared/sequence.ts";
-import type { LogLine, ProjectSnapshot, ServerEvent, Settings, SkillInfo } from "../shared/types.ts";
+import type { LogLine, ProjectSnapshot, ServerEvent, Settings, SkillInfo, WorktreePolicy } from "../shared/types.ts";
 
 async function call<T = unknown>(method: string, url: string, body?: unknown): Promise<T> {
   const res = await fetch(url, {
@@ -56,6 +56,7 @@ export const api = {
   saveSkill: (project: string, name: string, content: string) => call("PUT", "/api/skill", { project, name, content }),
   createSkill: (project: string, name: string, description: string, body: string) =>
     call<SkillInfo>("POST", "/api/skills", { project, name, description, body }),
+  setWorktreePolicy: (project: string, policy: WorktreePolicy) => call<ProjectSnapshot>("PUT", "/api/worktree-policy", { project, policy }),
   toggleFavoriteSkill: (project: string, name: string, favorite: boolean) =>
     call<ProjectSnapshot>("PUT", "/api/favorite-skills", { project, name, favorite }),
   startQuickRun: (project: string, skill: string, instruction: string) =>

@@ -11,11 +11,14 @@ import {
   type Column,
   type ColumnType,
   cardRef,
+  DEFAULT_WORKTREE_POLICY,
   ensureSystemColumns,
   isDoneColumn,
   normalizeColumnEmoji,
   normalizeColumnParallel,
   type ServerEvent,
+  WORKTREE_POLICIES,
+  type WorktreePolicy,
 } from "../shared/types.ts";
 import { safeHttpUrl } from "../shared/urls.ts";
 import index from "../web/index.html";
@@ -430,6 +433,19 @@ export function startServer({ port, development, agents = true }: { port: number
             else next.delete(name);
             if (next.size > 0) board.favoriteSkills = [...next].sort((x, y) => x.localeCompare(y));
             else delete board.favoriteSkills;
+          });
+          return orch.snapshot(p);
+        }),
+      },
+      "/api/worktree-policy": {
+        PUT: h((b, url) => {
+          const p = project(b, url);
+          const policy = reqString(b, "policy");
+          if (!WORKTREE_POLICIES.includes(policy as WorktreePolicy)) throw new Error(`Unknown worktree policy: ${policy}`);
+          p.mutate((board) => {
+            // The default is never stored: the field is removed instead.
+            if (policy === DEFAULT_WORKTREE_POLICY) delete board.worktreePolicy;
+            else board.worktreePolicy = policy as WorktreePolicy;
           });
           return orch.snapshot(p);
         }),

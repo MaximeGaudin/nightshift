@@ -1,6 +1,6 @@
 import { TriangleAlert } from "lucide-react";
 import { type ReactNode, useState } from "react";
-import { type LanguageSetting, MAX_PARALLEL, type Settings } from "../shared/types.ts";
+import { type LanguageSetting, MAX_PARALLEL, type Settings, WORKTREE_POLICIES, type WorktreePolicy } from "../shared/types.ts";
 import { api } from "./api.ts";
 import { AppDialog } from "./components/app-dialog.tsx";
 import { Alert } from "./components/ui/alert.tsx";
@@ -29,6 +29,12 @@ export function languageOptions(): { value: LanguageSetting; label: string }[] {
     { value: "fr", label: "Français" },
   ];
 }
+
+const WORKTREE_LABELS: Record<WorktreePolicy, MessageKey> = {
+  required: "settings.worktree.required",
+  auto: "settings.worktree.auto",
+  forbidden: "settings.worktree.forbidden",
+};
 
 function Section({ title, description, children }: { title: string; description: string; children: ReactNode }) {
   return (
@@ -59,11 +65,16 @@ export function SettingsContent({
   onChange,
   currentProject,
   onOpenProject,
+  worktreePolicy,
+  onWorktreePolicyChange,
 }: {
   value: Settings;
   onChange: (s: Settings) => void;
   currentProject?: string;
   onOpenProject?: (path: string) => void;
+  /** Policy of the open project; the "This project" section only shows when a project is open and a policy is given. */
+  worktreePolicy?: WorktreePolicy;
+  onWorktreePolicyChange?: (policy: WorktreePolicy) => void;
 }) {
   const s = value;
   const { t } = useT();
@@ -147,6 +158,25 @@ export function SettingsContent({
         </Row>
       </Section>
 
+      {currentProject && worktreePolicy && (
+        <Section title={t("settings.project.title")} description={t("settings.project.description")}>
+          <Row id="set-worktree" label={t("settings.worktree.label")} help={t("settings.worktree.help")}>
+            <Select value={worktreePolicy} onValueChange={(v) => onWorktreePolicyChange?.(v as WorktreePolicy)}>
+              <SelectTrigger id="set-worktree" className="w-full">
+                <SelectValue>{t(WORKTREE_LABELS[worktreePolicy])}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {WORKTREE_POLICIES.map((p) => (
+                  <SelectItem key={p} value={p}>
+                    {t(WORKTREE_LABELS[p])}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Row>
+        </Section>
+      )}
+
       <Section title={t("settings.recent.title")} description={t("settings.recent.description")}>
         {s.recentProjects.length === 0 ? (
           <p className="recent-empty px-3 py-4 text-center text-xs text-muted-foreground">{t("settings.recent.empty")}</p>
@@ -184,15 +214,20 @@ export function SettingsModal({
   onClose,
   currentProject,
   onOpenProject,
+  worktreePolicy,
 }: {
   settings: Settings;
   onClose: () => void;
   /** Path of the open project (marked in the recent list) and the action to open another one. */
   currentProject?: string;
   onOpenProject?: (path: string) => void;
+  /** Saved worktree policy of the open project. */
+  worktreePolicy?: WorktreePolicy;
 }) {
   const { t } = useT();
   const [s, setS] = useState(settings);
+  const [policy, setPolicy] = useState(worktreePolicy);
+  const policyDirty = !!currentProject && policy !== undefined && policy !== worktreePolicy;
   const save = () =>
     api
       .saveSettings({
@@ -204,6 +239,7 @@ export function SettingsModal({
         soundNotifications: s.soundNotifications,
         language: s.language,
       })
+      .then(() => (policyDirty && currentProject && policy ? api.setWorktreePolicy(currentProject, policy) : undefined))
       .then(onClose)
       .catch((e) => notifyError(e.message));
 
@@ -228,10 +264,12 @@ export function SettingsModal({
         value={s}
         onChange={setS}
         currentProject={currentProject}
+        worktreePolicy={policy}
+        onWorktreePolicyChange={setPolicy}
         onOpenProject={
           onOpenProject &&
           ((path) => {
-            if (settingsDirty(settings, s) && !confirm(t("settings.discardChanges"))) return;
+            if ((settingsDirty(settings, s) || policyDirty) && !confirm(t("settings.discardChanges"))) return;
             onClose();
             onOpenProject(path);
           })

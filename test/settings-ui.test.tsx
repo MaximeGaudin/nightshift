@@ -53,3 +53,21 @@ test("language-switch-ui: Settings shows the Language select with Auto / English
   expect(render({ ...base, language: "auto" })).toMatch(/id="set-language"[^>]*>.*?<span[^>]*>Auto<\/span>/s);
   expect(settingsDirty(base, { ...base, language: "fr" })).toBe(true);
 });
+
+test("worktree-policy-ui: the project section shows with an open project and a policy, with three options", () => {
+  const html = renderToStaticMarkup(
+    <SettingsContent
+      value={base}
+      onChange={() => {}}
+      currentProject="/a/one"
+      worktreePolicy="forbidden"
+      onWorktreePolicyChange={() => {}}
+    />,
+  );
+  expect(html).toContain(">Ce projet</h3>");
+  expect(html).toContain('id="set-worktree"');
+  expect(html).toContain("Interdit");
+  const without = renderToStaticMarkup(<SettingsContent value={base} onChange={() => {}} worktreePolicy="auto" />);
+  expect(without).not.toContain('id="set-worktree"');
+  expect(render(base, "/a/one")).not.toContain('id="set-worktree"');
+});
