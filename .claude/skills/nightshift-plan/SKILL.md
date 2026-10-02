@@ -1,6 +1,6 @@
 ---
 name: nightshift-plan
-description: Writes a Nightshift implementation plan from a grilled kanban note. Specifies architecture, parallel tasks, numbered progress steps, tests, and the definition of done, and leaves routine coding to the implement agent. Use when a Nightshift skill column turns a grilled card into a specification.
+description: Writes a Nightshift implementation plan from a grilled kanban note. Specifies architecture, an ordered list of tasks with the code context they need, numbered progress steps, tests, the definition of done and the card's models, and leaves routine coding to the implement agent. Use when a Nightshift skill column turns a grilled card into a specification.
 ---
 
 # Nightshift Plan
@@ -27,7 +27,7 @@ Progress marker: at the start of each step, write `[nightshift-progress] N/M lab
    - On a missing file: skip it and continue from the brief.
 3. If the brief still needs a product decision (an undefined noun, a behavior with no unhappy path, a missing boundary, or an untestable claim), do not plan. Ask every gap at once, set `move` to `stay`, and stop. See Questions.
 4. On the next run, read answers the same way as Questions. Fold them into the brief. Delete `## Questions`. Repeat from step 3.
-5. Write the specification into the description, using the template below. Keep the user's product sentences verbatim under `## Brief`.
+5. Write the specification into the description, using the template below, as `sections` (Updating the card): add `## Progress`, `## Architecture`, `## Tasks`, `## Tests`, `## Definition of done` and `## Models`. The grilled brief stays as it is: do not return it. Sections are added at the end of the note, so the order is Brief (the grilled note), then the new sections.
 6. Set `move` to `next` and return `questions` as an empty array. Stop.
 
 Follow extra column instructions in the worker prompt when they do not contradict the steps above.
@@ -38,7 +38,7 @@ Write these. A competent implement agent must not have to invent them:
 
 - Module boundaries, the data model, and the invariants that must hold.
 - State transitions, failure behavior, and the contracts between tasks.
-- Which tasks run in parallel, which wait, and which files or modules each task owns.
+- The order of the tasks, and for each one the files it lands in and the `file:line` context it needs, so the implement agent does not have to search the repository.
 - The important tests and the definition of done.
 
 Write the decision and the constraint. Do not write function bodies, import lists, or boilerplate.
@@ -64,9 +64,9 @@ The grilled brief, user sentences kept.
 
 ## Progress
 
-- [ ] 1. Wave 0 — Task 0 — Shared contract
-- [ ] 2. Wave 1 — Task 1 — <name>
-- [ ] 3. Wave 1 — Task 2 — <name>
+- [ ] 1. Shared contract
+- [ ] 2. <task name>
+- [ ] 3. <task name>
 
 ## Architecture
 
@@ -75,33 +75,23 @@ Name each module by its responsibility. State the contract other tasks will impo
 
 ## Tasks
 
-### Wave 0 — sequential
-
-Lock the shared contract. Later tasks import it and do not redesign it.
-
-#### Task 0 — Shared contract
-Owns: the modules that define the contract.
+### Task 1 — Shared contract
+Files: the modules that define the contract.
+Context: `path/to/module.py:120-180` (what is there and what changes), the commands to run, the existing pattern to copy.
 Hard part: the invariant or transition that is easy to get wrong.
 Done when: the contract is in the tree and the tests below that cover it pass.
-Model: opus — the contract every later task builds on.
 
-### Wave 1 — parallel
-
-Start these together after wave 0. They share no owned files.
-
-#### Task 1 — <name>
-Owns: <modules or paths>.
-Depends on: Task 0.
+### Task 2 — <name>
+Files: <modules or paths>.
+Context: <`file:line` references and facts this task needs>.
 Hard part: <the non-obvious behavior>.
 Done when: <observable outcome>.
-Model: <haiku | sonnet | opus> — <the reason, one clause>.
 
-#### Task 2 — <name>
-Owns: <modules or paths>.
-Depends on: Task 0.
+### Task 3 — <name>
+Files: <modules or paths>.
+Context: <`file:line` references and facts this task needs>.
 Hard part: <the non-obvious behavior>.
 Done when: <observable outcome>.
-Model: <haiku | sonnet | opus> — <the reason, one clause>.
 
 ## Tests
 
@@ -111,24 +101,23 @@ Model: <haiku | sonnet | opus> — <the reason, one clause>.
 
 - [ ] <What a user can do, or what a command prints, when this card is finished>
 - [ ] Every test in Tests passes
-- [ ] No task wrote a file owned by another task
 ```
 
 Rules for Tasks:
 
-- A task may run beside another task only when they do not write the same files and neither needs a type or behavior the other task creates. Put that shared piece in an earlier sequential wave.
-- Always include the wave labels. When nothing is parallel, use one sequential wave and write why a split would share files.
-- Own paths narrowly. Two parallel tasks never list the same path.
-- One task, one hard part. Split a task that contains two unrelated hard parts when the split can run in parallel.
+- One implement session does the tasks one after the other, in the order written: there are no waves and no parallel tasks. Order them so each task builds on the previous ones; put a shared contract first.
+- `Files` says where a task lands: a guide for the implementer and the reviewer, not an ownership rule.
+- `Context` carries the research, so the implement agent reads only what it touches: the `file:line` ranges, the existing pattern to follow, the command that runs the relevant tests. Copy facts you verified in the code, not guesses.
+- One task, one hard part. Split a task that contains two unrelated hard parts; merge tasks that are too small to be worth a checkbox.
 
 ## Progress
 
 `## Progress` is the list a person reads to see how far implementation got. Write it immediately after `## Brief`.
 
-- One checkbox per task. Number from 1 with no gaps, in wave order, then task order inside the wave.
-- Line shape: `- [ ] N. Wave W — Task T — <task name>`. Leave every box unchecked.
+- One checkbox per task. Number from 1 with no gaps, in task order.
+- Line shape: `- [ ] N. <task name>`. Leave every box unchecked.
 - Do not renumber a step after it is written. Do not add a progress line that is not a task.
-- The implement agent changes `- [ ]` to `- [x]` only after that task is merged. A stopped run leaves later boxes unchecked.
+- The implement agent changes `- [ ]` to `- [x]` only after that task is committed and its tests pass. A stopped run leaves later boxes unchecked.
 
 Rules for Tests and Definition of done:
 
@@ -158,23 +147,27 @@ On the next run, the answer is the text under that question, down to the next nu
 
 ## Models
 
-Judge each task's difficulty, write it on the task's `Model:` line, then pick the card's models from them. One Claude session runs a whole column for a card, on one model, so the card's model for a column is the highest its tasks need. A model that is too weak costs a repair loop; one that is too strong costs time and money on every line.
+One implement session runs every task on one model, so pick the card's models from its hardest task. A model that is too weak costs a repair loop; one that is too strong costs time and money on every line.
 
-- `haiku`: mechanical and fully specified. A rename, a text or copy change, a config value, deleting code the task lists by path, docs.
-- `sonnet` (the default): one module, page or endpoint that follows a pattern the project already has, with its tests.
-- `opus`: a wrong guess breaks something silently or for good. Concurrency or async ordering, state shared across processes or replicas, security, authentication or secrets, a data migration or an irreversible operation, a refactor across modules, or a `Hard part` whose invariant is easy to break.
+- `haiku`: everything is mechanical and fully specified: renames, text or copy changes, config values, deleting code listed by path, docs.
+- `sonnet` (the default): modules, pages or endpoints that follow patterns the project already has, with their tests.
+- `opus`: a wrong guess breaks something silently or for good: concurrency or async ordering, state shared across processes or replicas, security, authentication or secrets, a data migration or an irreversible operation, a refactor across modules, or a `Hard part` whose invariant is easy to break.
 
-Then add the card's models at the end of the specification:
+Add them at the end of the specification:
 
 ```markdown
 ## Models
 
-- nightshift-implement: <the highest model of the tasks>
-- nightshift-review: <sonnet, or opus when any task is opus>
+- nightshift-implement: <haiku | sonnet | opus, from the hardest task>
+- nightshift-review: <sonnet, or opus when implement is opus>
 - nightshift-merge: sonnet
 ```
 
 Also return the same values in the structured output's `models` field, keyed by skill name: Nightshift runs the card's next columns on them, unless a column locks its own model.
+
+## Updating the card
+
+Return only what changes, in the structured output's `sections` list: `{"heading": "Result", "content": "…"}` replaces (or adds) the `## Result` section, `"op": "append"` adds lines to a section, `"op": "delete"` removes one. Do not return `description`: Nightshift keeps every section you do not name, byte for byte, and re-emitting the whole note costs minutes of generation. Use `description` only to restructure the whole note.
 
 ## Output
 
@@ -183,7 +176,7 @@ Question round (`move` is `stay` whenever `questions` is non-empty):
 ```json
 {
   "title": "current title",
-  "description": "the brief, then ## Questions with three blank lines under each question",
+  "sections": [{"heading": "Questions", "content": "…three blank lines under each question…"}],
   "move": "stay",
   "summary": "Asked 2 product questions before planning.",
   "questions": [
@@ -197,9 +190,10 @@ Plan ready (`questions` empty, `move` is `next`):
 ```json
 {
   "title": "current or tightened title",
-  "description": "the specification, from ## Brief through ## Definition of done, with ## Progress still unchecked",
+  "sections": [{"heading": "Progress", "content": "…"}, {"heading": "Architecture", "content": "…"}, {"heading": "Tasks", "content": "…"}, {"heading": "Tests", "content": "…"}, {"heading": "Definition of done", "content": "…"}, {"heading": "Models", "content": "…"}],
+  "models": {"nightshift-implement": "sonnet", "nightshift-review": "sonnet", "nightshift-merge": "sonnet"},
   "move": "next",
-  "summary": "Plan ready: 1 sequential wave, then 2 parallel tasks.",
+  "summary": "Plan ready: 3 tasks, implement on sonnet.",
   "questions": []
 }
 ```
@@ -207,9 +201,9 @@ Plan ready (`questions` empty, `move` is `next`):
 ## Done when
 
 - [ ] The description contains `## Brief`, `## Progress`, `## Architecture`, `## Tasks`, `## Tests`, and `## Definition of done`
-- [ ] `## Progress` has one unchecked numbered line per task, from 1, in wave order
-- [ ] Parallel tasks are in a wave marked parallel, with no shared owned path
+- [ ] `## Progress` has one unchecked numbered line per task, from 1, in task order
+- [ ] Every task has `Files`, `Context` with `file:line` references, `Hard part` and `Done when`
 - [ ] Tests cover the hard behavior, and Definition of done is observable
-- [ ] Every task has a `Model:` line, and `## Models` names the card's models (see Models)
+- [ ] `## Models` names the card's models, chosen from the hardest task (see Models)
 - [ ] The specification does not contain function bodies or routine implementation steps
 - [ ] `move` is `next` and `questions` is empty, or `move` is `stay` because product questions are still open
