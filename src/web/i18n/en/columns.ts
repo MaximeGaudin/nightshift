@@ -12,7 +12,7 @@ export const columns = {
   "columns.projectSkills": "Project skills",
   "columns.userSkills": "User skills",
   "columns.parallel": "Parallel agents",
-  "columns.parallelHint": "Parallel agents in this column. Empty = 1. The global cap from settings always applies.",
+  "columns.parallelHint": "Parallel agents in this column. Empty = 1. The project cap (Settings > This project) always applies.",
   "columns.details": "Details",
   "columns.emptyBeforeDelete": "Empty the column before deleting it",
   "columns.model": "Model",
@@ -33,7 +33,7 @@ export const columns = {
   "columns.hintBefore": "A",
   "columns.hintSkill": "skill",
   "columns.hintAfter":
-    "column runs the chosen skill on every card that arrives in it. Each skill column has its own limit of parallel agents (1 by default), under the global cap from settings. The skill may edit the card then send it to the next column. The (optional) emoji field replaces the column's type icon.",
+    "column runs the chosen skill on every card that arrives in it. Each skill column has its own limit of parallel agents (1 by default), under the project cap (Settings > This project). The skill may edit the card then send it to the next column. The (optional) emoji field replaces the column's type icon.",
   "columns.dnd.instructions":
     "To reorder a column, press Space, move it with the up and down arrows, then press Space to drop it or Escape to cancel.",
   "columns.dnd.start": "Column {name} picked up",

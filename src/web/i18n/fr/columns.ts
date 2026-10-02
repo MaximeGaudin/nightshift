@@ -14,7 +14,7 @@ export const columns: Record<keyof typeof enColumns, string> = {
   "columns.projectSkills": "Skills du projet",
   "columns.userSkills": "Skills utilisateur",
   "columns.parallel": "Agents en parallèle",
-  "columns.parallelHint": "Agents en parallèle dans cette colonne. Vide = 1. Le plafond global des réglages s'applique toujours.",
+  "columns.parallelHint": "Agents en parallèle dans cette colonne. Vide = 1. Le plafond du projet (Réglages > Ce projet) s'applique toujours.",
   "columns.details": "Détails",
   "columns.emptyBeforeDelete": "Videz la colonne avant de la supprimer",
   "columns.model": "Modèle",
@@ -36,7 +36,7 @@ export const columns: Record<keyof typeof enColumns, string> = {
   "columns.hintBefore": "Une colonne",
   "columns.hintSkill": "skill",
   "columns.hintAfter":
-    "exécute le skill choisi sur chaque fiche qui y arrive. Chaque colonne skill a sa propre limite d'agents en parallèle (1 par défaut), sous le plafond global des réglages. Le skill peut modifier la fiche puis l'envoyer à la colonne suivante. Le champ emoji (optionnel) remplace l'icône de type de la colonne.",
+    "exécute le skill choisi sur chaque fiche qui y arrive. Chaque colonne skill a sa propre limite d'agents en parallèle (1 par défaut), sous le plafond du projet (Réglages > Ce projet). Le skill peut modifier la fiche puis l'envoyer à la colonne suivante. Le champ emoji (optionnel) remplace l'icône de type de la colonne.",
   "columns.dnd.instructions":
     "Pour réordonner une colonne, appuyez sur Espace, déplacez-la avec les flèches haut et bas, puis appuyez sur Espace pour la déposer ou sur Échap pour annuler.",
   "columns.dnd.start": "Colonne {name} saisie",
