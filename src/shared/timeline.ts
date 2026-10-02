@@ -92,7 +92,7 @@ export function replayHistory(base: TimeState | undefined, entries: HistoryEntry
   return { totals: [...totals.values()], ...(cursor ? { cursor } : {}) };
 }
 
-/** Time per (column, part) of a card at `nowMs`, in board order then deleted columns, Done and zero slices excluded. */
+/** Time per (column, part) of a card at `nowMs`, in board order then deleted columns, Backlog, Done and zero slices excluded. */
 export function cardTimeSlices(card: Card, columns: Column[], nowMs: number): TimeSlice[] {
   const state = replayHistory(card.timeBase, card.history, card.createdAt);
   const raw = [...state.totals];
@@ -119,7 +119,7 @@ export function cardTimeSlices(card: Card, columns: Column[], nowMs: number): Ti
     const name = col?.name ?? s.columnName;
     let part = s.part;
     if (col) {
-      if (col.id === DONE_COLUMN_ID) continue;
+      if (col.id === DONE_COLUMN_ID || isBacklogColumn(col.id)) continue;
       if (part === "legacy" && col.type === "inert") part = "inert";
     } else {
       id = s.columnId;
@@ -153,9 +153,7 @@ export function cardTimeSlices(card: Card, columns: Column[], nowMs: number): Ti
  */
 export function cardTimers(card: Card, columns: Column[], nowMs: number): { totalMs: number; stepMs: number } | null {
   if (isBacklogColumn(card.columnId) || isDoneColumn(card.columnId)) return null;
-  const totalMs = cardTimeSlices(card, columns, nowMs)
-    .filter((s) => s.columnId === undefined || !isBacklogColumn(s.columnId))
-    .reduce((sum, s) => sum + s.ms, 0);
+  const totalMs = cardTimeSlices(card, columns, nowMs).reduce((sum, s) => sum + s.ms, 0);
   const step = nowMs - Date.parse(card.enteredColumnAt);
   return { totalMs, stepMs: Number.isFinite(step) && step > 0 ? step : 0 };
 }

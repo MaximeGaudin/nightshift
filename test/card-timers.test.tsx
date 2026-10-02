@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { cardTimers } from "../src/shared/timeline.ts";
+import { cardTimeSlices, cardTimers } from "../src/shared/timeline.ts";
 import { backlogColumn, type Card, type Column, doneColumn, type HistoryEntry } from "../src/shared/types.ts";
 import { CardTile } from "../src/web/CardTile.tsx";
 import { nowSubscribers } from "../src/web/useNow.ts";
@@ -35,6 +35,15 @@ const card = (col: Column, enteredAt: number): Card =>
 test("total excludes Backlog, step counts from the last entry", () => {
   const now = T0 + (3 * DAY + 300 + 60) * 1000;
   expect(cardTimers(card(plan, 3 * DAY + 300), columns, now)).toEqual({ totalMs: 360_000, stepMs: 60_000 });
+});
+
+test("back to Backlog and out again: neither chrono nor chart counts Backlog", () => {
+  const h = history([0, "created", grill], [100, "moved", backlog], [1000, "moved", grill]);
+  const c = { ...card(grill, 1000), history: h } as Card;
+  const now = T0 + 1060 * 1000;
+  const sum = cardTimeSlices(c, columns, now).reduce((a, x) => a + x.ms, 0);
+  expect(sum).toBe(160_000);
+  expect(cardTimers(c, columns, now)?.totalMs).toBe(sum);
 });
 
 test("no timers in Backlog or Done", () => {

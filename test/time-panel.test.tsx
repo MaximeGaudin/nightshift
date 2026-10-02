@@ -7,7 +7,7 @@ import { quiet, waitFor } from "./helpers.ts";
 const T0 = Date.parse("2026-01-01T00:00:00Z");
 const iso = (ms: number) => new Date(T0 + ms).toISOString();
 
-const backlog: Column = { id: "c_back", name: "Backlog", type: "inert" };
+const backlog: Column = { id: "col_backlog", name: "Backlog", type: "inert" };
 const plan: Column = { id: "c_plan", name: "Plan", type: "skill", skill: "x" };
 const done: Column = { id: DONE_COLUMN_ID, name: "Done", type: "inert" };
 const board = (cards: Card[]): Board => ({ version: 1, name: "t", columns: [backlog, plan, done], cards, nextCardNumber: 2 });
@@ -35,7 +35,7 @@ test("empty tab: just created, or only in Done", () => {
 });
 
 test("single part: filled circle and 100 %", () => {
-  const c = card([created(backlog)], backlog.id);
+  const c = card([created(plan)], plan.id);
   const html = render(c, T0 + 90_000);
   expect(html).toMatch(/<circle[^>]*fill="hsl\(/);
   expect(html).not.toContain("<path");
@@ -63,8 +63,25 @@ test("several parts: arcs, labels, legacy pattern", () => {
   expect(render(legacy, T0 + 5000)).toContain("<pattern");
 });
 
+test("Backlog time is left out of the pie and the percentages", () => {
+  const grill: Column = { id: "c_grill", name: "Grill", type: "skill", skill: "g" };
+  const b: Board = { version: 1, name: "t", columns: [backlog, grill, plan, done], cards: [], nextCardNumber: 2 };
+  const mv = (ms: number, from: Column, to: Column) => ({
+    at: iso(ms),
+    kind: "moved" as const,
+    text: `Agent: ${from.name} → ${to.name}`,
+    columnId: to.id,
+  });
+  const c = card([created(backlog), mv(3_600_000, backlog, grill), mv(5_400_000, grill, plan)], plan.id);
+  const html = renderToStaticMarkup(<TimePanelView card={c} board={b} nowMs={T0 + 7_200_000} />);
+  expect(html).not.toContain("Backlog");
+  expect(html.match(/class="time-pct[^>]*>50 %/g)?.length).toBe(2);
+  expect(html).toContain("Grill");
+  expect(html).toContain("Plan");
+});
+
 test("tick: duration grows as time passes", () => {
-  const c = card([created(backlog)], backlog.id);
+  const c = card([created(plan)], plan.id);
   expect(render(c, T0 + 5_000)).toContain("5 s");
   expect(render(c, T0 + 6_000)).toContain("6 s");
 });
