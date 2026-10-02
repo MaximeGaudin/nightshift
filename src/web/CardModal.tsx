@@ -449,7 +449,8 @@ export function CardModalContent({
               onDoubleClick={editDescription}
             >
               {description.trim() ? (
-                <Markdown source={description} renderImage={renderCardImage(project, card.id)} />
+                // Keyed on the saved version: an image pasted then previewed before Save is refused until saved, and must load again after.
+                <Markdown key={card.updatedAt} source={description} renderImage={renderCardImage(project, card.id)} />
               ) : (
                 <p className="text-muted-foreground">{t("card.noDescription")}</p>
               )}

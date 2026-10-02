@@ -113,4 +113,6 @@ test("card modal wires the paste handler and the uploading hint", () => {
   expect(src).toContain("onPaste={(e) =>");
   expect(src).toContain("api.uploadCardImage(project, card.id, image)");
   expect(src).toContain('t("card.uploadingImage")');
+  // A pasted image previewed before Save fails to load; the preview remounts once the card is saved.
+  expect(src).toContain("<Markdown key={card.updatedAt} source={description}");
 });
