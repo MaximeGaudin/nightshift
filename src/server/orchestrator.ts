@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Subprocess } from "bun";
+import { isReady, releaseReason } from "../shared/dependencies.ts";
 import { describeModelChanges, formatDropped, type ModelSource, mergeModels, resolveModel } from "../shared/models.ts";
 import { resolveNextColumn } from "../shared/skip.ts";
 import type {
@@ -333,6 +334,8 @@ export class Orchestrator {
   private logs = new Map<string, LogLine[]>();
   private listeners = new Set<(e: ServerEvent) => void>();
   private tickScheduled = false;
+  /** Projects waiting for a dependency pass (coalesced per microtask). */
+  private dependencyPending = new Map<string, Project>();
   /** Projects whose agents are run by another live Nightshift process: path -> its pid. */
   private lockedBy = new Map<string, number>();
   private lockTimer: ReturnType<typeof setInterval>;
@@ -389,6 +392,8 @@ export class Orchestrator {
     if (wasLocked !== this.lockedBy.has(p.path)) {
       this.broadcast({ type: "board", project: p.path, snapshot: this.snapshot(p) });
       this.scheduleTick();
+      // Just took the lock over: release the cards whose dependencies finished meanwhile.
+      if (!this.lockedBy.has(p.path)) this.scheduleDependencies(p);
     }
   }
 
@@ -425,9 +430,11 @@ export class Orchestrator {
       this.broadcast({ type: "board", project: path, snapshot: this.snapshot(p) });
       this.scheduleTick();
       this.sequence.schedule(p);
+      this.scheduleDependencies(p);
     });
     rememberProject(path);
     this.scheduleTick();
+    this.scheduleDependencies(p);
     return p;
   }
 
@@ -536,6 +543,33 @@ export class Orchestrator {
       }
     }
     this.broadcast({ type: "log", project: p.path, cardId, line });
+  }
+
+  // ---- dependencies ------------------------------------------------------
+  // A card held in Backlog by its dependencies leaves it once they are all in Done. Only the instance that runs
+  // the project's agents does it, so two processes never release the same card.
+
+  /** Coalesced like scheduleTick: one dependency pass per project per microtask, never inside an emit. */
+  scheduleDependencies(p: Project) {
+    if (this.dependencyPending.has(p.path)) return;
+    this.dependencyPending.set(p.path, p);
+    queueMicrotask(() => {
+      this.dependencyPending.delete(p.path);
+      this.releaseReadyCards(p);
+    });
+  }
+
+  private releaseReadyCards(p: Project) {
+    if (!this.agents || this.lockedBy.has(p.path) || this.projects.get(p.path) !== p) return;
+    // No ready card, no mutation: every mutation emits a change that schedules another pass.
+    if (!p.board.cards.some((c) => isReady(p.board, c))) return;
+    try {
+      p.mutate((board) => {
+        for (const card of board.cards.filter((c) => isReady(board, c))) p.releaseDependencies(board, card, releaseReason(board, card));
+      });
+    } catch (e) {
+      console.error(`Could not release the cards of ${p.path} whose dependencies are done: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
 
   // ---- scheduling --------------------------------------------------------
