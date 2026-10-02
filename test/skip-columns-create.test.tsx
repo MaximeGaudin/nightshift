@@ -35,14 +35,19 @@ test("no section in Merge (only Done follows)", () => {
   expect(renderToStaticMarkup(<AddCard initialOpen skipOptions={options} onAdd={() => {}} />)).not.toContain("skip-picker");
 });
 
-test("submit passes the title and skip, then the next form is fresh", () => {
+test("submit with a title creates the card and closes the form", () => {
   const calls: [string, string[]][] = [];
   const onAdd = (t: string, s: string[]) => calls.push([t, s]);
-  const fresh = submitAddCard("  New card ", [TO_TEST], onAdd);
+  const result = submitAddCard("  New card ", [TO_TEST], onAdd);
   expect(calls).toEqual([["New card", [TO_TEST]]]);
-  expect(fresh).toEqual({ title: "", skip: [] });
-  expect(submitAddCard("   ", [TO_TEST], onAdd)).toEqual({ title: "", skip: [] });
-  expect(calls).toHaveLength(1);
+  expect(result).toEqual({ title: "", skip: [], close: true });
+});
+
+test("submit with a blank title creates nothing and keeps the form open", () => {
+  const calls: [string, string[]][] = [];
+  const onAdd = (t: string, s: string[]) => calls.push([t, s]);
+  expect(submitAddCard("   ", [TO_TEST], onAdd)).toEqual({ title: "   ", skip: [TO_TEST], close: false });
+  expect(calls).toHaveLength(0);
 });
 
 test("tile shows the skipped indicator, none when empty", () => {

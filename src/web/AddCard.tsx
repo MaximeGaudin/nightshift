@@ -13,14 +13,18 @@ export function skipOptions(columns: Column[], columnId: string): Column[] {
   return columns.slice(index + 1).filter((c) => c.id !== DONE_COLUMN_ID);
 }
 
-/** Submits the add-card form: a blank title submits nothing; the form state is fresh afterwards either way. */
+/**
+ * Submits the add-card form. A non-blank title creates the card, resets the form state and asks to close it.
+ * A blank title submits nothing and keeps the typed state: the form stays open.
+ */
 export function submitAddCard(
   title: string,
   skip: string[],
   onAdd: (title: string, skip: string[]) => void,
-): { title: string; skip: string[] } {
-  if (title.trim()) onAdd(title.trim(), skip);
-  return { title: "", skip: [] };
+): { title: string; skip: string[]; close: boolean } {
+  if (!title.trim()) return { title, skip, close: false };
+  onAdd(title.trim(), skip);
+  return { title: "", skip: [], close: true };
 }
 
 export function AddCard({
@@ -61,6 +65,7 @@ export function AddCard({
     const fresh = submitAddCard(title, skip, onAdd);
     setTitle(fresh.title);
     setSkip(fresh.skip);
+    if (fresh.close) close();
   };
   return (
     <div className="add-card-form flex flex-col gap-1.5 px-0.5 pb-2" ref={formRef}>
