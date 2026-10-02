@@ -26,7 +26,9 @@ export function DependencyPicker({ cards, columns, value, onChange }: Dependency
   const { t } = useT();
   const [query, setQuery] = useState("");
   if (cards.length === 0) return null;
-  const shown = filterDependencyCards(cards, query);
+  // Selected cards first, in selection order, then the others in board order.
+  const matches = filterDependencyCards(cards, query);
+  const shown = [...value.flatMap((id) => matches.filter((c) => c.id === id)), ...matches.filter((c) => !value.includes(c.id))];
   const toggle = (id: string, on: boolean) => onChange(on ? [...value.filter((v) => v !== id), id] : value.filter((v) => v !== id));
   return (
     <details className="dependency-picker min-w-0 text-xs text-muted-foreground">

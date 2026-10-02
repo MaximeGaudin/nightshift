@@ -1,6 +1,5 @@
 import { Loader2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { unmetDependencies } from "../shared/dependencies.ts";
 import {
   BACKLOG_COLUMN_ID,
   type Board,
@@ -112,7 +111,6 @@ export function DependenciesSection({
   useEffect(() => setDeps(serverDeps), [depsKey]);
   const editable = card.columnId === BACKLOG_COLUMN_ID;
   if (!editable && serverDeps.length === 0) return null;
-  const unmet = new Set(unmetDependencies(board, card).map((c) => c.id));
   const listed = serverDeps.flatMap((id) => {
     const dep = board.cards.find((c) => c.id === id);
     return dep ? [dep] : [];
@@ -135,9 +133,8 @@ export function DependenciesSection({
                   {cardRef(dep)}
                 </button>
                 <span className="min-w-0 flex-1 truncate">{dep.title}</span>
-                <span className="shrink-0 text-muted-foreground">
+                <span className={cn("shrink-0", dep.columnId === DONE_COLUMN_ID ? "text-ok" : "text-muted-foreground")}>
                   {column?.name}
-                  {!unmet.has(dep.id) ? ` · ${t("card.deps.done")}` : ""}
                 </span>
               </li>
             );
