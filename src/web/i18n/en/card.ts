@@ -57,4 +57,8 @@ export const card = {
   "card.models.unused": "{skill} (unused)",
   "card.models.clearAll": "Clear all",
   "card.models.save": "Save models",
+  "card.deps.heading": "Dependencies",
+  "card.deps.done": "done",
+  "card.deps.readonly": "Editable only in Backlog",
+  "card.deps.open": "Open {ref}",
 } as const;

@@ -22,18 +22,25 @@ export const api = {
   fs: (dir?: string) =>
     call<{ dir: string; parent: string | null; dirs: string[] }>("GET", `/api/fs${dir ? `?dir=${encodeURIComponent(dir)}` : ""}`),
   saveBoard: (project: string, patch: object) => call<ProjectSnapshot>("PUT", "/api/board", { project, ...patch }),
-  createCard: (project: string, columnId: string, title: string, description = "", skipColumnIds?: string[]) =>
+  createCard: (project: string, columnId: string, title: string, description = "", skipColumnIds?: string[], dependsOn?: string[]) =>
     call<{ id: string }>("POST", "/api/cards", {
       project,
       columnId,
       title,
       description,
       ...(skipColumnIds && skipColumnIds.length > 0 ? { skipColumnIds } : {}),
+      ...(dependsOn && dependsOn.length > 0 ? { dependsOn } : {}),
     }),
   updateCard: (
     project: string,
     id: string,
-    patch: { title?: string; description?: string; skipColumnIds?: string[]; models?: Record<string, string> | null },
+    patch: {
+      title?: string;
+      description?: string;
+      skipColumnIds?: string[];
+      dependsOn?: string[];
+      models?: Record<string, string> | null;
+    },
   ) => call("PATCH", `/api/cards/${id}`, { project, ...patch }),
   deleteCard: (project: string, id: string) => call("DELETE", `/api/cards/${id}?${q(project)}`),
   moveCard: (project: string, id: string, columnId: string, index?: number) =>

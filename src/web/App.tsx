@@ -299,6 +299,7 @@ export function App() {
           testing={snap.testing?.includes(card.id) ?? false}
           sequential={isSequential(snap, card.id)}
           onClose={() => setOpenCard(null)}
+          onOpenCard={setOpenCard}
           onError={notifyError}
         />
       )}
@@ -341,10 +342,11 @@ export function App() {
       {newCard && (
         <NewCardDialog
           columns={snap.board.columns}
+          cards={snap.board.cards}
           initialTitle={newCard.title}
-          onAdd={(title, skip) => {
+          onAdd={(title, skip, dependsOn) => {
             const first = snap.board.columns[0];
-            if (first) guard(api.createCard(snap.path, first.id, title, "", skip));
+            if (first) guard(api.createCard(snap.path, first.id, title, "", skip, dependsOn));
           }}
           onClose={() => setNewCard(null)}
         />
