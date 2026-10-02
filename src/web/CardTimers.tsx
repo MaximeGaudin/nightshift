@@ -24,14 +24,8 @@ export function CardTimers({ card, columns, column, inline }: { card: Card; colu
   const units = durationUnits();
   const total = formatDuration(timers.totalMs, units);
   const step = formatDuration(timers.stepMs, units);
-  return (
-    <span
-      className={cn(
-        "card-timers flex shrink-0 items-center gap-1 text-[11px] font-normal text-muted-foreground tabular-nums",
-        !inline && "mt-1.5",
-      )}
-    >
-      {inline && <span aria-hidden="true">(</span>}
+  const chronos = (
+    <span className="flex items-center gap-1">
       <Timer size={12} strokeWidth={1.75} aria-hidden="true" focusable="false" className="shrink-0" />
       <span className="card-timer-step" title={t("board.card.timerStepTitle", { column: column?.name ?? card.columnId })}>
         {step}
@@ -40,6 +34,18 @@ export function CardTimers({ card, columns, column, inline }: { card: Card; colu
       <span className="card-timer-total" title={t("board.card.timerTotalTitle")}>
         {total}
       </span>
+    </span>
+  );
+  return (
+    <span
+      className={cn(
+        "card-timers flex shrink-0 items-center text-[11px] font-normal text-muted-foreground tabular-nums",
+        !inline && "mt-1.5",
+      )}
+    >
+      {/* Parentheses hug the chronos: they sit outside the gapped group. */}
+      {inline && <span aria-hidden="true">(</span>}
+      {chronos}
       {inline && <span aria-hidden="true">)</span>}
     </span>
   );
