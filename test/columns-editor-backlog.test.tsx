@@ -79,3 +79,9 @@ test("editor-backlog-locked", () => {
   expect(alpha).toContain('aria-label="Name"');
   expect(done).toContain("locked");
 });
+
+test("editor-fresh-session-default: turning a column into a skill column ticks fresh session", async () => {
+  const { typePatch } = await import("../src/web/ColumnsEditor.tsx");
+  expect(typePatch("skill")).toEqual({ type: "skill", freshSession: true });
+  expect(typePatch("inert")).toEqual({ type: "inert" });
+});
