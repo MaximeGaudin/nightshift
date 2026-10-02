@@ -30,7 +30,7 @@ import { resolveNextColumn, skippedColumns } from "../shared/skip.ts";
 import { type Card, type Column, cardRef, columnMaxParallel, isDoneColumn, type ProjectSnapshot } from "../shared/types.ts";
 import { AddCard, skipOptions } from "./AddCard.tsx";
 import { isSequential } from "./App.tsx";
-import { api } from "./api.ts";
+import { api, useSettings } from "./api.ts";
 import {
   applyDrop,
   cardsByColumn,
@@ -168,6 +168,7 @@ export function Board({
   };
 
   const columns = snap.board.columns;
+  const settings = useSettings();
   const cards = snap.board.cards;
   const serverCards = useMemo(() => cardsByColumn(columns, cards, null), [columns, cards]);
   const shownCards = useMemo(() => cardsByColumn(columns, cards, local, moving), [columns, cards, local, moving]);
@@ -313,6 +314,8 @@ export function Board({
         onSendNext={next ? () => sendNext(card, next.id) : undefined}
         sending={sending.has(card.id)}
         sequential={isSequential(snap, card.id)}
+        column={columns.find((c) => c.id === card.columnId)}
+        settings={settings}
         onOpen={() => onOpen(card.id)}
         {...extra}
       />

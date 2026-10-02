@@ -1,6 +1,7 @@
 import { ArrowRight, ChevronsRight } from "lucide-react";
 import type { HTMLAttributes, KeyboardEvent, Ref } from "react";
-import { type Card, cardRef, type LiveStatus, type RunProgress as RunProgressData } from "../shared/types.ts";
+import { resolveModel } from "../shared/models.ts";
+import { type Card, type Column, cardRef, type LiveStatus, type RunProgress as RunProgressData, type Settings } from "../shared/types.ts";
 import { CardThumbnail } from "./CardThumbnail.tsx";
 import { IconButton } from "./components/icon-button.tsx";
 import { Badge } from "./components/ui/badge.tsx";
@@ -19,6 +20,14 @@ export function SequenceBadge() {
   );
 }
 
+/** The card's own model when it is the one that will run (skill column, not locked); otherwise null. */
+export function cardModelOverride(column: Column | undefined, settings: Pick<Settings, "model"> | null | undefined, card: Card) {
+  if (column?.type !== "skill") return null;
+  const r = resolveModel(column, { model: settings?.model ?? "" }, card);
+  if (r.source !== "card" || !r.model) return null;
+  return { model: r.model, columnModel: column.model?.trim() || undefined };
+}
+
 export function CardTile({
   project,
   card,
@@ -33,6 +42,8 @@ export function CardTile({
   onSendNext,
   sending,
   sequential,
+  column,
+  settings,
 }: {
   project: string;
   card: Card;
@@ -50,8 +61,12 @@ export function CardTile({
   sending?: boolean;
   /** The sequential mode is working on this card. */
   sequential?: boolean;
+  /** The column the card is in, and the settings, to flag a card model that overrides the column's. */
+  column?: Column;
+  settings?: Pick<Settings, "model"> | null;
 }) {
   const { t, tn } = useT();
+  const override = cardModelOverride(column, settings, card);
   const lr = card.lastRun?.columnId === card.columnId ? card.lastRun : undefined;
   const status = live ?? lr?.status;
   const excerpt = card.description ? toPlainText(card.description).slice(0, 160) : "";
@@ -88,6 +103,15 @@ export function CardTile({
       <div className="card-ref mb-0.5 flex min-h-5 items-center gap-1 pr-6 text-[11px] text-muted-foreground tabular-nums">
         <span>{cardRef(card)}</span>
         {sequential && <SequenceBadge />}
+        {override && (
+          <Badge
+            variant="secondary"
+            className="model-badge"
+            title={override.columnModel ? t("board.card.modelBadge", { column: override.columnModel }) : t("board.card.modelBadgeNone")}
+          >
+            {override.model}
+          </Badge>
+        )}
         {skipped && skipped.length > 0 && (
           <span
             className="card-skipped inline-flex text-muted-foreground"

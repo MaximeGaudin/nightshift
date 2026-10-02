@@ -153,3 +153,32 @@ test("card models: a 400 message is returned for inline display", async () => {
   };
   expect(await saveCardModels({ project: "p", cardId: "c1", values: { plan: "gpt" }, update })).toBe('Invalid model "gpt" for plan');
 });
+
+// --- Override badge ---
+
+const { CardTile, cardModelOverride } = await import("../src/web/CardTile.tsx");
+
+const overridden = { ...baseCard, columnId: "col_impl", models: { implement: "haiku", plan: "fable" } } as Card;
+const tile = (column: Column, settings: { model: string } | null = null) =>
+  renderToStaticMarkup(
+    <CardTile project="/p" card={{ ...overridden, columnId: column.id }} column={column} settings={settings} onOpen={noop} />,
+  );
+
+test("badge: shows the card model with the column in the tooltip", () => {
+  const out = tile({ id: "col_impl", name: "Implement", type: "skill", skill: "implement", model: "opus" });
+  expect(out).toContain("model-badge");
+  expect(out).toContain(">haiku<");
+  expect(out).toContain('title="Card model (column: opus)"');
+});
+
+test("badge: tooltip says the column has none", () => {
+  const out = tile({ id: "col_impl", name: "Implement", type: "skill", skill: "implement" }, { model: "sonnet" });
+  expect(out).toContain('title="Card model (column has none)"');
+});
+
+test("badge: absent when the column is locked, inert, or the card has no entry", () => {
+  expect(tile({ id: "col_impl", name: "Implement", type: "skill", skill: "implement", lockModel: true })).not.toContain("model-badge");
+  expect(tile({ id: "col_impl", name: "Notes", type: "inert" })).not.toContain("model-badge");
+  expect(tile({ id: "col_impl", name: "Review", type: "skill", skill: "review" })).not.toContain("model-badge");
+  expect(cardModelOverride(undefined, null, overridden)).toBeNull();
+});
