@@ -1,14 +1,13 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Card, Column } from "../src/shared/types.ts";
-import { type ChildServer, must, startChildServer, waitFor } from "./helpers.ts";
+import { type ChildServer, must, removeTempDirs, startChildServer, tempDir, waitFor } from "./helpers.ts";
 
 let srv: ChildServer;
 let argsLog: string;
 beforeAll(async () => {
-  const tmp = mkdtempSync(join(tmpdir(), "ns-carry-"));
+  const tmp = tempDir("ns-carry-");
   argsLog = join(tmp, "args.jsonl");
   srv = await startChildServer({
     agents: true,
@@ -16,7 +15,10 @@ beforeAll(async () => {
     env: { FAKE_DELAY_MS: "50", FAKE_ARGS_LOG: argsLog },
   });
 }, 30000);
-afterAll(() => srv.stop());
+afterAll(async () => {
+  await srv.stop();
+  removeTempDirs();
+});
 
 const runsOf = (title: string) =>
   (() => {
