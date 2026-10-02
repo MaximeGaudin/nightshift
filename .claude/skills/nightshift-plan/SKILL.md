@@ -158,7 +158,7 @@ On the next run, the answer is the text under that question, down to the next nu
 
 ## Models
 
-Pick a model per task from its difficulty, write it on the task's `Model:` line, and pick the card's models. A model that is too weak costs a repair loop; one that is too strong costs time and money on every line. Judge the task, not the card.
+Judge each task's difficulty, write it on the task's `Model:` line, then pick the card's models from them. One Claude session runs a whole column for a card, on one model, so the card's model for a column is the highest its tasks need. A model that is too weak costs a repair loop; one that is too strong costs time and money on every line.
 
 - `haiku`: mechanical and fully specified. A rename, a text or copy change, a config value, deleting code the task lists by path, docs.
 - `sonnet` (the default): one module, page or endpoint that follows a pattern the project already has, with its tests.
@@ -169,12 +169,12 @@ Then add the card's models at the end of the specification:
 ```markdown
 ## Models
 
-- nightshift-implement: <sonnet, or opus when any task is opus>
+- nightshift-implement: <the highest model of the tasks>
 - nightshift-review: <sonnet, or opus when any task is opus>
 - nightshift-merge: sonnet
 ```
 
-When the structured output accepts a `models` field (Nightshift with per-card models), also return the same values there, keyed by skill name. Otherwise the `## Models` section is enough: `nightshift-implement` reads the task lines.
+Also return the same values in the structured output's `models` field, keyed by skill name: Nightshift runs the card's next columns on them, unless a column locks its own model.
 
 ## Output
 

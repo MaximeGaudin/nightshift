@@ -22,6 +22,9 @@ export const columns: Record<keyof typeof enColumns, string> = {
   "columns.modelHint": "Vide = modèle des réglages globaux.",
   "columns.lockModel": "Toujours utiliser le modèle de cette colonne",
   "columns.lockModelHint": "Ignore le modèle propre à la fiche pour cette colonne.",
+  "columns.freshSession": "Session vierge",
+  "columns.freshSessionHint":
+    "Démarre une nouvelle session Claude au lieu de reprendre celle de la fiche. Les colonnes suivantes reprennent cette nouvelle session.",
   "columns.instructions": "Instructions",
   "columns.instructionsPlaceholder": "Instructions additionnelles pour l'agent (optionnel)…",
   "columns.systemColumn": "Colonne système",

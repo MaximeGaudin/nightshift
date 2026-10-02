@@ -81,7 +81,8 @@ test("card models integration", async () => {
   // Plan -> Implement -> Review -> Done, all with move "next".
   let implStart = "";
   await waitFor(async () => {
-    const l = (await logOf(id)).find((x) => x.text.includes('Starting skill "nightshift-implement"'));
+    // Implement continues the card's session from Plan: its start line says so.
+    const l = (await logOf(id)).find((x) => x.text.includes('skill "nightshift-implement"'));
     if (l) implStart = l.text;
     return !!l;
   }, 15000);

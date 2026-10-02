@@ -61,6 +61,11 @@ export function lockModelPatch(checked: boolean): Partial<Column> {
   return { lockModel: checked ? true : undefined };
 }
 
+/** Checkbox state → column patch: `freshSession` is stored as `true` and omitted when off. */
+export function freshSessionPatch(checked: boolean): Partial<Column> {
+  return { freshSession: checked ? true : undefined };
+}
+
 function errorMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
@@ -198,6 +203,14 @@ function SortableColumnRow({ col, skills, skillsLoading, cardCount, reducedMotio
                 <label className="lock-model flex items-center gap-2 text-xs" title={t("columns.lockModelHint")}>
                   <input type="checkbox" checked={col.lockModel === true} onChange={(e) => onPatch(lockModelPatch(e.target.checked))} />
                   {t("columns.lockModel")}
+                </label>
+                <label className="fresh-session flex items-center gap-2 text-xs" title={t("columns.freshSessionHint")}>
+                  <input
+                    type="checkbox"
+                    checked={col.freshSession === true}
+                    onChange={(e) => onPatch(freshSessionPatch(e.target.checked))}
+                  />
+                  {t("columns.freshSession")}
                 </label>
               </div>
               <div className="grid gap-1.5 sm:col-span-2">

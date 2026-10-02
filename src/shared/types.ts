@@ -20,6 +20,8 @@ export interface Column {
   maxParallel?: number;
   /** Single grapheme shown instead of the type icon; absent = type icon. */
   emoji?: string;
+  /** Skill columns only: start a new Claude session instead of continuing the card's. Never stored as false. */
+  freshSession?: true;
 }
 
 export type RunStatus = "success" | "error" | "cancelled" | "question";
@@ -103,6 +105,8 @@ export interface Card {
   skipColumnIds?: string[];
   /** Per-skill model overrides (skill name -> alias or ID). Never `{}`; "default" is never stored. */
   models?: Record<string, string>;
+  /** The card's Claude session: every column continues it, except a column with `freshSession`. */
+  sessionId?: string;
   history: HistoryEntry[];
   /** Time checkpoint of the history entries dropped by the history cap. */
   timeBase?: TimeState;

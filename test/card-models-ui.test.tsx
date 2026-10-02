@@ -65,7 +65,7 @@ afterAll(() => {
 });
 
 test("columns editor: lock checkbox only on skill columns, checked from lockModel", () => {
-  const boxes = html.match(/<input[^>]*type="checkbox"[^>]*>/g) ?? [];
+  const boxes = html.match(/class="lock-model[^"]*"[^>]*><input[^>]*type="checkbox"[^>]*>/g) ?? [];
   expect(boxes).toHaveLength(2);
   expect(boxes[0]).toContain("checked");
   expect(boxes[1]).not.toContain("checked");

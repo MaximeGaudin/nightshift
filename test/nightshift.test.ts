@@ -516,6 +516,81 @@ test("prompt goes through stdin, never argv", async () => {
   expect(entry.argvHasCard).toBe(false);
 });
 
+test("card session: each column continues the card's session, a fresh-session column starts a new one", async () => {
+  const dir = tempDir("ns-session-");
+  await post("/api/projects/open", { path: dir });
+  const res = await post(
+    "/api/board",
+    {
+      project: dir,
+      columns: [
+        { name: "A", type: "skill", skill: "enrich" },
+        { name: "B", type: "skill", skill: "enrich" },
+        { name: "C", type: "skill", skill: "enrich", freshSession: true },
+        { name: "D", type: "skill", skill: "enrich" },
+        { name: "Done", type: "inert" },
+      ],
+    },
+    "PUT",
+  );
+  const col = (name: string) =>
+    must(
+      (res.board.columns as Column[]).find((c) => c.name === name),
+      name,
+    );
+  expect(col("C").freshSession).toBe(true);
+  expect(col("B").freshSession).toBeUndefined();
+  const { id } = await post("/api/cards", { project: dir, columnId: col("A").id, title: "session-chain" });
+  const get = async () => (await fetch(`${base}/api/project?project=${encodeURIComponent(dir)}`).then((r) => r.json())).board.cards;
+  await waitFor(async () => (await get()).find((c: Card) => c.id === id)?.columnId === col("Done").id, 15000);
+  const mine = readFileSync(argsLog, "utf8")
+    .trim()
+    .split("\n")
+    .map((l) => JSON.parse(l))
+    .filter((r) => String(r.title).startsWith("session-chain"));
+  // A: new session. B: continues it. C: fresh (no --resume). D: continues C's session.
+  expect(mine.map((r) => [r.continuing, r.resumeId !== null])).toEqual([
+    [false, false],
+    [true, true],
+    [false, false],
+    [true, true],
+  ]);
+  expect((await get()).find((c: Card) => c.id === id)?.sessionId).toBe("sess-1");
+});
+
+test("card session: an unknown session falls back to a new one", async () => {
+  const dir = tempDir("ns-session-gone-");
+  await post("/api/projects/open", { path: dir });
+  const res = await post(
+    "/api/board",
+    {
+      project: dir,
+      columns: [
+        { name: "A", type: "skill", skill: "enrich" },
+        { name: "Done", type: "inert" },
+      ],
+    },
+    "PUT",
+  );
+  const col = (name: string) =>
+    must(
+      (res.board.columns as Column[]).find((c) => c.name === name),
+      name,
+    );
+  const { id } = await post("/api/cards", { project: dir, columnId: col("Done").id, title: "gone FAKE_UNKNOWN_SESSION" });
+  // Pretend an earlier column left a session this machine does not have, then send the card to A.
+  srv.orch.get(dir).mutate(() => {
+    const c = must(srv.orch.get(dir).card(id));
+    c.sessionId = "sess-deleted";
+  });
+  await post(`/api/cards/${id}/move`, { project: dir, columnId: col("A").id });
+  const get = async () => (await fetch(`${base}/api/project?project=${encodeURIComponent(dir)}`).then((r) => r.json())).board.cards;
+  await waitFor(async () => (await get()).find((c: Card) => c.id === id)?.columnId === col("Done").id, 15000);
+  const card = (await get()).find((c: Card) => c.id === id);
+  expect(card.lastRun.status).toBe("success");
+  expect(card.sessionId).toBe("sess-1");
+});
+
 test("removing a column that still holds cards is refused", async () => {
   const snap = await post("/api/projects/open", { path: proj });
   const res = await post("/api/board", { project: proj, columns: [snap.board.columns[0]] }, "PUT");

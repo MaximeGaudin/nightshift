@@ -232,6 +232,7 @@ export function startServer({ port, development, agents = true }: { port: number
                   ...(instructions ? { instructions } : {}),
                   ...(model ? { model } : {}),
                   ...(type === "skill" && c.lockModel === true ? { lockModel: true as const } : {}),
+                  ...(type === "skill" && c.freshSession === true ? { freshSession: true as const } : {}),
                   ...(maxParallel !== undefined ? { maxParallel } : {}),
                   ...(emoji !== undefined ? { emoji } : {}),
                 };

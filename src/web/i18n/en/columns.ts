@@ -20,6 +20,8 @@ export const columns = {
   "columns.modelHint": "Empty = model from the global settings.",
   "columns.lockModel": "Always use this column's model",
   "columns.lockModelHint": "Ignore the card's own model for this column.",
+  "columns.freshSession": "Fresh session",
+  "columns.freshSessionHint": "Start a new Claude session instead of continuing the card's. The next columns continue this new session.",
   "columns.instructions": "Instructions",
   "columns.instructionsPlaceholder": "Additional instructions for the agent (optional)…",
   "columns.systemColumn": "System column",

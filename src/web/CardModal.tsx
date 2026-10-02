@@ -253,7 +253,9 @@ export function CardModalContent({
   useServerEvents((e) => {
     if (e.type !== "log" || e.project !== project || e.cardId !== card.id) return;
     // A new run resets the log on the server: mirror that.
-    setLog((l) => (e.line.text.startsWith("Starting skill") ? [e.line] : [...l, e.line]));
+    // A new column's run resets the log on the server: mirror that.
+    const fresh = e.line.text.startsWith("Starting skill") || e.line.text.startsWith("Continuing the card's session");
+    setLog((l) => (fresh ? [e.line] : [...l, e.line]));
   });
   // biome-ignore lint/correctness/useExhaustiveDependencies: log.length is the trigger (scroll to the new line); the effect only reads the DOM
   useEffect(() => {

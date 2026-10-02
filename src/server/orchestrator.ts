@@ -175,6 +175,9 @@ export const RESULT_SCHEMA = {
   additionalProperties: false,
 };
 
+/** Put before a column's prompt when it continues the card's session from an earlier column. */
+export const CONTINUE_PREFIX = `New step for this card. The messages above are its earlier steps, in other columns: keep their context, but follow only the instructions below for this step, and return this step's structured output.`;
+
 /** Sent when resuming a session that stopped before returning its structured result. */
 export const RECOVER_PROMPT = `Your previous run in this session stopped before returning Nightshift's structured output (it may have been interrupted, or it only returned interim results while background work was running).
 Check the actual state of your work first (worktrees, branches, commits, background tasks). If work remains, finish it. Then return the structured output exactly once, describing the final state.
@@ -930,17 +933,30 @@ export class Orchestrator {
           : buildAnswerPrompt(card.title, skillRef, answer.text);
     if (answer?.kind === "feedback") this.log(p, card.id, "info", `Retour utilisateur : ${answer.text}`);
     else if (answer && answer.kind !== "resume") this.log(p, card.id, "info", `User answer: ${answer.text}`);
-    let resumeId = answer?.sessionId;
+    // A new run continues the card's session (the previous columns' context), unless its column asks for a fresh one.
+    let carried = !answer && !column.freshSession ? (card.sessionId ?? card.lastRun?.sessionId) : undefined;
+    if (carried) prompt = `${CONTINUE_PREFIX}\n\n${prompt}`;
+    let resumeId = answer?.sessionId ?? carried;
     let costUsd = 0;
 
     // One automatic recovery: an agent that stops without its structured result (interrupted, or it
     // returned only interim results while background work was running) is resumed once to collect it.
     for (let attempt = 0; ; attempt++) {
-      const verb = attempt > 0 ? "Recovering" : !answer ? "Starting" : "Resuming";
+      const verb = attempt > 0 ? "Recovering" : carried ? "Continuing the card's session with" : !answer ? "Starting" : "Resuming";
+      job.sessionId = undefined;
       const r = await this.spawnAgent(job, this.cardTarget(job, card, column, verb), prompt, resumeId);
       if ("startError" in r) return this.finish(job, "error", { error: r.startError });
       if (job.cancelled) return this.finish(job, "cancelled", {});
       const result = r.result;
+      // The card's session could not be resumed (deleted, or from another machine): start this step fresh, once.
+      if (carried && !job.sessionId && (!result || result.is_error)) {
+        this.log(p, card.id, "info", `Could not continue the card's session ${carried}: starting a new one.`);
+        carried = undefined;
+        resumeId = undefined;
+        prompt = buildPrompt(p.board, card, column, skill?.path);
+        attempt--;
+        continue;
+      }
       costUsd += Number(result?.total_cost_usd) || 0;
       const sessionId: string | undefined = result?.session_id ?? job.sessionId;
       const out = result?.structured_output;
@@ -1142,6 +1158,8 @@ export class Orchestrator {
         ...(sessionId ? { sessionId } : {}),
         ...(job.skill ? { skill: job.skill } : {}),
       };
+      // The next column continues from here.
+      if (sessionId) card.sessionId = sessionId;
       const colName = p.column(job.columnId)?.name ?? "?";
       p.addHistory(
         card,

@@ -102,7 +102,7 @@ export function systemColumnsChanged(raw: unknown, board: Board): boolean {
   return JSON.stringify(rawCols) !== JSON.stringify(board.columns);
 }
 
-export const COLUMN_KEYS = ["id", "name", "type", "skill", "instructions", "model", "lockModel", "maxParallel", "emoji"];
+export const COLUMN_KEYS = ["id", "name", "type", "skill", "instructions", "model", "lockModel", "maxParallel", "emoji", "freshSession"];
 const CARD_KEYS = [
   "id",
   "number",
@@ -116,6 +116,7 @@ const CARD_KEYS = [
   "pendingAnswer",
   "test",
   "skipColumnIds",
+  "sessionId",
   "history",
   "timeBase",
   "models",
@@ -203,6 +204,7 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
             ...(c.instructions ? { instructions: String(c.instructions) } : {}),
             ...(typeof c.model === "string" && c.model.trim() ? { model: c.model.trim() } : {}),
             ...(type === "skill" && c.lockModel === true ? { lockModel: true as const } : {}),
+            ...(type === "skill" && c.freshSession === true ? { freshSession: true as const } : {}),
             ...(maxParallel !== undefined ? { maxParallel } : {}),
             ...(emoji !== undefined ? { emoji } : {}),
           };
@@ -247,6 +249,7 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
         : {}),
       ...(skipColumnIds ? { skipColumnIds } : {}),
       ...(models ? { models } : {}),
+      ...(typeof c.sessionId === "string" && c.sessionId ? { sessionId: c.sessionId } : {}),
       history: rawHistory.slice(-50),
       ...(timeBase ? { timeBase } : {}),
     };

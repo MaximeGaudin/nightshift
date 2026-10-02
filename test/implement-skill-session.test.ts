@@ -19,8 +19,9 @@ test("implement-skill-one-worktree", () => {
   expect(text).not.toContain("git worktree remove");
 });
 
-test("implement-skill-session-transport", () => {
-  for (const needle of ["SendMessage", "select:SendMessage", "--output-format json", "--resume"]) expect(text).toContain(needle);
+test("implement-skill-card-session: the work stays in the card's session, never in a subagent", () => {
+  expect(text).toContain("Never hand a task to a subagent");
+  for (const needle of ["SendMessage", "claude -p --resume", "replacement agent"]) expect(text).not.toContain(needle);
   expect(text.toLowerCase()).not.toContain("one agent per");
   expect(text.toLowerCase()).not.toContain("parallel agents");
 });
@@ -31,9 +32,9 @@ test("implement-skill-reporting", () => {
   expect(fm.description.toLowerCase()).not.toContain("one agent per parallel task");
   const result = section("Result", "Output");
   expect(result).toContain("Tasks done:");
-  expect(result).toContain("one agent session");
+  expect(result).toContain("all done in the card's session");
   expect(result).not.toContain("Tasks merged");
   const done = section("Done when");
-  expect(done).toContain("Every task ran in the same agent session, in this run's worktree");
+  expect(done).toContain("Every task ran in this session, in this run's worktree, with no subagent");
   expect(done).not.toContain("Agent count");
 });

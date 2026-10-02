@@ -10,7 +10,8 @@
 // Quick runs: the instruction may contain FAKE_QUICK_ERROR (error status), FAKE_QUICK_INVALID (no status),
 // FAKE_QUICK_SLOW (sleeps ~5 s) or FAKE_QUICK_PROGRESS (emits a progress marker 1/2); otherwise success echoing it.
 // FAKE_EXTRA_OUTPUT, when set, is a JSON object merged into the structured output of card runs.
-// FAKE_ARGS_LOG, when set, receives one JSON line per run: { title, resumed, model }.
+// FAKE_ARGS_LOG, when set, receives one JSON line per run: { title, resumed, continuing, resumeId, model, ... }.
+// FAKE_UNKNOWN_SESSION in the prompt of a continuing run answers like claude for a session it does not have.
 import { appendFileSync } from "node:fs";
 
 // Nightshift sends the prompt on stdin (never argv).
@@ -20,7 +21,12 @@ const delay = Number(process.env.FAKE_DELAY_MS ?? 200);
 // Quick runs (no card): the prompt carries an instruction block or "no instruction", and the instruction drives the behaviour.
 const quick = prompt.includes("<instruction>") || prompt.includes("no instruction");
 const instruction = prompt.match(/<instruction>\n([\s\S]*?)\n<\/instruction>/)?.[1] ?? "";
-const resumed = process.argv.includes("--resume");
+// A new column continuing the card's session also passes --resume, with the column prompt behind a "New step" line:
+// it behaves like a fresh run. `resumed` means an answer, feedback or recovery in the same column.
+const resumeAt = process.argv.indexOf("--resume");
+const resumeId = resumeAt >= 0 ? process.argv[resumeAt + 1] : null;
+const continuing = resumeAt >= 0 && prompt.startsWith("New step for this card.");
+const resumed = resumeAt >= 0 && !continuing;
 const modelAt = process.argv.indexOf("--model");
 if (process.env.FAKE_ARGS_LOG) {
   appendFileSync(
@@ -28,6 +34,8 @@ if (process.env.FAKE_ARGS_LOG) {
     `${JSON.stringify({
       title,
       resumed,
+      continuing,
+      resumeId,
       model: modelAt >= 0 ? process.argv[modelAt + 1] : null,
       argvHasCard: process.argv.some((a) => a.includes("<card")),
       argv: process.argv.slice(2),
@@ -38,6 +46,18 @@ if (process.env.FAKE_ARGS_LOG) {
 }
 const extra = process.env.FAKE_EXTRA_OUTPUT ? JSON.parse(process.env.FAKE_EXTRA_OUTPUT) : {};
 const emit = (o: unknown) => console.log(JSON.stringify(o));
+if (continuing && prompt.includes("FAKE_UNKNOWN_SESSION")) {
+  console.log(`No conversation found with session ID: ${resumeId}`);
+  console.log(
+    JSON.stringify({
+      type: "result",
+      subtype: "error_during_execution",
+      is_error: true,
+      errors: [`No conversation found with session ID: ${resumeId}`],
+    }),
+  );
+  process.exit(1);
+}
 emit({ type: "system", subtype: "init", session_id: "sess-1", model: "fake" });
 emit({
   type: "assistant",
