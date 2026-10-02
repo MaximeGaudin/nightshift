@@ -408,18 +408,32 @@ export function startServer({ port, development, agents = true }: { port: number
           p.mutate((board) => p.moveCard(board, req.params.id, columnId, index as number | undefined, "Moved by user"));
         }),
       },
-      "/api/sequence/play": {
+      "/api/flow/fast-forward/on": {
         POST: h((b, url) => {
           const p = project(b, url);
-          orch.sequence.play(p);
-          return { sequence: orch.sequence.get(p) };
+          orch.flow.setFastForward(p, true);
+          return { flow: orch.flow.get(p) };
         }),
       },
-      "/api/sequence/pause": {
+      "/api/flow/fast-forward/off": {
         POST: h((b, url) => {
           const p = project(b, url);
-          orch.sequence.pause(p);
-          return { sequence: orch.sequence.get(p) };
+          orch.flow.setFastForward(p, false);
+          return { flow: orch.flow.get(p) };
+        }),
+      },
+      "/api/flow/pause": {
+        POST: h((b, url) => {
+          const p = project(b, url);
+          orch.flow.setPaused(p, true);
+          return { flow: orch.flow.get(p) };
+        }),
+      },
+      "/api/flow/play": {
+        POST: h((b, url) => {
+          const p = project(b, url);
+          orch.flow.setPaused(p, false);
+          return { flow: orch.flow.get(p) };
         }),
       },
       "/api/cards/:id/retry": {

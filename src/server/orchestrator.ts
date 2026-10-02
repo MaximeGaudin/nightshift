@@ -4,6 +4,7 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSyn
 import { join, resolve } from "node:path";
 import type { Subprocess } from "bun";
 import { isReady, releaseReason } from "../shared/dependencies.ts";
+import { fastForwardSkipIds } from "../shared/flow.ts";
 import { describeModelChanges, formatDropped, type ModelSource, mergeModels, resolveModel } from "../shared/models.ts";
 import { resolveNextColumn } from "../shared/skip.ts";
 import type {
@@ -23,12 +24,12 @@ import type {
 import { canSendFeedback, cardRef, columnMaxParallel, isDoneColumn } from "../shared/types.ts";
 import { safeHttpUrl } from "../shared/urls.ts";
 import { buildEnvironment } from "./environment.ts";
+import { FlowController } from "./flow.ts";
 import { HttpError } from "./guard.ts";
 import { parseProgressMarker, progressFromTodos } from "./progress.ts";
 import { buildQuickRunPrompt, parseQuickOutput, QUICK_INSTRUCTION_MAX, QUICK_RESULT_SCHEMA } from "./quickrun.ts";
 import { persistScreenshots } from "./screenshots.ts";
 import { applySections, parseSections } from "./sections.ts";
-import { SequenceController } from "./sequence.ts";
 import { getSettings, legacyMaxParallel, NIGHTSHIFT_HOME, onSettingsChange, rememberProject } from "./settings.ts";
 import { findSkill } from "./skills.ts";
 import { isRaw, needsRun, newId, Project, type Raw } from "./store.ts";
@@ -379,13 +380,14 @@ export class Orchestrator {
   /** Projects whose agents are run by another live Nightshift process: path -> its pid. */
   private lockedBy = new Map<string, number>();
   private lockTimer: ReturnType<typeof setInterval>;
-  /** Sequential mode state, per project. */
-  readonly sequence = new SequenceController({
-    isRunning: (p, cardId) => this.jobs.has(this.key(p, cardId)),
+  /** Fast forward and pause, per project. */
+  readonly flow = new FlowController({
     canRunAgents: (p) => this.agents && !this.lockedBy.has(p.path),
     onState: (p) => this.broadcast({ type: "board", project: p.path, snapshot: this.snapshot(p) }),
-    onAttention: (p, cardId) => this.broadcast({ type: "attention", project: p.path, cardId, kind: "error" }),
+    onResume: () => this.scheduleTick(),
   });
+  /** Cards retried by the user while paused may start anyway: job key -> the enteredColumnAt the retry wrote. */
+  private explicitRetries = new Map<string, string>();
   private tests = new Map<string, { project: Project; cardId: string; proc: ChildProcess; lines: LogLine[] }>();
   private lastTestLines = new Map<string, LogLine[]>();
 
@@ -469,7 +471,7 @@ export class Orchestrator {
       this.cancelStaleJobs(p);
       this.broadcast({ type: "board", project: path, snapshot: this.snapshot(p) });
       this.scheduleTick();
-      this.sequence.schedule(p);
+      this.flow.schedule(p);
       this.scheduleDependencies(p);
     });
     rememberProject(path);
@@ -493,9 +495,24 @@ export class Orchestrator {
     const live: Record<string, LiveStatus> = {};
     for (const card of p.board.cards) {
       if (this.jobs.has(this.key(p, card.id))) live[card.id] = "running";
-      else if (needsRun(p.board, card)) live[card.id] = "queued";
+      else if (needsRun(p.board, card)) live[card.id] = this.waitsForPlay(p, card) ? "paused" : "queued";
     }
     return live;
+  }
+
+  /**
+   * True when the project is paused and nothing explicit asked for this card's run: an answer, feedback or session
+   * resume (pendingAnswer), or a retry still matching the column entry it wrote. The scheduler and the live
+   * statuses both use it, so a card shown "paused" never starts and a card shown "queued" does.
+   */
+  private waitsForPlay(p: Project, card: Card): boolean {
+    if (!this.flow.isPaused(p) || card.pendingAnswer) return false;
+    const key = this.key(p, card.id);
+    const retried = this.explicitRetries.get(key);
+    if (retried === undefined) return true;
+    if (retried === card.enteredColumnAt) return false;
+    this.explicitRetries.delete(key);
+    return true;
   }
 
   snapshot(p: Project): ProjectSnapshot {
@@ -525,7 +542,7 @@ export class Orchestrator {
           createdAt: q.createdAt,
           ...(q.status === "running" && q.progress ? { progress: q.progress } : {}),
         })),
-      sequence: this.sequence.get(p),
+      flow: this.flow.get(p),
       ...(lockedBy ? { lockedBy } : {}),
       ...(this.agents ? {} : { agentsDisabled: true }),
     };
@@ -617,7 +634,16 @@ export class Orchestrator {
     if (!p.board.cards.some((c) => isReady(p.board, c))) return;
     try {
       p.mutate((board) => {
-        for (const card of board.cards.filter((c) => isReady(board, c))) p.releaseDependencies(board, card, releaseReason(board, card));
+        const fastForward = this.flow.isFastForward(p);
+        for (const card of board.cards.filter((c) => isReady(board, c))) {
+          // Fast forward on: the released card skips the inert columns too, before its target is resolved.
+          if (fastForward) {
+            const skips = fastForwardSkipIds(board.columns, card);
+            if (skips) card.skipColumnIds = skips;
+            else delete card.skipColumnIds;
+          }
+          p.releaseDependencies(board, card, releaseReason(board, card));
+        }
       });
     } catch (e) {
       console.error(`Could not release the cards of ${p.path} whose dependencies are done: ${e instanceof Error ? e.message : String(e)}`);
@@ -644,7 +670,7 @@ export class Orchestrator {
     for (const p of this.projects.values()) {
       if (this.lockedBy.has(p.path)) continue;
       for (const card of p.board.cards) {
-        if (!this.jobs.has(this.key(p, card.id)) && needsRun(p.board, card)) candidates.push({ p, card });
+        if (!this.jobs.has(this.key(p, card.id)) && needsRun(p.board, card) && !this.waitsForPlay(p, card)) candidates.push({ p, card });
       }
     }
     candidates.sort((a, b) => a.card.enteredColumnAt.localeCompare(b.card.enteredColumnAt));
@@ -872,6 +898,8 @@ export class Orchestrator {
       const card = p.card(cardId);
       if (!card) throw new HttpError(404, "Unknown card");
       card.enteredColumnAt = new Date().toISOString();
+      // Explicit action: starts even while the project is paused (set before the change schedules a tick).
+      this.explicitRetries.set(this.key(p, card.id), card.enteredColumnAt);
       delete card.lastRun;
       delete card.pendingAnswer;
       p.addHistory(card, "edited", "Retry requested by user");
@@ -967,6 +995,7 @@ export class Orchestrator {
       done: false,
     };
     this.jobs.set(job.key, job);
+    this.explicitRetries.delete(job.key);
     p.mutate(() => p.addHistory(card, "started", `Agent started in ${column.name}`, column.id));
     // A resumed session (answer to a question) keeps the log of the run that asked it.
     if (!card.pendingAnswer) {
@@ -991,7 +1020,6 @@ export class Orchestrator {
         this.jobs.delete(job.key);
         this.broadcast({ type: "board", project: p.path, snapshot: this.snapshot(p) });
         this.scheduleTick();
-        this.sequence.schedule(p);
       });
   }
 
