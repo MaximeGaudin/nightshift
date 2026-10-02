@@ -11,11 +11,12 @@ import { cn } from "./lib/utils.ts";
 import { toPlainText } from "./markdown.tsx";
 import { RunProgress } from "./RunProgress.tsx";
 
-export function SequenceBadge() {
+/** The card waits for the project to leave pause. */
+export function PausedBadge() {
   const { t } = useT();
   return (
-    <Badge variant="secondary" className="sequence-badge ml-1.5 align-middle">
-      {t("board.sequential")}
+    <Badge variant="secondary" className="paused-badge ml-1.5 align-middle text-warn">
+      {t("board.status.paused")}
     </Badge>
   );
 }
@@ -42,7 +43,6 @@ export function CardTile({
   waitingFor,
   onSendNext,
   sending,
-  sequential,
   column,
   settings,
 }: {
@@ -62,8 +62,6 @@ export function CardTile({
   waitingFor?: string[];
   onSendNext?: () => void;
   sending?: boolean;
-  /** The sequential mode is working on this card. */
-  sequential?: boolean;
   /** The column the card is in, and the settings, to flag a card model that overrides the column's. */
   column?: Column;
   settings?: Pick<Settings, "model"> | null;
@@ -76,12 +74,20 @@ export function CardTile({
   const label: Record<string, string> = {
     running: t("board.status.running"),
     queued: t("board.status.queued"),
+    paused: t("board.status.paused"),
     success: t("board.status.success"),
     error: t("board.status.error"),
     cancelled: t("board.status.cancelled"),
     question: t("board.status.question"),
   };
-  const statusColor = status === "error" ? "text-err" : status === "question" ? "text-warn" : status === "running" ? "text-foreground" : "";
+  const statusColor =
+    status === "error"
+      ? "text-err"
+      : status === "question" || status === "paused"
+        ? "text-warn"
+        : status === "running"
+          ? "text-foreground"
+          : "";
   return (
     <article
       ref={tileRef}
@@ -105,7 +111,6 @@ export function CardTile({
       <CardThumbnail project={project} card={card} />
       <div className="card-ref mb-0.5 flex min-h-5 items-center gap-1 pr-6 text-[11px] text-muted-foreground tabular-nums">
         <span>{cardRef(card)}</span>
-        {sequential && <SequenceBadge />}
         {override && (
           <Badge
             variant="secondary"

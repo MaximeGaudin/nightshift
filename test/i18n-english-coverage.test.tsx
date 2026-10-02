@@ -21,7 +21,7 @@ mock.module(new URL("../src/web/components/ui/dialog.tsx", import.meta.url).path
 }));
 
 // App first: Board and App import each other.
-const { SequenceButton, SequenceNotice } = await import("../src/web/App.tsx");
+const { FlowButtons } = await import("../src/web/App.tsx");
 const { Board: BoardView } = await import("../src/web/Board.tsx");
 const { CardModal } = await import("../src/web/CardModal.tsx");
 const { SettingsContent, SettingsModal } = await import("../src/web/SettingsModal.tsx");
@@ -75,10 +75,10 @@ const snap = {
   path: "/tmp/demo",
   board,
   maxParallel: 3,
-  live: { c2: "running", c3: "queued" },
+  live: { c2: "running", c3: "queued", c1: "paused" },
   testing: [],
   progress: {},
-  sequence: { status: "paused", cardId: "c1" },
+  flow: { fastForward: true, paused: true },
 } as unknown as ProjectSnapshot;
 const settings: Settings = {
   claudePath: "claude",
@@ -95,7 +95,7 @@ const rendered: Record<string, string> = {};
 const surfaces: Record<string, () => ReactNode> = {
   board: () => <BoardView snap={snap} onOpen={noop} guard={noop} />,
   "card modal": () => (
-    <CardModal project="/tmp/demo" card={cards[2]} board={board} testing={false} sequential onClose={noop} onError={noop} />
+    <CardModal project="/tmp/demo" card={cards[2]} board={board} live="paused" testing={false} onClose={noop} onError={noop} />
   ),
   "card modal running": () => (
     <CardModal project="/tmp/demo" card={cards[1]} board={board} live="running" testing onClose={noop} onError={noop} />
@@ -108,10 +108,8 @@ const surfaces: Record<string, () => ReactNode> = {
     <CommandPalette commands={buildCommands({ snap, recentProjects: settings.recentProjects, skills: [] })} onRun={noop} onClose={noop} />
   ),
   "shortcuts help": () => <ShortcutsHelp onClose={noop} />,
-  "sequence button": () => <SequenceButton snap={snap} guard={noop} />,
-  "sequence notice": () => (
-    <SequenceNotice snap={{ sequence: { status: "stopped", cardId: "c1", notice: { code: "kept", ref: "#3", column: "Review" } } }} />
-  ),
+  "flow buttons": () => <FlowButtons snap={snap} guard={noop} />,
+  "flow buttons playing": () => <FlowButtons snap={{ ...snap, flow: { fastForward: false, paused: false } }} guard={noop} />,
   "time panel": () => <TimePanelView card={cards[2]} board={board} nowMs={Date.parse("2026-01-04T05:00:00Z")} />,
 };
 

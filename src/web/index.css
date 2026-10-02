@@ -139,6 +139,7 @@
     vertical-align: middle;
   }
   .st-icon.st-queued,
+  .st-icon.st-paused,
   .st-icon.st-question {
     color: var(--warn);
   }

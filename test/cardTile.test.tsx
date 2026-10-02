@@ -24,8 +24,8 @@ test("card-tile-sending", () => {
 });
 
 test("card-tile-hooks-kept", () => {
-  const html = renderToStaticMarkup(<CardTile {...base} next={{ name: "Grill" }} skipped={["Plan"]} sequential />);
-  for (const hook of ["card-ref", "card-next", "card-skipped", "sequence-badge"]) expect(html).toContain(hook);
+  const html = renderToStaticMarkup(<CardTile {...base} next={{ name: "Grill" }} skipped={["Plan"]} />);
+  for (const hook of ["card-ref", "card-next", "card-skipped"]) expect(html).toContain(hook);
   expect(html).toMatch(/<article[^>]*class="card /);
   expect(html).not.toContain('draggable="true"');
   expect(html).not.toMatch(/<article[^>]*draggable/);

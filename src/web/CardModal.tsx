@@ -14,7 +14,7 @@ import {
 } from "../shared/types.ts";
 import { api, useServerEvents, useSettings } from "./api.ts";
 import { CardModelsEditor } from "./CardModelsEditor.tsx";
-import { SequenceBadge } from "./CardTile.tsx";
+import { PausedBadge } from "./CardTile.tsx";
 import { attempt, deleteThenClose, sendThenClear } from "./cardActions.ts";
 import { AppDialog } from "./components/app-dialog.tsx";
 import { Alert, AlertDescription } from "./components/ui/alert.tsx";
@@ -173,8 +173,6 @@ type CardModalProps = {
   live?: LiveStatus;
   progress?: RunProgressData;
   testing: boolean;
-  /** The sequential mode is working on this card. */
-  sequential?: boolean;
   onClose: () => void;
   /** Opens another card of the board (a dependency). */
   onOpenCard?: (id: string) => void;
@@ -208,7 +206,7 @@ export function useCardDraft(project: string, card: Card) {
 export type CardDraft = ReturnType<typeof useCardDraft>;
 
 export function CardModal(props: CardModalProps) {
-  const { project, card, board, live, sequential, onClose, onError } = props;
+  const { project, card, board, live, onClose, onError } = props;
   const { t } = useT();
   const draft = useCardDraft(project, card);
   const column = board.columns.find((c) => c.id === card.columnId);
@@ -217,7 +215,7 @@ export function CardModal(props: CardModalProps) {
       size="xl"
       title={
         <span>
-          {t("card.heading")} <CopyRef card={card} /> {sequential && <SequenceBadge />}{" "}
+          {t("card.heading")} <CopyRef card={card} /> {live === "paused" && <PausedBadge />}{" "}
           <span className="font-normal text-muted-foreground">
             · {column && columnEmoji(column) ? `${columnEmoji(column)} ` : ""}
             {column?.name}

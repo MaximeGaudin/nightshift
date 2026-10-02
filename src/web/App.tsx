@@ -1,7 +1,6 @@
-import { Columns3, Info, Pause, Play, Settings as SettingsIcon, Sparkles, TriangleAlert } from "lucide-react";
+import { Columns3, FastForward, Info, Pause, Play, Settings as SettingsIcon, Sparkles, TriangleAlert } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { type SequenceNotice as Notice, sequenceLabel } from "../shared/sequence.ts";
 import { type ProjectSnapshot, type SkillInfo, worktreePolicyOf } from "../shared/types.ts";
 import { api, useServerEvents, useSettings } from "./api.ts";
 import { Board } from "./Board.tsx";
@@ -15,8 +14,9 @@ import { Alert } from "./components/ui/alert.tsx";
 import { Button } from "./components/ui/button.tsx";
 import { Kbd } from "./components/ui/kbd.tsx";
 import { Skeleton } from "./components/ui/skeleton.tsx";
-import { type MessageKey, resolveLocale, setLocale, useT } from "./i18n/index.ts";
+import { resolveLocale, setLocale, useT } from "./i18n/index.ts";
 import { Logo } from "./Logo.tsx";
+import { cn } from "./lib/utils.ts";
 import { NewCardDialog } from "./NewCardDialog.tsx";
 import { notifyError } from "./notify.ts";
 import { ProjectPicker } from "./ProjectPicker.tsx";
@@ -197,8 +197,11 @@ export function App() {
       case "openProject":
         setProject(action.path);
         break;
-      case "sequence":
-        guard(action.play ? api.sequencePlay(snap.path) : api.sequencePause(snap.path));
+      case "fastForward":
+        guard(api.fastForward(snap.path, action.on));
+        break;
+      case "pause":
+        guard(action.paused ? api.pause(snap.path) : api.play(snap.path));
         break;
       case "quickRun":
         guard(api.startQuickRun(snap.path, action.skill, quickRunInstruction(action.skill, search)));
@@ -252,7 +255,7 @@ export function App() {
           {questions > 0 && <span className="font-medium text-warn">· {tn("board.app.questions", questions)}</span>}
         </div>
         <nav className="ml-auto flex items-center gap-1">
-          <SequenceButton snap={snap} guard={guard} />
+          <FlowButtons snap={snap} guard={guard} />
           <Button variant="ghost" onClick={() => setModal("columns")}>
             <Columns3 aria-hidden="true" />
             {t("board.app.columns")}
@@ -270,7 +273,7 @@ export function App() {
           </Button>
         </nav>
       </header>
-      {(snap.agentsDisabled || snap.lockedBy || snap.sequence.notice) && (
+      {(snap.agentsDisabled || snap.lockedBy) && (
         <div className="flex shrink-0 flex-col gap-1.5 px-4 pt-3">
           {snap.agentsDisabled && (
             <Alert role="status">
@@ -284,7 +287,6 @@ export function App() {
               {t("board.app.locked", { pid: snap.lockedBy })}
             </Alert>
           )}
-          <SequenceNotice snap={snap} />
         </div>
       )}
       <Board snap={snap} onOpen={setOpenCard} guard={guard} />
@@ -297,7 +299,6 @@ export function App() {
           live={snap.live[card.id]}
           progress={snap.progress?.[card.id]}
           testing={snap.testing?.includes(card.id) ?? false}
-          sequential={isSequential(snap, card.id)}
           onClose={() => setOpenCard(null)}
           onOpenCard={setOpenCard}
           onError={notifyError}
@@ -364,59 +365,36 @@ export function activeAgents(snap: Pick<ProjectSnapshot, "live" | "quickRuns" | 
   return { running: cards + quick, max: snap.maxParallel };
 }
 
-/** True when the sequential mode is running or paused on this card. */
-export function isSequential(snap: Pick<ProjectSnapshot, "sequence">, cardId: string): boolean {
-  return snap.sequence.status !== "stopped" && snap.sequence.cardId === cardId;
+/** Cards waiting for the project to leave pause. */
+export function pausedCount(snap: Pick<ProjectSnapshot, "live">): number {
+  return Object.values(snap.live).filter((s) => s === "paused").length;
 }
 
-export function SequenceButton({ snap, guard }: { snap: ProjectSnapshot; guard: (p: Promise<unknown>) => void }) {
-  const { t } = useT();
-  const active = snap.sequence.status === "active";
-  return (
-    <IconButton
-      className="sequence-toggle"
-      label={sequenceLabel(snap.sequence, snap.board, {
-        stopped: t("board.sequence.stopped"),
-        active: t("board.sequence.active"),
-        paused: t("board.sequence.paused"),
-        pausedHint: t("board.sequence.pausedHint"),
-      })}
-      disabled={snap.agentsDisabled || !!snap.lockedBy}
-      onClick={() => guard(active ? api.sequencePause(snap.path) : api.sequencePlay(snap.path))}
-    >
-      {active ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
-    </IconButton>
-  );
-}
-
-const NOTICE_KEYS: Record<Notice["code"], MessageKey> = {
-  backlogEmpty: "board.sequence.notice.backlogEmpty",
-  finished: "board.sequence.notice.finished",
-  cardDeleted: "board.sequence.notice.cardDeleted",
-  cardReturned: "board.sequence.notice.cardReturned",
-  error: "board.sequence.notice.error",
-  cancelled: "board.sequence.notice.cancelled",
-  kept: "board.sequence.notice.kept",
-};
-
-export function SequenceNotice({ snap }: { snap: Pick<ProjectSnapshot, "sequence"> }) {
-  const { t } = useT();
-  const notice = snap.sequence.notice;
-  if (!notice) return null;
-  const { code, ...params } = notice;
-  return (
-    <Alert role="status" variant="warn" className="sequence-notice">
-      <TriangleAlert aria-hidden="true" />
-      {t(NOTICE_KEYS[code], params)}
-    </Alert>
-  );
-}
-
-export function SequenceControl({ snap, guard }: { snap: ProjectSnapshot; guard: (p: Promise<unknown>) => void }) {
+/** Fast forward toggle and play/pause button of the board header. */
+export function FlowButtons({ snap, guard }: { snap: ProjectSnapshot; guard: (p: Promise<unknown>) => void }) {
+  const { t, tn } = useT();
+  const { fastForward, paused } = snap.flow;
+  const disabled = snap.agentsDisabled || !!snap.lockedBy;
   return (
     <>
-      <SequenceButton snap={snap} guard={guard} />
-      <SequenceNotice snap={snap} />
+      <IconButton
+        className={cn("fast-forward-toggle", fastForward && "bg-accent text-primary")}
+        label={fastForward ? t("board.flow.fastForwardOn") : t("board.flow.fastForwardOff")}
+        aria-pressed={fastForward}
+        disabled={disabled}
+        onClick={() => guard(api.fastForward(snap.path, !fastForward))}
+      >
+        <FastForward aria-hidden="true" />
+      </IconButton>
+      <IconButton
+        className={cn("pause-toggle", paused && "bg-warn-soft text-warn")}
+        label={paused ? tn("board.flow.paused", pausedCount(snap)) : t("board.flow.playing")}
+        aria-pressed={paused}
+        disabled={disabled}
+        onClick={() => guard(paused ? api.play(snap.path) : api.pause(snap.path))}
+      >
+        {paused ? <Play aria-hidden="true" /> : <Pause aria-hidden="true" />}
+      </IconButton>
     </>
   );
 }

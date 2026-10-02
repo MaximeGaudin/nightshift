@@ -10,7 +10,8 @@ export type CommandAction =
   | { type: "newCard" }
   | { type: "openModal"; modal: "columns" | "skills" | "settings" }
   | { type: "openProject"; path: string }
-  | { type: "sequence"; play: boolean }
+  | { type: "fastForward"; on: boolean }
+  | { type: "pause"; paused: boolean }
   | { type: "quickRun"; skill: string };
 
 export interface PaletteCommand {
@@ -85,16 +86,27 @@ export function buildCommands({ snap, recentProjects, skills }: CommandContext):
     });
   }
 
-  const active = snap.sequence.status === "active";
-  const seqLabel = active ? t("palette.sequencePauseValue") : t("palette.sequenceStart");
+  const { fastForward, paused } = snap.flow;
+  const flowDisabled = !!snap.agentsDisabled || !!snap.lockedBy;
+  const ffLabel = fastForward ? t("palette.fastForwardOff") : t("palette.fastForwardOn");
   out.push({
-    id: "sequence",
+    id: "fastForward",
     group: "actions",
-    label: active ? t("palette.sequencePause") : t("palette.sequenceStart"),
-    value: seqLabel,
-    keywords: words("palette.keywords.sequence"),
-    disabled: !!snap.agentsDisabled || !!snap.lockedBy,
-    action: { type: "sequence", play: !active },
+    label: ffLabel,
+    value: ffLabel,
+    keywords: words("palette.keywords.fastForward"),
+    disabled: flowDisabled,
+    action: { type: "fastForward", on: !fastForward },
+  });
+  const pauseLabel = paused ? t("palette.play") : t("palette.pause");
+  out.push({
+    id: "pause",
+    group: "actions",
+    label: pauseLabel,
+    value: pauseLabel,
+    keywords: words("palette.keywords.pause"),
+    disabled: flowDisabled,
+    action: { type: "pause", paused: !paused },
   });
 
   const favorites = new Set(snap.board.favoriteSkills ?? []);

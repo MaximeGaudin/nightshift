@@ -30,7 +30,6 @@ import { isHeld, unmetDependencies } from "../shared/dependencies.ts";
 import { resolveNextColumn, skippedColumns } from "../shared/skip.ts";
 import { type Card, type Column, cardRef, columnMaxParallel, isDoneColumn, type ProjectSnapshot } from "../shared/types.ts";
 import { AddCard, skipOptions } from "./AddCard.tsx";
-import { isSequential } from "./App.tsx";
 import { api, useSettings } from "./api.ts";
 import {
   applyDrop,
@@ -315,7 +314,6 @@ export function Board({
         waitingFor={isHeld(card) ? unmetDependencies(snap.board, card).map(cardRef) : undefined}
         onSendNext={next ? () => sendNext(card, next.id) : undefined}
         sending={sending.has(card.id)}
-        sequential={isSequential(snap, card.id)}
         column={columns.find((c) => c.id === card.columnId)}
         settings={settings}
         onOpen={() => onOpen(card.id)}

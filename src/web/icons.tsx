@@ -1,11 +1,23 @@
 // Icons on lucide-react. Every stroke uses currentColor, so color comes from CSS (.st-<status>, .col-<type>, or the parent's color).
-import { Ban, Circle, CircleCheck, CircleDashed, CircleQuestionMark, CircleX, LoaderCircle, type LucideIcon, Zap } from "lucide-react";
+import {
+  Ban,
+  Circle,
+  CircleCheck,
+  CircleDashed,
+  CirclePause,
+  CircleQuestionMark,
+  CircleX,
+  LoaderCircle,
+  type LucideIcon,
+  Zap,
+} from "lucide-react";
 import { type Column, columnEmoji, type LiveStatus, type RunStatus } from "../shared/types.ts";
 
 type Status = RunStatus | LiveStatus;
 
 const STATUS_ICONS: Record<Status, LucideIcon> = {
   queued: CircleDashed,
+  paused: CirclePause,
   running: LoaderCircle,
   success: CircleCheck,
   error: CircleX,
