@@ -86,6 +86,8 @@ export const board: Record<keyof typeof enboard, string> = {
   "board.app.skills": "Skills",
   "board.app.settings": "Réglages",
   "board.app.search": "Rechercher",
+  "board.card.timerTotalTitle": "Temps total depuis la sortie du Backlog",
+  "board.card.timerStepTitle": "Temps dans {column}",
   "time.unit.second": "s",
   "time.unit.minute": "min",
   "time.unit.hour": "h",

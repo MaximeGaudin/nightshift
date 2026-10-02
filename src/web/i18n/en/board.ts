@@ -84,6 +84,8 @@ export const board = {
   "board.app.skills": "Skills",
   "board.app.settings": "Settings",
   "board.app.search": "Search",
+  "board.card.timerTotalTitle": "Total time since leaving Backlog",
+  "board.card.timerStepTitle": "Time in {column}",
   "time.unit.second": "s",
   "time.unit.minute": "min",
   "time.unit.hour": "h",
