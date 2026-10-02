@@ -58,7 +58,11 @@ async function open(srv: ChildServer, maxParallel = 3, path?: string): Promise<s
 const api = (srv: ChildServer, dir: string) => {
   const q = `project=${encodeURIComponent(dir)}`;
   const snap = async (): Promise<ProjectSnapshot> => srv.call(`/api/project?${q}`).then((r) => r.json());
-  const find = async (id: string): Promise<Card> => must((await snap()).board.cards.find((c) => c.id === id), "card");
+  const find = async (id: string): Promise<Card> =>
+    must(
+      (await snap()).board.cards.find((c) => c.id === id),
+      "card",
+    );
   const create = async (title: string, columnId = "col_backlog", dependsOn?: string[]) =>
     (await srv
       .call("/api/cards", { body: { project: dir, columnId, title, ...(dependsOn ? { dependsOn } : {}) } })
