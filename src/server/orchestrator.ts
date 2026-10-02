@@ -26,6 +26,7 @@ import { HttpError } from "./guard.ts";
 import { parseProgressMarker, progressFromTodos } from "./progress.ts";
 import { buildQuickRunPrompt, parseQuickOutput, QUICK_INSTRUCTION_MAX, QUICK_RESULT_SCHEMA } from "./quickrun.ts";
 import { persistScreenshots } from "./screenshots.ts";
+import { applySections, parseSections } from "./sections.ts";
 import { SequenceController } from "./sequence.ts";
 import { getSettings, legacyMaxParallel, NIGHTSHIFT_HOME, onSettingsChange, rememberProject } from "./settings.ts";
 import { findSkill } from "./skills.ts";
@@ -143,7 +144,30 @@ export const RESULT_SCHEMA = {
     title: { type: "string", description: "Updated card title. Repeat the current title if unchanged." },
     description: {
       type: "string",
-      description: "Updated full card description (markdown). Repeat the current description if unchanged.",
+      description:
+        "Full card description (markdown), a complete replacement. Return it only when you restructure the whole note; otherwise omit it and use sections. Never repeat an unchanged description.",
+    },
+    sections: {
+      type: "array",
+      description:
+        'Preferred way to update the description: edit only the sections that change, the rest of the note is kept as is. A section is a "## " heading and everything up to the next "## " heading (level-3+ headings belong to their parent). Applied after description when both are present. Max 50 entries.',
+      items: {
+        type: "object",
+        properties: {
+          heading: {
+            type: "string",
+            description: 'Heading text without the hashes, exact match, for example "Result" or "Questions". One line.',
+          },
+          content: { type: "string", description: "Markdown body of the section (not the heading line). Not needed for delete." },
+          op: {
+            type: "string",
+            enum: ["replace", "append", "delete"],
+            description:
+              '"replace" (default): replace the section body, or add the section at the end of the note when it is absent. "append": add the content at the end of the section body. "delete": remove the section.',
+          },
+        },
+        required: ["heading"],
+      },
     },
     move: {
       type: "string",
@@ -218,7 +242,9 @@ ${PROGRESS_RULE}
 - Never kill processes by name or pattern (pkill -f, killall, kill $(pgrep …)): other agents run on this machine and their processes can match. Only kill PIDs you started yourself.
 - Return the structured output exactly once, at the very end. If you started background work (subagents, background shells), wait until all of it has finished first. Never return an interim or "in progress" result.
 - When finished, return the structured output:
-  - title / description: the updated card content (you may enrich the description with your results, links to files you created, etc.).
+  - title: the card title (repeat it if unchanged).
+  - sections: preferred way to update the card content: [{heading, content, op}] edits only the "## " sections that change ("replace" is the default, "append" adds lines at the end of a section, "delete" removes it); the rest of the note is kept untouched. Use it to add your results, links to files you created, etc.
+  - description: the full card description, a complete replacement. Return it only when you restructure the whole note; otherwise omit it. When both are present, description is applied first, then sections.
   - move: "next" to send the card to ${next ? `"${next.name}"` : "(there is no next column, so this behaves like stay)"}, "stay" to keep it in "${column.name}", or a column id.
   - summary: a short summary of what you did.
   - questions: only when you need the user's input (see above).
@@ -267,7 +293,9 @@ When resuming, re-emit the marker of the step currently in progress before anyth
 - Never kill processes by name or pattern (pkill -f, killall, kill $(pgrep …)): other agents run on this machine and their processes can match. Only kill PIDs you started yourself.
 - Return the structured output exactly once, at the very end. If you started background work (subagents, background shells), wait until all of it has finished first. Never return an interim or "in progress" result.
 - When finished, return the structured output:
-  - title / description: the updated card content.
+  - title: the card title (repeat it if unchanged).
+  - sections: preferred way to update the card content: [{heading, content, op}] edits only the "## " sections that change ("replace" is the default, "append" adds lines at the end of a section, "delete" removes it); the rest of the note is kept untouched.
+  - description: the full card description, a complete replacement. Return it only when you restructure the whole note; otherwise omit it.
   - move: "stay" keeps the card in "${column.name}", "next" sends it to ${next ? `"${next.name}"` : "(there is no next column, so this behaves like stay)"}, or give a column id.
   - summary: a short summary of what you did.
   - questions: only when you need the user's input (see above).
@@ -284,7 +312,7 @@ ${answerText}
 ${PROGRESS_RULE}
 When resuming, re-emit the marker of the step currently in progress before anything else.
 
-Continue processing the card "${title}" with ${skillRef}, then return the structured output as before (title, description, move, summary). Only ask new questions if the answers raise new blocking decisions, and then ask them all at once.`;
+Continue processing the card "${title}" with ${skillRef}, then return the structured output as before (title, sections or description, move, summary). Only ask new questions if the answers raise new blocking decisions, and then ask them all at once.`;
 }
 
 /** Splits a shell-like argument string, honouring single and double quotes. */
@@ -1212,6 +1240,18 @@ export class Orchestrator {
       if ((status !== "success" && status !== "question") || !out) return;
       if (typeof out.title === "string" && out.title.trim()) card.title = out.title.trim();
       if (typeof out.description === "string") card.description = persistScreenshots(card.id, out.description);
+      if (out.sections !== undefined) {
+        try {
+          const parsed = parseSections(out.sections);
+          const edits = parsed.edits.map((e) => ({ ...e, content: persistScreenshots(card.id, e.content) }));
+          const res = applySections(card.description, edits);
+          card.description = res.text;
+          for (const l of [...parsed.logs, ...res.logs]) this.log(p, job.cardId, "info", l);
+          if (res.applied.length > 0) p.addHistory(card, "edited", `sections: ${res.applied.join(", ")}`);
+        } catch (e) {
+          this.log(p, job.cardId, "error", `sections not applied: ${(e as Error).message}`);
+        }
+      }
       if (isRaw(out.test) && typeof out.test.command === "string" && out.test.command.trim()) {
         // A url from the agent is only kept when it is a plain http(s) URL (it ends up in a link).
         const testUrl = typeof out.test.url === "string" ? safeHttpUrl(out.test.url.trim()) : null;
