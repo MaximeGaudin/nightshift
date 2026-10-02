@@ -68,11 +68,7 @@ test("detailed replay splits inert, queued, running and human time", () => {
     run(25, plan),
     moved(40, plan, doneColumn()),
   ];
-  expect(view(cardTimeSlices(card(h), columns, T0 + s(100)))).toEqual([
-    "Plan/queued/5000",
-    "Plan/running/10000",
-    "Plan/human/15000",
-  ]);
+  expect(view(cardTimeSlices(card(h), columns, T0 + s(100)))).toEqual(["Plan/queued/5000", "Plan/running/10000", "Plan/human/15000"]);
 });
 
 test("visits are merged into one row per column and part", () => {
@@ -88,11 +84,7 @@ test("visits are merged into one row per column and part", () => {
     run(40, plan),
     moved(50, plan, doneColumn()),
   ];
-  expect(view(cardTimeSlices(card(h), columns, T0 + s(100)))).toEqual([
-    "Plan/queued/3000",
-    "Plan/running/17000",
-    "Plan/human/10000",
-  ]);
+  expect(view(cardTimeSlices(card(h), columns, T0 + s(100)))).toEqual(["Plan/queued/3000", "Plan/running/17000", "Plan/human/10000"]);
 });
 
 test("a rerun stops human waiting at queued", () => {

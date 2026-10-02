@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { cardTimeSlices, cardTimers } from "../src/shared/timeline.ts";
+import { cardTimers, cardTimeSlices } from "../src/shared/timeline.ts";
 import { backlogColumn, type Card, type Column, doneColumn, type HistoryEntry } from "../src/shared/types.ts";
 import { CardTile } from "../src/web/CardTile.tsx";
 import { nowSubscribers } from "../src/web/useNow.ts";
