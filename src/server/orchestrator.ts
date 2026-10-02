@@ -26,7 +26,7 @@ import { parseProgressMarker, progressFromTodos } from "./progress.ts";
 import { buildQuickRunPrompt, parseQuickOutput, QUICK_INSTRUCTION_MAX, QUICK_RESULT_SCHEMA } from "./quickrun.ts";
 import { persistScreenshots } from "./screenshots.ts";
 import { SequenceController } from "./sequence.ts";
-import { getSettings, NIGHTSHIFT_HOME, onSettingsChange, rememberProject } from "./settings.ts";
+import { getSettings, legacyMaxParallel, NIGHTSHIFT_HOME, onSettingsChange, rememberProject } from "./settings.ts";
 import { findSkill } from "./skills.ts";
 import { isRaw, needsRun, newId, Project, type Raw } from "./store.ts";
 import { copyTemplateSkills } from "./templates.ts";
@@ -436,6 +436,11 @@ export class Orchestrator {
     return p;
   }
 
+  /** Agents allowed at once in this project: the board's cap, else the legacy global setting, else the default. */
+  projectMaxParallel(p: Project): number {
+    return p.board.maxParallel ?? legacyMaxParallel();
+  }
+
   snapshot(p: Project): ProjectSnapshot {
     const live: Record<string, LiveStatus> = {};
     for (const card of p.board.cards) {
@@ -452,6 +457,7 @@ export class Orchestrator {
     return {
       path: p.path,
       board: p.board,
+      maxParallel: this.projectMaxParallel(p),
       live,
       testing,
       progress,

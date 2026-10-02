@@ -77,7 +77,6 @@ test("normalizeBoard keeps a trimmed model and drops empty ones", () => {
 test("resolveModel priority", () => {
   const col = (model?: string): Column => ({ id: "a", name: "A", type: "skill", skill: "s", ...(model ? { model } : {}) });
   const settings = (model: string): Settings => ({
-    maxParallel: 1,
     claudePath: "claude",
     permissionMode: "auto",
     model,
@@ -109,7 +108,7 @@ let base = "";
 const proj = tempDir("ns-e2e-");
 
 beforeAll(() => {
-  updateSettings({ claudePath: join(import.meta.dir, "fake-claude.ts"), maxParallel: 2 });
+  updateSettings({ claudePath: join(import.meta.dir, "fake-claude.ts") });
   srv = startServer({ port: 0 });
   base = `http://localhost:${srv.server.port}`;
   mkdirSync(join(userSkills, "enrich"), { recursive: true });
@@ -877,7 +876,7 @@ type AttentionEvent = { type: "attention"; project: string; cardId: string; kind
 
 /** Fresh project with the given columns; collects the attention events of that project only. */
 async function attentionBoard(columns: object[]) {
-  updateSettings({ claudePath: join(import.meta.dir, "fake-claude.ts"), maxParallel: 2 });
+  updateSettings({ claudePath: join(import.meta.dir, "fake-claude.ts") });
   const dir = tempDir("ns-attn-");
   await post("/api/projects/open", { path: dir });
   const res = await post("/api/board", { project: dir, columns }, "PUT");
@@ -1330,7 +1329,6 @@ test("feedback question in inert column can be answered", async () => {
 });
 
 test("feedback in inert column ignores the column limit and survives cancelStaleJobs", async () => {
-  updateSettings({ maxParallel: 3 });
   const b = await feedbackBoard();
   try {
     const ids = [await b.landed("go1"), await b.landed("go2")];
@@ -1351,7 +1349,6 @@ test("feedback in inert column ignores the column limit and survives cancelStale
       expect(log.some((l: LogLine) => l.text.includes("stopping agent"))).toBe(false);
     }
   } finally {
-    updateSettings({ maxParallel: 2 });
     b.stop();
   }
 });

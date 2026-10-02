@@ -48,7 +48,7 @@ if (!CHILD) {
   let base = "";
 
   beforeAll(() => {
-    updateSettings({ claudePath: join(import.meta.dir, "fake-claude.ts"), maxParallel: 2 });
+    updateSettings({ claudePath: join(import.meta.dir, "fake-claude.ts") });
     srv = startServer({ port: 0 });
     base = `http://localhost:${srv.server.port}`;
     mkdirSync(join(userSkills, "enrich"), { recursive: true });
