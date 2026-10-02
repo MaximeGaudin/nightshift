@@ -14,7 +14,8 @@ export const columns: Record<keyof typeof enColumns, string> = {
   "columns.projectSkills": "Skills du projet",
   "columns.userSkills": "Skills utilisateur",
   "columns.parallel": "Agents en parallèle",
-  "columns.parallelHint": "Agents en parallèle dans cette colonne. Vide = 1. Le plafond du projet (Réglages > Ce projet) s'applique toujours.",
+  "columns.parallelHint":
+    "Agents en parallèle dans cette colonne. Vide = 1. Le plafond du projet (Réglages > Ce projet) s'applique toujours.",
   "columns.details": "Détails",
   "columns.emptyBeforeDelete": "Videz la colonne avant de la supprimer",
   "columns.model": "Modèle",
