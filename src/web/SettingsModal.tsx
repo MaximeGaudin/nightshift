@@ -163,6 +163,25 @@ export function SettingsContent({
             )}
           </div>
         </Row>
+        <Row id="set-carry-tokens" label={t("settings.carryTokens.label")} help={t("settings.carryTokens.help")}>
+          <Input
+            id="set-carry-tokens"
+            type="number"
+            min={0}
+            step={1000}
+            value={s.carryMaxTokens}
+            onChange={(e) => onChange({ ...s, carryMaxTokens: Math.max(0, Math.trunc(Number(e.target.value)) || 0) })}
+          />
+        </Row>
+        <Row id="set-carry-age" label={t("settings.carryAge.label")} help={t("settings.carryAge.help")}>
+          <Input
+            id="set-carry-age"
+            type="number"
+            min={1}
+            value={s.carryMaxAgeMinutes}
+            onChange={(e) => onChange({ ...s, carryMaxAgeMinutes: Math.max(1, Math.trunc(Number(e.target.value)) || 1) })}
+          />
+        </Row>
         <Row id="set-model" label={t("settings.model.label")} help={t("settings.model.help")}>
           <Input
             id="set-model"
@@ -209,7 +228,16 @@ export function SettingsContent({
   );
 }
 
-const EDITABLE = ["claudePath", "permissionMode", "model", "extraArgs", "soundNotifications", "language"] as const;
+const EDITABLE = [
+  "claudePath",
+  "permissionMode",
+  "model",
+  "extraArgs",
+  "soundNotifications",
+  "language",
+  "carryMaxTokens",
+  "carryMaxAgeMinutes",
+] as const;
 
 /** True when the form differs from the saved settings on any editable field, or the project cap changed. */
 export function settingsDirty(

@@ -38,12 +38,12 @@ const now = () => new Date().toISOString();
 
 // Key order matches normalizeBoard's output so a fresh board is not rewritten on reopen.
 const DEFAULT_COLUMNS: Omit<Column, "id">[] = [
-  { name: "Grill", type: "skill", skill: "nightshift-grill", model: "opus", freshSession: true, maxParallel: 3, emoji: "🔥" },
-  { name: "Plan", type: "skill", skill: "nightshift-plan", model: "opus", freshSession: true, maxParallel: 3, emoji: "🗺️" },
-  { name: "Implement", type: "skill", skill: "nightshift-implement", model: "sonnet", freshSession: true, maxParallel: 3, emoji: "🧑‍💻" },
-  { name: "Review", type: "skill", skill: "nightshift-review", model: "opus", freshSession: true, maxParallel: 3, emoji: "🧐" },
+  { name: "Grill", type: "skill", skill: "nightshift-grill", model: "opus", freshSession: "auto", maxParallel: 3, emoji: "🔥" },
+  { name: "Plan", type: "skill", skill: "nightshift-plan", model: "opus", freshSession: "auto", maxParallel: 3, emoji: "🗺️" },
+  { name: "Implement", type: "skill", skill: "nightshift-implement", model: "sonnet", freshSession: "auto", maxParallel: 3, emoji: "🧑‍💻" },
+  { name: "Review", type: "skill", skill: "nightshift-review", model: "opus", freshSession: "auto", maxParallel: 3, emoji: "🧐" },
   { name: "To Test", type: "inert", emoji: "🪲" },
-  { name: "Merge", type: "skill", skill: "nightshift-merge", model: "sonnet", freshSession: true, maxParallel: 1, emoji: "🎉" },
+  { name: "Merge", type: "skill", skill: "nightshift-merge", model: "sonnet", freshSession: "auto", maxParallel: 1, emoji: "🎉" },
 ];
 
 export function defaultBoard(name: string): Board {
@@ -215,7 +215,7 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
             ...(c.instructions ? { instructions: String(c.instructions) } : {}),
             ...(typeof c.model === "string" && c.model.trim() ? { model: c.model.trim() } : {}),
             ...(type === "skill" && c.lockModel === true ? { lockModel: true as const } : {}),
-            ...(type === "skill" && c.freshSession === true ? { freshSession: true as const } : {}),
+            ...(type === "skill" && (c.freshSession === true || c.freshSession === "auto") ? { freshSession: c.freshSession } : {}),
             ...(maxParallel !== undefined ? { maxParallel } : {}),
             ...(emoji !== undefined ? { emoji } : {}),
           };

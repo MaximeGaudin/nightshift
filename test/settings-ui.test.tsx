@@ -11,6 +11,8 @@ const base: Settings = {
   recentProjects: [],
   soundNotifications: false,
   language: "auto",
+  carryMaxTokens: 80000,
+  carryMaxAgeMinutes: 5,
 };
 
 const render = (s: Settings, current?: string) =>
@@ -40,6 +42,14 @@ test("settings-dirty: only editable fields count as unsaved changes", () => {
   expect(settingsDirty(base, { ...base, recentProjects: ["/x"] })).toBe(false);
   expect(settingsDirty(base, { ...base, model: "opus" })).toBe(true);
   expect(settingsDirty(base, { ...base, soundNotifications: true })).toBe(true);
+});
+
+test("settings-carry: both thresholds are shown with their value and count as unsaved changes", () => {
+  const html = render({ ...base, carryMaxTokens: 123000, carryMaxAgeMinutes: 9 });
+  expect(html).toMatch(/id="set-carry-tokens"[^>]*value="123000"/);
+  expect(html).toMatch(/id="set-carry-age"[^>]*value="9"/);
+  expect(settingsDirty(base, { ...base, carryMaxTokens: 1000 })).toBe(true);
+  expect(settingsDirty(base, { ...base, carryMaxAgeMinutes: 6 })).toBe(true);
 });
 
 test("language-switch-ui: Settings shows the Language select with Auto / English / Français and the stored value", async () => {
