@@ -122,6 +122,18 @@ export interface Board {
   nextCardNumber: number;
   /** Skill names pinned in the command palette for quick runs. Absent when none. */
   favoriteSkills?: string[];
+  /** Whether agents work in a git worktree. Absent = `DEFAULT_WORKTREE_POLICY`; never stored as the default. */
+  worktreePolicy?: WorktreePolicy;
+}
+
+/** Agents must use a worktree per card, may choose, or must never create one. */
+export const WORKTREE_POLICIES = ["required", "auto", "forbidden"] as const;
+export type WorktreePolicy = (typeof WORKTREE_POLICIES)[number];
+export const DEFAULT_WORKTREE_POLICY: WorktreePolicy = "required";
+
+/** The board's worktree policy; the only place that reads `board.worktreePolicy`. */
+export function worktreePolicyOf(board: Pick<Board, "worktreePolicy">): WorktreePolicy {
+  return board.worktreePolicy && WORKTREE_POLICIES.includes(board.worktreePolicy) ? board.worktreePolicy : DEFAULT_WORKTREE_POLICY;
 }
 
 /** Quick human ref of a card, e.g. `#32`. */

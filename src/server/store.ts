@@ -11,6 +11,7 @@ import {
   type Card,
   type Column,
   type ColumnType,
+  DEFAULT_WORKTREE_POLICY,
   doneColumn,
   ensureSystemColumns,
   type HistoryEntry,
@@ -19,6 +20,8 @@ import {
   normalizeColumnParallel,
   type TimePart,
   type TimeState,
+  WORKTREE_POLICIES,
+  type WorktreePolicy,
 } from "../shared/types.ts";
 
 import { writeFileAtomic } from "./fsutil.ts";
@@ -121,7 +124,7 @@ const CARD_KEYS = [
   "timeBase",
   "models",
 ];
-const BOARD_KEYS = ["version", "name", "columns", "cards", "nextCardNumber", "favoriteSkills"];
+const BOARD_KEYS = ["version", "name", "columns", "cards", "nextCardNumber", "favoriteSkills", "worktreePolicy"];
 
 /**
  * Fields this version does not know, kept as they are. Several Nightshift versions write the same file
@@ -183,6 +186,11 @@ function normalizeFavoriteSkills(value: unknown): string[] | undefined {
   const names = new Set<string>();
   for (const v of value) if (typeof v === "string" && v.trim()) names.add(v.trim());
   return names.size > 0 ? [...names] : undefined;
+}
+
+/** A non-default policy from the file; the default and anything unknown give undefined (field omitted). */
+function normalizeWorktreePolicy(value: unknown): WorktreePolicy | undefined {
+  return WORKTREE_POLICIES.includes(value as WorktreePolicy) && value !== DEFAULT_WORKTREE_POLICY ? (value as WorktreePolicy) : undefined;
 }
 
 /** Normalizes a parsed board so the rest of the code can trust its shape. */
@@ -260,6 +268,7 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
     r.nextCardNumber,
   );
   const favoriteSkills = normalizeFavoriteSkills(r.favoriteSkills);
+  const worktreePolicy = normalizeWorktreePolicy(r.worktreePolicy);
   return {
     ...unknownFields(raw, BOARD_KEYS),
     version: 1,
@@ -268,6 +277,7 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
     cards,
     nextCardNumber,
     ...(favoriteSkills ? { favoriteSkills } : {}),
+    ...(worktreePolicy ? { worktreePolicy } : {}),
   };
 }
 
