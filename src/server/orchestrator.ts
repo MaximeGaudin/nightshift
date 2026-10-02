@@ -21,6 +21,7 @@ import type {
 } from "../shared/types.ts";
 import { canSendFeedback, cardRef, columnMaxParallel, isDoneColumn } from "../shared/types.ts";
 import { safeHttpUrl } from "../shared/urls.ts";
+import { buildEnvironment } from "./environment.ts";
 import { HttpError } from "./guard.ts";
 import { parseProgressMarker, progressFromTodos } from "./progress.ts";
 import { buildQuickRunPrompt, parseQuickOutput, QUICK_INSTRUCTION_MAX, QUICK_RESULT_SCHEMA } from "./quickrun.ts";
@@ -190,7 +191,13 @@ function formatColumns(board: Board): string {
     .join("\n");
 }
 
-export function buildPrompt(board: Board, card: Card, column: Column, skillPath: string | undefined): string {
+export function buildPrompt(
+  board: Board,
+  card: Card,
+  column: Column,
+  skillPath: string | undefined,
+  live: Record<string, LiveStatus> = {},
+): string {
   const next = resolveNextColumn(board.columns, { columnId: column.id, skipColumnIds: card.skipColumnIds });
   const columns = formatColumns(board);
   return `You are an automated worker driven by Nightshift, a kanban board that orchestrates AI agents.
@@ -204,6 +211,8 @@ ${column.instructions ? `\nAdditional instructions for this column:\n${column.in
 ${card.description}
 </description>
 </card>
+
+${buildEnvironment(board, card, live)}
 
 Board columns, in order:
 ${columns}
@@ -232,6 +241,7 @@ export function buildFeedbackPrompt(
   column: Column,
   skill: string | undefined,
   skillPath: string | undefined,
+  live: Record<string, LiveStatus> = {},
 ): string {
   const next = resolveNextColumn(board.columns, { columnId: column.id, skipColumnIds: card.skipColumnIds });
   const skillName = skill ? `the skill "${skill}"` : "the skill you applied earlier in this session";
@@ -250,6 +260,8 @@ Address this feedback on the card below. Follow ${skillName}${skill && skillPath
 ${card.description}
 </description>
 </card>
+
+${buildEnvironment(board, card, live)}
 
 The card may have moved since your session ran; it is now in column "${column.name}" (id: ${column.id}, ${column.type === "skill" ? `skill: ${column.skill}` : "inert"}).
 ${column.instructions ? `\nAdditional instructions for this column:\n${column.instructions}\n` : ""}
@@ -436,12 +448,18 @@ export class Orchestrator {
     return p;
   }
 
-  snapshot(p: Project): ProjectSnapshot {
+  /** Run state of the cards that have an agent running or waiting to run. */
+  private liveStatuses(p: Project): Record<string, LiveStatus> {
     const live: Record<string, LiveStatus> = {};
     for (const card of p.board.cards) {
       if (this.jobs.has(this.key(p, card.id))) live[card.id] = "running";
       else if (needsRun(p.board, card)) live[card.id] = "queued";
     }
+    return live;
+  }
+
+  snapshot(p: Project): ProjectSnapshot {
+    const live = this.liveStatuses(p);
     const lockedBy = this.lockedBy.get(p.path);
     const testing = [...this.tests.values()].filter((t) => t.project === p).map((t) => t.cardId);
     const progress: Record<string, RunProgress> = {};
@@ -925,11 +943,11 @@ export class Orchestrator {
     }
     const skillRef = job.skill ? `the skill "${job.skill}"` : "the skill you applied earlier in this session";
     let prompt = !answer
-      ? buildPrompt(p.board, card, column, skill?.path)
+      ? buildPrompt(p.board, card, column, skill?.path, this.liveStatuses(p))
       : answer.kind === "resume"
         ? RECOVER_PROMPT
         : answer.kind === "feedback"
-          ? buildFeedbackPrompt(p.board, card, column, job.skill, skill?.path)
+          ? buildFeedbackPrompt(p.board, card, column, job.skill, skill?.path, this.liveStatuses(p))
           : buildAnswerPrompt(card.title, skillRef, answer.text);
     if (answer?.kind === "feedback") this.log(p, card.id, "info", `Retour utilisateur : ${answer.text}`);
     else if (answer && answer.kind !== "resume") this.log(p, card.id, "info", `User answer: ${answer.text}`);
@@ -953,7 +971,7 @@ export class Orchestrator {
         this.log(p, card.id, "info", `Could not continue the card's session ${carried}: starting a new one.`);
         carried = undefined;
         resumeId = undefined;
-        prompt = buildPrompt(p.board, card, column, skill?.path);
+        prompt = buildPrompt(p.board, card, column, skill?.path, this.liveStatuses(p));
         attempt--;
         continue;
       }
