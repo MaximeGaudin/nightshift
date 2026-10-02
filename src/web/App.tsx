@@ -20,7 +20,8 @@ import { cn } from "./lib/utils.ts";
 import { NewCardDialog } from "./NewCardDialog.tsx";
 import { notifyError } from "./notify.ts";
 import { ProjectPicker } from "./ProjectPicker.tsx";
-import { questionCount } from "./projectTabs.ts";
+import { ProjectTabs } from "./ProjectTabs.tsx";
+import { loadTabs, questionCount, saveTabs, type TabsState, tabBoardEvent, tabClosed, tabOpened, tabOpenFailed } from "./projectTabs.ts";
 import { QuickRunToasts, showQuickRunResult } from "./QuickRunToasts.tsx";
 import { SettingsModal } from "./SettingsModal.tsx";
 import { ShortcutsHelp } from "./ShortcutsHelp.tsx";
@@ -47,11 +48,23 @@ function useProjectParam(): [string | null, (p: string | null) => void] {
 
 type Modal = "settings" | "columns" | "skills" | "projects";
 
+/** Rounded panel that holds the board, inset from the window edges under the tab bar. */
+const PANEL = "board-panel mx-2 mb-2 flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border bg-panel";
+
+/** localStorage when the page may use it. */
+function browserStorage(): Storage | undefined {
+  try {
+    return typeof window === "undefined" ? undefined : window.localStorage;
+  } catch {
+    return undefined;
+  }
+}
+
 function BoardSkeleton() {
   const { t } = useT();
   return (
     <div className="flex h-full flex-col" role="status" aria-label={t("board.app.loading")}>
-      <div className="flex h-11 items-center gap-3 border-b bg-card px-4">
+      <div className="flex h-11 items-center gap-3 border-b px-4">
         <Skeleton className="size-5" />
         <Skeleton className="h-4 w-40" />
         <Skeleton className="ml-auto h-6 w-24" />
@@ -75,7 +88,10 @@ function BoardSkeleton() {
 export function App() {
   const { t, tn } = useT();
   const [project, setProject] = useProjectParam();
-  const [snap, setSnap] = useState<ProjectSnapshot | null>(null);
+  const [tabsState, setTabsState] = useState<TabsState>(() => ({ tabs: loadTabs(browserStorage()), snaps: {}, errors: {} }));
+  const tabsRef = useRef(tabsState);
+  tabsRef.current = tabsState;
+  const snap: ProjectSnapshot | null = project ? (tabsState.snaps[project] ?? null) : null;
   // Opening the project failed: go back to the project picker.
   const [openFailed, setOpenFailed] = useState(false);
   // Bumped on each pick so picking the same path again after a failure re-runs the open.
@@ -91,24 +107,28 @@ export function App() {
     if (language) setLocale(resolveLocale(language, navigator.language));
   }, [language]);
 
+  useEffect(() => saveTabs(browserStorage(), tabsState.tabs), [tabsState.tabs]);
+
   // biome-ignore lint/correctness/useExhaustiveDependencies: openAttempt is a retry trigger, not read
   useEffect(() => {
-    setSnap(null);
     setOpenFailed(false);
-    if (!project) return;
-    // Switching project quickly: only the answer of the latest open may be shown.
+    // A tab already opened shows its cached snapshot at once; board events keep it current.
+    if (!project || project in tabsRef.current.snaps) return;
+    // Switching project quickly: only the answer of the latest open may change the active project.
     let cancelled = false;
+    const requested = project;
     api
-      .open(project)
+      .open(requested)
       .then((s) => {
         // Told once by the server: shown even if the user already switched project.
         if (s.templateSkillsNotCopied?.length)
           toast.warning(t("common.templateSkillsNotCopied", { names: s.templateSkillsNotCopied.join(", ") }));
-        if (cancelled) return;
-        setSnap(s);
-        if (s.path !== project) setProject(s.path);
+        // Cached even when the user moved on: its tab then shows it without waiting.
+        setTabsState((st) => tabOpened(st, requested, s));
+        if (!cancelled && s.path !== requested) setProject(s.path);
       })
       .catch((e) => {
+        setTabsState((st) => tabOpenFailed(st, requested, e.message));
         if (cancelled) return;
         notifyError(e.message);
         setOpenFailed(true);
@@ -117,6 +137,43 @@ export function App() {
       cancelled = true;
     };
   }, [project, setProject, openAttempt]);
+
+  // On load, open the other stored tabs so their counters are live; with no project in the URL, show the first tab.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs once, with the tabs read from storage
+  useEffect(() => {
+    const current = readProjectParam();
+    for (const path of tabsRef.current.tabs) {
+      if (path === current) continue;
+      api
+        .open(path)
+        .then((s) => setTabsState((st) => tabOpened(st, path, s)))
+        .catch((e) => setTabsState((st) => tabOpenFailed(st, path, e.message)));
+    }
+    const first = tabsRef.current.tabs[0];
+    if (!current && first) setProject(first);
+  }, []);
+
+  // Dialogs, the open card and the palette belong to the project they were opened on.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: project is the trigger, not read
+  useEffect(() => {
+    setOpenCard(null);
+    setModal(null);
+    setPalette(false);
+    setNewCard(null);
+  }, [project]);
+
+  /** Shows a tab; clicking the active one again retries a failed open. */
+  const activate = (path: string) => {
+    if (path !== project) setProject(path);
+    else if (!snap) setOpenAttempt((n) => n + 1);
+  };
+
+  /** Removes a tab only: the server keeps the project, and its agents, running. */
+  const closeProjectTab = (path: string) => {
+    const { state, next } = tabClosed(tabsRef.current, path, project);
+    setTabsState(state);
+    if (path === project) setProject(next);
+  };
 
   useEffect(() => installAudioUnlock(), []);
 
@@ -127,7 +184,7 @@ export function App() {
   });
 
   useServerEvents((e) => {
-    if (e.type === "board" && snap && e.project === snap.path) setSnap(e.snapshot);
+    if (e.type === "board") setTabsState((st) => tabBoardEvent(st, e.project, e.snapshot));
     if (e.type === "quickrun" && snap && e.project === snap.path) showQuickRunResult(e.result);
   });
 
@@ -166,13 +223,22 @@ export function App() {
   // Counts what is rendered, not the raw state (settings modal waits for settings).
   const modalShown = modal === "settings" ? !!settings : !!modal;
   const dialogOpen = !!(modalShown || card || palette || help || newCard);
-  const keyState = useRef({ dialogOpen, ready: false });
-  keyState.current = { dialogOpen, ready: !!snap };
+  const keyState = useRef({ dialogOpen, ready: false, tabs: tabsState.tabs, activate });
+  keyState.current = { dialogOpen, ready: !!snap, tabs: tabsState.tabs, activate };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!keyState.current.ready || e.defaultPrevented) return;
+      if (e.defaultPrevented) return;
       const action = shortcutFor(e, { dialogOpen: keyState.current.dialogOpen });
       if (!action) return;
+      // Tab shortcuts also work while a project is loading or failed to open.
+      if (typeof action === "object") {
+        const path = keyState.current.tabs[action.tab - 1];
+        if (!path) return;
+        e.preventDefault();
+        keyState.current.activate(path);
+        return;
+      }
+      if (!keyState.current.ready) return;
       e.preventDefault();
       if (action === "palette") setPalette(true);
       else if (action === "newCard") setNewCard({ title: "" });
@@ -210,85 +276,99 @@ export function App() {
     }
   };
 
+  const tabBar = (onAdd?: () => void) => (
+    <ProjectTabs
+      state={tabsState}
+      active={project}
+      leading={<Logo size={16} className="mx-1.5 shrink-0" />}
+      onSelect={activate}
+      onClose={closeProjectTab}
+      onAdd={onAdd}
+    />
+  );
+
   if (!project || (!snap && openFailed)) {
     return (
-      <div className="flex h-full flex-col overflow-y-auto">
-        <ProjectPicker
-          recent={settings?.recentProjects ?? []}
-          onPick={(p) => {
-            setOpenFailed(false);
-            setOpenAttempt((n) => n + 1);
-            setProject(p);
-          }}
-        />
+      <div className="flex h-full flex-col bg-background">
+        {tabsState.tabs.length > 0 && tabBar()}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <ProjectPicker
+            recent={settings?.recentProjects ?? []}
+            onPick={(p) => {
+              setOpenFailed(false);
+              setOpenAttempt((n) => n + 1);
+              setProject(p);
+            }}
+          />
+        </div>
       </div>
     );
   }
-  if (!snap) return <BoardSkeleton />;
+  if (!snap)
+    return (
+      <div className="flex h-full flex-col bg-background">
+        {tabBar()}
+        <div className={PANEL}>
+          <BoardSkeleton />
+        </div>
+      </div>
+    );
 
   const { running, max } = activeAgents(snap);
   const queued = Object.values(snap.live).filter((s) => s === "queued").length;
   const questions = questionCount(snap);
 
   return (
-    <div className="flex h-full flex-col">
-      <header className="flex min-h-11 shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-b bg-card px-4 py-1.5">
-        <div className="flex min-w-0 items-center gap-2">
-          <Logo size={18} className="shrink-0" />
+    <div className="flex h-full flex-col bg-background">
+      {tabBar(() => setModal("projects"))}
+      <div className={PANEL}>
+        <header className="flex min-h-11 shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-b px-4 py-1.5">
           <div className="flex min-w-0 items-baseline gap-2">
-            <h1 className="truncate text-[15px] font-semibold tracking-tight">{snap.board.name}</h1>
-            <button
-              type="button"
-              className="truncate rounded-sm font-mono text-xs text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-              onClick={() => setModal("projects")}
-              title={t("board.app.switchProject")}
-            >
-              {snap.path}
-            </button>
+            <h1 className="truncate text-[14px] font-semibold tracking-tight">{snap.board.name}</h1>
+            <span className="board-card-count shrink-0 text-xs text-muted-foreground tabular-nums">
+              {tn("board.app.cardCount", snap.board.cards.length)}
+            </span>
           </div>
-        </div>
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground" aria-live="polite">
-          <span className={`size-1.5 rounded-full ${running ? "bg-ok" : "bg-muted-foreground/40"}`} aria-hidden="true" />
-          {t("board.app.agentsActive", { running, max })}
-          {queued > 0 && <span> · {t("board.app.queued", { count: queued })}</span>}
-          {questions > 0 && <span className="font-medium text-warn">· {tn("board.app.questions", questions)}</span>}
-        </div>
-        <nav className="ml-auto flex items-center gap-1">
-          <FlowButtons snap={snap} guard={guard} />
-          <Button variant="ghost" onClick={() => setModal("columns")}>
-            <Columns3 aria-hidden="true" />
-            {t("board.app.columns")}
-          </Button>
-          <Button variant="ghost" onClick={() => setModal("skills")}>
-            <Sparkles aria-hidden="true" />
-            {t("board.app.skills")}
-          </Button>
-          <Button variant="ghost" onClick={() => setModal("settings")}>
-            <SettingsIcon aria-hidden="true" />
-            {t("board.app.settings")}
-          </Button>
-          <Button variant="outline" size="sm" className="ml-1 text-muted-foreground" onClick={() => setPalette(true)}>
-            {t("board.app.search")} <Kbd>⌘K</Kbd>
-          </Button>
-        </nav>
-      </header>
-      {(snap.agentsDisabled || snap.lockedBy) && (
-        <div className="flex shrink-0 flex-col gap-1.5 px-4 pt-3">
-          {snap.agentsDisabled && (
-            <Alert role="status">
-              <Info aria-hidden="true" />
-              {t("board.app.noAgents")}
-            </Alert>
-          )}
-          {snap.lockedBy && (
-            <Alert role="status" variant="warn">
-              <TriangleAlert aria-hidden="true" />
-              {t("board.app.locked", { pid: snap.lockedBy })}
-            </Alert>
-          )}
-        </div>
-      )}
-      <Board snap={snap} onOpen={setOpenCard} onEditColumns={() => setModal("columns")} guard={guard} />
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground" aria-live="polite">
+            <span className={`size-1.5 rounded-full ${running ? "bg-ok" : "bg-muted-foreground/40"}`} aria-hidden="true" />
+            {t("board.app.agentsActive", { running, max })}
+            {queued > 0 && <span> · {t("board.app.queued", { count: queued })}</span>}
+            {questions > 0 && <span className="font-medium text-warn">· {tn("board.app.questions", questions)}</span>}
+          </div>
+          <nav className="ml-auto flex items-center gap-0.5">
+            <FlowButtons snap={snap} guard={guard} />
+            <IconButton label={t("board.app.columns")} onClick={() => setModal("columns")}>
+              <Columns3 aria-hidden="true" />
+            </IconButton>
+            <IconButton label={t("board.app.skills")} onClick={() => setModal("skills")}>
+              <Sparkles aria-hidden="true" />
+            </IconButton>
+            <IconButton label={t("board.app.settings")} onClick={() => setModal("settings")}>
+              <SettingsIcon aria-hidden="true" />
+            </IconButton>
+            <Button variant="outline" size="sm" className="ml-1.5 text-muted-foreground" onClick={() => setPalette(true)}>
+              {t("board.app.search")} <Kbd>⌘K</Kbd>
+            </Button>
+          </nav>
+        </header>
+        {(snap.agentsDisabled || snap.lockedBy) && (
+          <div className="flex shrink-0 flex-col gap-1.5 px-4 pt-3">
+            {snap.agentsDisabled && (
+              <Alert role="status">
+                <Info aria-hidden="true" />
+                {t("board.app.noAgents")}
+              </Alert>
+            )}
+            {snap.lockedBy && (
+              <Alert role="status" variant="warn">
+                <TriangleAlert aria-hidden="true" />
+                {t("board.app.locked", { pid: snap.lockedBy })}
+              </Alert>
+            )}
+          </div>
+        )}
+        <Board key={snap.path} snap={snap} onOpen={setOpenCard} onEditColumns={() => setModal("columns")} guard={guard} />
+      </div>
 
       {card && (
         <CardModal
@@ -320,7 +400,7 @@ export function App() {
         />
       )}
       {modal === "projects" && (
-        <AppDialog size="lg" title={t("board.app.switchProject")} onClose={() => setModal(null)}>
+        <AppDialog size="lg" title={t("board.tabs.add")} onClose={() => setModal(null)}>
           <ProjectPicker
             embedded
             recent={settings?.recentProjects ?? []}

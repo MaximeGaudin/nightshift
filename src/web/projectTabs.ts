@@ -65,3 +65,42 @@ export function tabLabel(path: string): string {
 export function questionCount(snap: Pick<ProjectSnapshot, "board" | "live">): number {
   return snap.board.cards.filter((c) => !snap.live[c.id] && c.lastRun?.status === "question" && c.lastRun.columnId === c.columnId).length;
 }
+
+/** Everything the tab bar knows: open tabs, the last snapshot of each opened project, and why a tab failed to open. */
+export interface TabsState {
+  tabs: Tabs;
+  snaps: Record<string, ProjectSnapshot>;
+  errors: Record<string, string>;
+}
+
+const without = <T>(record: Record<string, T>, key: string): Record<string, T> => {
+  if (!(key in record)) return record;
+  const { [key]: _, ...rest } = record;
+  return rest;
+};
+
+/** `requested` answered with `snap`: cache it and make it a tab under its resolved path. */
+export function tabOpened(state: TabsState, requested: string, snap: ProjectSnapshot): TabsState {
+  return {
+    tabs: renameTab(state.tabs, requested, snap.path),
+    snaps: { ...state.snaps, [snap.path]: snap },
+    errors: without(without(state.errors, requested), snap.path),
+  };
+}
+
+/** Opening `path` failed: an existing tab keeps its place and shows the error. */
+export function tabOpenFailed(state: TabsState, path: string, message: string): TabsState {
+  return { ...state, errors: { ...state.errors, [path]: message } };
+}
+
+/** A board event: only projects with a cached snapshot (open tabs, or the one being shown) are followed. */
+export function tabBoardEvent(state: TabsState, project: string, snap: ProjectSnapshot): TabsState {
+  if (!(project in state.snaps)) return state;
+  return { ...state, snaps: { ...state.snaps, [project]: snap } };
+}
+
+/** Closes a tab and forgets its snapshot and error; the server keeps the project open. */
+export function tabClosed(state: TabsState, path: string, active: string | null): { state: TabsState; next: string | null } {
+  const { tabs, next } = closeTab(state.tabs, path, active);
+  return { state: { tabs, snaps: without(state.snaps, path), errors: without(state.errors, path) }, next };
+}

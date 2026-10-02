@@ -125,6 +125,12 @@
       color-scheme: dark;
     }
   }
+  /* The app shell fills the window: the board panel takes the height left under the tab bar. */
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
   body {
     background-color: var(--background);
     color: var(--foreground);
