@@ -16,7 +16,7 @@ import { RunProgress } from "./RunProgress.tsx";
 export function PausedBadge() {
   const { t } = useT();
   return (
-    <Badge variant="secondary" className="paused-badge ml-1.5 align-middle text-warn">
+    <Badge variant="secondary" dot="warn" className="paused-badge ml-1.5 align-middle text-warn">
       {t("board.status.paused")}
     </Badge>
   );
@@ -98,7 +98,7 @@ export function CardTile({
       {...dndProps}
       data-card
       className={cn(
-        "card group relative cursor-pointer touch-manipulation rounded-lg border bg-card px-3 py-2 outline-none transition-colors duration-150 hover:border-foreground/25 focus-visible:ring-2 focus-visible:ring-ring",
+        "card group relative cursor-pointer touch-manipulation rounded-lg border bg-card p-3 shadow-xs outline-none transition-colors duration-150 hover:border-foreground/20 hover:bg-accent/40 focus-visible:ring-2 focus-visible:ring-ring",
         status === "question" && "st-question border-warn-soft hover:border-warn",
         status && status !== "question" && `st-${status}`,
         dragging && "dragging opacity-40",
@@ -113,11 +113,12 @@ export function CardTile({
       }}
     >
       <CardThumbnail project={project} card={card} />
-      <div className="card-ref mb-0.5 flex min-h-5 items-center gap-1 pr-6 text-[11px] text-muted-foreground tabular-nums">
+      <div className="card-ref mb-1 flex min-h-5 items-center gap-1 pr-6 text-[11px] text-muted-foreground tabular-nums">
         <span>{cardRef(card)}</span>
         {override && (
           <Badge
             variant="secondary"
+            dot="primary"
             className="model-badge"
             title={override.columnModel ? t("board.card.modelBadge", { column: override.columnModel }) : t("board.card.modelBadgeNone")}
           >
@@ -127,6 +128,7 @@ export function CardTile({
         {waitingFor && (
           <Badge
             variant="outline"
+            dot="warn"
             className="waiting-badge"
             title={waitingFor.length > 0 ? t("board.card.waitingTitle", { refs: waitingFor.join(", ") }) : undefined}
           >

@@ -6,10 +6,10 @@ import { ColumnGlyph } from "./icons.tsx";
 
 /** Shell of a wide column: shares the free space equally between 290px and 560px; the fixed basis stops a long badge from widening it. */
 export const WIDE_COLUMN =
-  "column flex max-h-full min-w-[290px] max-w-[560px] flex-[1_0_290px] flex-col rounded-lg border border-transparent transition-colors duration-150";
+  "column flex max-h-full min-w-[290px] max-w-[560px] flex-[1_0_290px] flex-col rounded-lg border border-transparent bg-lane p-1.5 transition-colors duration-150";
 /** Shell of a strip (compact or collapsed Done): fixed width, opts out of the wide rules above. */
 export const STRIP_COLUMN =
-  "column flex max-h-full min-w-0 max-w-none flex-col overflow-hidden rounded-lg border border-transparent transition-colors duration-150";
+  "column flex max-h-full min-w-0 max-w-none flex-col overflow-hidden rounded-lg border border-transparent bg-lane transition-colors duration-150";
 /** Highlight of the column under the dragged card. */
 export const DROP_TARGET = "drop-target border-primary bg-primary/8";
 
