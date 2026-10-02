@@ -186,6 +186,6 @@ test("palette-skill-description-first", () => {
   // A card number keeps the card first.
   expect(orderGroups([...groups], cmds, "#5")[0]).toBe("cards");
   // Disabled skills (agents off) do not lead.
-  const off = buildCommands({ ...withCard, agentsDisabled: true } as typeof withCard);
+  const off = buildCommands({ ...withCard, snap: { ...withCard.snap, agentsDisabled: true } });
   expect(orderGroups([...groups], off, "grill")[0]).not.toBe("skills");
 });
