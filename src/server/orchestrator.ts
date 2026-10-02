@@ -29,6 +29,7 @@ import { buildQuickRunPrompt, parseQuickOutput, QUICK_INSTRUCTION_MAX, QUICK_RES
 import { persistScreenshots } from "./screenshots.ts";
 import { applySections, parseSections } from "./sections.ts";
 import { SequenceController } from "./sequence.ts";
+import { contextTokensOf, decideCarry } from "./sessionCarry.ts";
 import { getSettings, legacyMaxParallel, NIGHTSHIFT_HOME, onSettingsChange, rememberProject } from "./settings.ts";
 import { findSkill } from "./skills.ts";
 import { isRaw, needsRun, newId, Project, type Raw } from "./store.ts";
@@ -49,7 +50,7 @@ interface StreamEvent {
   session_id?: string;
   model?: string;
   parent_tool_use_id?: string | null;
-  message?: { content?: StreamBlock[] };
+  message?: { content?: StreamBlock[]; usage?: unknown };
   is_error?: boolean;
   result?: unknown;
   total_cost_usd?: number;
@@ -66,6 +67,8 @@ interface Runner {
   cancelled: boolean;
   /** Claude session of the current process, from its init event (known even if it dies before a result). */
   sessionId?: string;
+  /** Context size of the current process's last own assistant message (see contextTokensOf); reset at each attempt. */
+  contextTokens?: number;
   /** Live progress of the current process; reset at each spawn, never persisted. */
   progress?: RunProgress;
   /** A valid marker was seen in the current process: TodoWrite no longer counts. */
@@ -1018,8 +1021,15 @@ export class Orchestrator {
           : buildAnswerPrompt(card.title, skillRef, answer.text);
     if (answer?.kind === "feedback") this.log(p, card.id, "info", `Retour utilisateur : ${answer.text}`);
     else if (answer && answer.kind !== "resume") this.log(p, card.id, "info", `User answer: ${answer.text}`);
-    // A new run continues the card's session (the previous columns' context), unless its column asks for a fresh one.
-    let carried = !answer && !column.freshSession ? (card.sessionId ?? card.lastRun?.sessionId) : undefined;
+    // A new run continues the card's session (the previous columns' context), unless its column asks for a fresh one
+    // or, in auto mode, the carried context is too big or too old to be worth re-reading.
+    let carried: string | undefined;
+    const previousSession = !answer ? (card.sessionId ?? card.lastRun?.sessionId) : undefined;
+    if (previousSession) {
+      const decision = decideCarry(column.freshSession, card.lastRun, getSettings(), Date.now());
+      if (decision.log) this.log(p, card.id, "info", decision.log);
+      if (decision.carry) carried = previousSession;
+    }
     if (carried) prompt = `${CONTINUE_PREFIX}\n\n${prompt}`;
     let resumeId = answer?.sessionId ?? carried;
     let costUsd = 0;
@@ -1029,6 +1039,7 @@ export class Orchestrator {
     for (let attempt = 0; ; attempt++) {
       const verb = attempt > 0 ? "Recovering" : carried ? "Continuing the card's session with" : !answer ? "Starting" : "Resuming";
       job.sessionId = undefined;
+      job.contextTokens = undefined;
       const r = await this.spawnAgent(job, this.cardTarget(job, card, column, verb), prompt, resumeId);
       if ("startError" in r) return this.finish(job, "error", { error: r.startError });
       if (job.cancelled) return this.finish(job, "cancelled", {});
@@ -1177,6 +1188,9 @@ export class Orchestrator {
     if (ev.type === "assistant") {
       // Subagent messages carry parent_tool_use_id: they are logged but never drive the card's progress.
       const own = !ev.parent_tool_use_id;
+      // Subagents run in their own context: only the card's session counts toward what a next column would carry.
+      const tokens = own ? contextTokensOf(ev.message?.usage) : undefined;
+      if (tokens !== undefined) job.contextTokens = tokens;
       for (const block of Array.isArray(ev.message?.content) ? ev.message.content : []) {
         if (block.type === "text" && block.text?.trim()) {
           target.log("text", block.text.trim());
@@ -1241,6 +1255,7 @@ export class Orchestrator {
         ...(data.error ? { error: data.error } : {}),
         ...(data.costUsd !== undefined ? { costUsd: data.costUsd } : {}),
         ...(sessionId ? { sessionId } : {}),
+        ...(job.contextTokens !== undefined ? { contextTokens: job.contextTokens } : {}),
         ...(job.skill ? { skill: job.skill } : {}),
       };
       // The next column continues from here.

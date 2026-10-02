@@ -251,7 +251,7 @@ export function startServer({ port, development, agents = true }: { port: number
                   ...(instructions ? { instructions } : {}),
                   ...(model ? { model } : {}),
                   ...(type === "skill" && c.lockModel === true ? { lockModel: true as const } : {}),
-                  ...(type === "skill" && c.freshSession === true ? { freshSession: true as const } : {}),
+                  ...(type === "skill" && (c.freshSession === true || c.freshSession === "auto") ? { freshSession: c.freshSession } : {}),
                   ...(maxParallel !== undefined ? { maxParallel } : {}),
                   ...(emoji !== undefined ? { emoji } : {}),
                 };
