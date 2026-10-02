@@ -203,7 +203,8 @@ export function commandLabel(c: PaletteCommand, search: string): string {
 
 /**
  * cmdk filter: "#<digits>" is an exact card number; a skill name match scores 4 (exact or followed by an instruction), 3 (prefix)
- * or 2 (substring); otherwise a case and accent insensitive substring of value + keywords scores 1.
+ * or 2 (substring); a skill matching only by description or keywords scores 1.5, above every non-skill match; otherwise a
+ * case and accent insensitive substring of value + keywords scores 1.
  * The "create a card" item always matches free text (low score, so it comes after real matches).
  */
 export function paletteFilter(value: string, search: string, keywords?: string[]): number {
@@ -221,6 +222,7 @@ export function paletteFilter(value: string, search: string, keywords?: string[]
     if (n.includes(text)) return 2;
   }
   const hay = normalize([value, ...(keywords ?? [])].join(" "));
-  if (hay.includes(normalize(term))) return 1;
+  // Any skill match outranks cards, actions and navigation: the palette is mostly opened to run a skill.
+  if (hay.includes(normalize(term))) return value.startsWith(SKILL_PREFIX) ? 1.5 : 1;
   return isFreeText(term) && normalize(value).startsWith(normalize(newCardPrefix())) ? 0.01 : 0;
 }

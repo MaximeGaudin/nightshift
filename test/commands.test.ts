@@ -119,7 +119,7 @@ test("palette-instruction", () => {
   if (!c) throw new Error("missing skill entry");
   expect(paletteFilter(c.value, "deploy-prod v1.4", c.keywords)).toBe(4);
   expect(paletteFilter(c.value, "depl", c.keywords)).toBe(3);
-  expect(paletteFilter(c.value, "lancer", c.keywords)).toBe(1);
+  expect(paletteFilter(c.value, "lancer", c.keywords)).toBe(1.5);
   expect(commandLabel(c, "deploy-prod v1.4")).toContain("“v1.4”");
   expect(commandLabel(c, "depl")).toBe("deploy-prod");
 });
@@ -156,8 +156,36 @@ test("palette-skill-name-first", () => {
   // Exact > prefix > substring > description-only.
   expect(score("skill:nightshift-grill", "nightshift-grill")).toBe(4);
   expect(score("skill:nightshift-grill", "nights")).toBe(3);
-  expect(score("skill:lint", "grill")).toBe(1);
+  expect(score("skill:lint", "grill")).toBe(1.5);
   expect(orderGroups([...groups], cmds, "nights")[0]).toBe("skills");
   // No skill name matches: order unchanged.
   expect(orderGroups([...groups], cmds, "revoir")[0]).toBe("cards");
+});
+
+test("palette-skill-description-first", () => {
+  const groups = ["cards", "actions", "skills", "navigation", "projects"] as const;
+  const withCard = {
+    ...ctx({ board: { name: "b", columns, cards: [card(5, "Revoir grill")], favoriteSkills: ["nightshift-grill", "lint"] } }),
+    skills: [
+      { ...skillInfo("nightshift-grill"), description: "Interroge" },
+      { ...skillInfo("lint"), description: "grill du code" },
+    ],
+  };
+  const cmds = buildCommands(withCard);
+  const score = (id: string, search: string) => {
+    const c = cmds.find((x) => x.id === id);
+    if (!c) throw new Error(`missing ${id}`);
+    return paletteFilter(c.value, search, c.keywords);
+  };
+  // A description-only skill match still beats the card title.
+  expect(score("skill:lint", "grill")).toBeGreaterThan(score("card:card_5", "grill"));
+  expect(orderGroups([...groups], cmds.filter((c) => c.id !== "skill:nightshift-grill"), "grill")[0]).toBe("skills");
+  expect(score("skill:nightshift-grill", "grill")).toBeGreaterThan(score("skill:lint", "grill"));
+  // Keyword match ("lancer") puts skills first.
+  expect(orderGroups([...groups], cmds, "lancer")[0]).toBe("skills");
+  // A card number keeps the card first.
+  expect(orderGroups([...groups], cmds, "#5")[0]).toBe("cards");
+  // Disabled skills (agents off) do not lead.
+  const off = buildCommands({ ...withCard, agentsDisabled: true } as typeof withCard);
+  expect(orderGroups([...groups], off, "grill")[0]).not.toBe("skills");
 });
