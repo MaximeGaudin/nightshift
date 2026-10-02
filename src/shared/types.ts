@@ -14,6 +14,8 @@ export interface Column {
   instructions?: string;
   /** Modèle Claude (alias ou ID) pour les runs de cette colonne ; absent = réglage global. */
   model?: string;
+  /** Skill columns only: the column model wins over the card's per-skill model. Never stored as false. */
+  lockModel?: true;
   /** Max agents running at once in this column; absent = 1. The global setting still caps the total. */
   maxParallel?: number;
   /** Single grapheme shown instead of the type icon; absent = type icon. */
@@ -99,6 +101,8 @@ export interface Card {
   test?: CardTest;
   /** Ids of the columns "next" jumps over for this card. Canonical form: see `normalizeSkipColumnIds`. Absent = none. */
   skipColumnIds?: string[];
+  /** Per-skill model overrides (skill name -> alias or ID). Never `{}`; "default" is never stored. */
+  models?: Record<string, string>;
   history: HistoryEntry[];
   /** Time checkpoint of the history entries dropped by the history cap. */
   timeBase?: TimeState;
@@ -184,6 +188,7 @@ export function ensureDoneColumn(columns: Column[]): Column[] {
   delete done.skill;
   delete done.instructions;
   delete done.model;
+  delete done.lockModel;
   delete done.maxParallel;
   return [...columns.filter((c) => !isDoneColumn(c)), done];
 }
@@ -227,6 +232,7 @@ export function ensureBacklogColumn(columns: Column[]): { columns: Column[]; ren
   delete backlog.skill;
   delete backlog.instructions;
   delete backlog.model;
+  delete backlog.lockModel;
   delete backlog.maxParallel;
   const rest = columns.filter((c) => c !== source && !isBacklogColumn(c));
   return { columns: [backlog, ...rest], ...(renamedFrom !== undefined ? { renamedFrom } : {}) };

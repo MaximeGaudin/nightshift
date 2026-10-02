@@ -2,6 +2,7 @@ import { existsSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import type { Server, ServerWebSocket } from "bun";
+import { describeModelChanges, diffModels, validateModelsStrict } from "../shared/models.ts";
 import { normalizeSkipColumnIds, skippedColumns } from "../shared/skip.ts";
 import {
   BACKLOG_COLUMN_ID,
@@ -230,6 +231,7 @@ export function startServer({ port, development, agents = true }: { port: number
                   ...(type === "skill" && skill ? { skill } : {}),
                   ...(instructions ? { instructions } : {}),
                   ...(model ? { model } : {}),
+                  ...(type === "skill" && c.lockModel === true ? { lockModel: true as const } : {}),
                   ...(maxParallel !== undefined ? { maxParallel } : {}),
                   ...(emoji !== undefined ? { emoji } : {}),
                 };
@@ -303,13 +305,23 @@ export function startServer({ port, development, agents = true }: { port: number
           const title = optString(b, "title");
           const description = optString(b, "description");
           const skipInput = optSkipIds(b);
+          const hasModels = b.models !== undefined;
+          const modelsCheck = validateModelsStrict(b.models);
+          if (!modelsCheck.ok) throw new Error(modelsCheck.error);
           p.mutate((board) => {
             const card = p.card(req.params.id);
             if (!card) throw new HttpError(404, "Unknown card");
             if (title !== undefined) card.title = title;
             if (description !== undefined) card.description = description;
             card.updatedAt = new Date().toISOString();
-            if (title !== undefined || description !== undefined || skipInput === undefined) p.addHistory(card, "edited", "Edited by user");
+            if (title !== undefined || description !== undefined || (skipInput === undefined && !hasModels))
+              p.addHistory(card, "edited", "Edited by user");
+            if (hasModels) {
+              const changes = diffModels(card.models, modelsCheck.models);
+              if (modelsCheck.models) card.models = modelsCheck.models;
+              else delete card.models;
+              if (changes.length > 0) p.addHistory(card, "edited", describeModelChanges(changes, "user"));
+            }
             if (skipInput !== undefined) {
               const skip = normalizeSkipColumnIds(board.columns, skipInput);
               const before = (card.skipColumnIds ?? []).join("\n");

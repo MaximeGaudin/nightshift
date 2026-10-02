@@ -9,6 +9,7 @@
 // or FAKE_SLOW (sleeps ~5 s first).
 // Quick runs: the instruction may contain FAKE_QUICK_ERROR (error status), FAKE_QUICK_INVALID (no status),
 // FAKE_QUICK_SLOW (sleeps ~5 s) or FAKE_QUICK_PROGRESS (emits a progress marker 1/2); otherwise success echoing it.
+// FAKE_EXTRA_OUTPUT, when set, is a JSON object merged into the structured output of card runs.
 // FAKE_ARGS_LOG, when set, receives one JSON line per run: { title, resumed, model }.
 import { appendFileSync } from "node:fs";
 
@@ -35,6 +36,7 @@ if (process.env.FAKE_ARGS_LOG) {
     })}\n`,
   );
 }
+const extra = process.env.FAKE_EXTRA_OUTPUT ? JSON.parse(process.env.FAKE_EXTRA_OUTPUT) : {};
 const emit = (o: unknown) => console.log(JSON.stringify(o));
 emit({ type: "system", subtype: "init", session_id: "sess-1", model: "fake" });
 emit({
@@ -130,7 +132,7 @@ if (quick) {
     type: "result",
     is_error: false,
     session_id: "sess-ask",
-    structured_output: { move: "stay", summary: "need input", questions: ["Color?", "Size?"] },
+    structured_output: { move: "stay", summary: "need input", questions: ["Color?", "Size?"], ...extra },
   });
 } else if (resumed && prompt.includes("FAKE_FAIL")) {
   emit({ type: "result", is_error: true, result: "feedback boom", session_id: "sess-fb" });
@@ -173,6 +175,7 @@ if (quick) {
       summary: "fake run",
       ...(title === "js-url" ? { test: { command: "echo hi", url: "javascript:alert(1)" } } : {}),
       ...(title === "bad-url" ? { test: { command: "echo hi", url: 123 } } : {}),
+      ...extra,
       ...(title === "with-test" ? { test: { command: "echo hello-from-test; sleep 30", url: "http://localhost:9999" } } : {}),
     },
   });

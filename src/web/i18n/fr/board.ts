@@ -9,6 +9,8 @@ export const board: Record<keyof typeof enboard, string> = {
   "board.status.cancelled": "Annulé",
   "board.status.question": "Question pour vous",
   "board.card.skippedColumns": "Colonnes sautées : {names}",
+  "board.card.modelBadge": "Modèle de la fiche (colonne : {column})",
+  "board.card.modelBadgeNone": "Modèle de la fiche (la colonne n'en a pas)",
   "board.card.sendTo": "Envoyer vers {name}",
   "board.card.questions_one": "{count} question",
   "board.card.questions_other": "{count} questions",

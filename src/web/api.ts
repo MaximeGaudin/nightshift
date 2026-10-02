@@ -30,8 +30,11 @@ export const api = {
       description,
       ...(skipColumnIds && skipColumnIds.length > 0 ? { skipColumnIds } : {}),
     }),
-  updateCard: (project: string, id: string, patch: { title?: string; description?: string; skipColumnIds?: string[] }) =>
-    call("PATCH", `/api/cards/${id}`, { project, ...patch }),
+  updateCard: (
+    project: string,
+    id: string,
+    patch: { title?: string; description?: string; skipColumnIds?: string[]; models?: Record<string, string> | null },
+  ) => call("PATCH", `/api/cards/${id}`, { project, ...patch }),
   deleteCard: (project: string, id: string) => call("DELETE", `/api/cards/${id}?${q(project)}`),
   moveCard: (project: string, id: string, columnId: string, index?: number) =>
     call("POST", `/api/cards/${id}/move`, { project, columnId, index }),

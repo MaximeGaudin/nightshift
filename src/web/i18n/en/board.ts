@@ -7,6 +7,8 @@ export const board = {
   "board.status.cancelled": "Cancelled",
   "board.status.question": "Question for you",
   "board.card.skippedColumns": "Skipped columns: {names}",
+  "board.card.modelBadge": "Card model (column: {column})",
+  "board.card.modelBadgeNone": "Card model (column has none)",
   "board.card.sendTo": "Send to {name}",
   "board.card.questions_one": "{count} question",
   "board.card.questions_other": "{count} questions",

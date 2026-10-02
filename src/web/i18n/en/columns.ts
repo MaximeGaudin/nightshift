@@ -18,6 +18,8 @@ export const columns = {
   "columns.model": "Model",
   "columns.modelPlaceholder": "Global setting",
   "columns.modelHint": "Empty = model from the global settings.",
+  "columns.lockModel": "Always use this column's model",
+  "columns.lockModelHint": "Ignore the card's own model for this column.",
   "columns.instructions": "Instructions",
   "columns.instructionsPlaceholder": "Additional instructions for the agent (optional)…",
   "columns.systemColumn": "System column",
