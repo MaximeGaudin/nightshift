@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { cardScreenshots, isCardScreenshot, screenshotUrl } from "../src/shared/screenshots.ts";
+import { cardImageType, cardScreenshots, isCardScreenshot, screenshotUrl } from "../src/shared/screenshots.ts";
 
 test("shared-is-card-screenshot", () => {
   expect(isCardScreenshot("/w/nightshift-screenshots/01-x.png", "card_a")).toBe(true);
@@ -9,7 +9,21 @@ test("shared-is-card-screenshot", () => {
   expect(isCardScreenshot("https://x/a.png", "card_a")).toBe(false);
   expect(isCardScreenshot("data:image/png;base64,AAAA", "card_a")).toBe(false);
   expect(isCardScreenshot("nightshift-screenshots/a.png", "card_a")).toBe(false);
-  expect(isCardScreenshot("/w/nightshift-screenshots/a.jpg", "card_a")).toBe(false);
+  expect(isCardScreenshot("/w/nightshift-screenshots/a.svg", "card_a")).toBe(false);
+});
+
+test("shared accepts the four image types", () => {
+  for (const ext of ["png", "jpg", "jpeg", "gif", "webp", "JPG"]) {
+    expect(isCardScreenshot(`/h/screenshots/card_a/paste-1.${ext}`, "card_a")).toBe(true);
+    expect(isCardScreenshot(`/w/nightshift-screenshots/1.${ext}`, "card_a")).toBe(true);
+  }
+  for (const ext of ["svg", "txt", "html", ""]) expect(isCardScreenshot(`/h/screenshots/card_a/x.${ext}`, "card_a")).toBe(false);
+  expect(isCardScreenshot("/h/screenshots/card_a/noext", "card_a")).toBe(false);
+  expect(isCardScreenshot("/h/screenshots/card_b/x.webp", "card_a")).toBe(false);
+  expect(cardImageType("/x/a.JPG")).toBe("image/jpeg");
+  expect(cardImageType("/x/a.webp")).toBe("image/webp");
+  expect(cardImageType("/x.png/a")).toBeNull();
+  expect(cardImageType("/x/a.svg")).toBeNull();
 });
 
 test("shared-is-card-screenshot cardScreenshots and screenshotUrl", () => {
