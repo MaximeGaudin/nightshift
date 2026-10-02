@@ -20,6 +20,8 @@ export const columns: Record<keyof typeof enColumns, string> = {
   "columns.model": "Modèle",
   "columns.modelPlaceholder": "Réglage global",
   "columns.modelHint": "Vide = modèle des réglages globaux.",
+  "columns.lockModel": "Toujours utiliser le modèle de cette colonne",
+  "columns.lockModelHint": "Ignore le modèle propre à la fiche pour cette colonne.",
   "columns.instructions": "Instructions",
   "columns.instructionsPlaceholder": "Instructions additionnelles pour l'agent (optionnel)…",
   "columns.systemColumn": "Colonne système",

@@ -3,6 +3,7 @@ import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalList
 import { CSS } from "@dnd-kit/utilities";
 import { ChevronDown, GripVertical, Lock, Plus, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { MODEL_ALIASES } from "../shared/models.ts";
 import {
   type Column,
   ensureSystemColumns,
@@ -53,6 +54,11 @@ function clampParallel(raw: string): number | undefined {
   const n = Math.floor(Number(raw));
   if (!Number.isFinite(n)) return undefined;
   return Math.min(MAX_PARALLEL, Math.max(1, n));
+}
+
+/** Checkbox state → column patch: `lockModel` is stored as `true` and omitted when off. */
+export function lockModelPatch(checked: boolean): Partial<Column> {
+  return { lockModel: checked ? true : undefined };
 }
 
 function errorMessage(e: unknown): string {
@@ -189,6 +195,10 @@ function SortableColumnRow({ col, skills, skillsLoading, cardCount, reducedMotio
                   onChange={(e) => onPatch({ model: e.target.value })}
                 />
                 <p className="text-xs text-muted-foreground">{t("columns.modelHint")}</p>
+                <label className="lock-model flex items-center gap-2 text-xs" title={t("columns.lockModelHint")}>
+                  <input type="checkbox" checked={col.lockModel === true} onChange={(e) => onPatch(lockModelPatch(e.target.checked))} />
+                  {t("columns.lockModel")}
+                </label>
               </div>
               <div className="grid gap-1.5 sm:col-span-2">
                 <Label htmlFor={`instructions-${col.key}`}>{t("columns.instructions")}</Label>
@@ -366,7 +376,7 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
           </SortableContext>
         </DndContext>
         <datalist id="column-models">
-          {["fable", "opus", "sonnet", "haiku"].map((m) => (
+          {MODEL_ALIASES.map((m) => (
             <option key={m} value={m} />
           ))}
         </datalist>
