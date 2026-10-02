@@ -39,3 +39,17 @@ test("theme-tokens: reduced motion turns off animations and transitions", () => 
   expect(reduced).toMatch(/animation:\s*none/);
   expect(reduced).toMatch(/transition:\s*none/);
 });
+
+/** Value of `--name` inside a block body. */
+const tokenValue = (body: string, name: string) => body.match(new RegExp(`${name}:\\s*([^;]+);`))?.[1]?.trim();
+
+test("theme-tokens: surface hierarchy page < panel < lane < card in both themes", () => {
+  for (const body of [block(":root {"), block("@media (prefers-color-scheme: dark)")]) {
+    const values = ["--background", "--panel", "--lane", "--card"].map((n) => tokenValue(body, n));
+    for (const v of values) expect(v).toBeTruthy();
+    expect(new Set(values).size).toBe(4);
+  }
+  const theme = block("@theme inline");
+  expect(theme).toContain("--color-panel: var(--panel);");
+  expect(theme).toContain("--color-lane: var(--lane);");
+});

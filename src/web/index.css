@@ -8,8 +8,11 @@
 @custom-variant dark (@media (prefers-color-scheme: dark));
 
 :root {
-  --radius: 6px;
-  --background: #fbfbfc;
+  --radius: 8px;
+  /* Surface ladder: page < panel < lane < card (see test/theme.test.ts). */
+  --background: #f1f2f4;
+  --panel: #fbfbfc;
+  --lane: #f3f4f6;
   --foreground: #1f2023;
   --card: #ffffff;
   --card-foreground: #1f2023;
@@ -20,7 +23,7 @@
   --secondary: #f4f5f7;
   --secondary-foreground: #1f2023;
   --muted: #f4f5f7;
-  --muted-foreground: #6b6f76;
+  --muted-foreground: #63666d;
   --accent: #eceef1;
   --accent-foreground: #1f2023;
   --destructive: #cf5050;
@@ -38,22 +41,24 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0e0f12;
+    --background: #08090a;
+    --panel: #0f1011;
+    --lane: #151618;
     --foreground: #e4e5e9;
-    --card: #16171b;
+    --card: #1c1d20;
     --card-foreground: #e4e5e9;
-    --popover: #16171b;
+    --popover: #1c1d20;
     --popover-foreground: #e4e5e9;
     --primary: #5e6ad2;
     --primary-foreground: #ffffff;
-    --secondary: #1c1d22;
+    --secondary: #222327;
     --secondary-foreground: #e4e5e9;
-    --muted: #1c1d22;
+    --muted: #222327;
     --muted-foreground: #8a8f98;
-    --accent: #24252b;
+    --accent: #28292e;
     --accent-foreground: #e4e5e9;
     --destructive: #e5676b;
-    --border: rgb(255 255 255 / 0.08);
+    --border: rgb(255 255 255 / 0.06);
     --input: rgb(255 255 255 / 0.12);
     --ring: #5e6ad2;
     --overlay: rgb(0 0 0 / 0.55);
@@ -72,6 +77,8 @@
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-panel: var(--panel);
+  --color-lane: var(--lane);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);
@@ -99,6 +106,7 @@
   --radius-sm: calc(var(--radius) - 2px);
   --radius-md: var(--radius);
   --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 4px);
 
   --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.06), 0 0 0 0.5px rgb(0 0 0 / 0.04);
   --default-transition-duration: 120ms;
