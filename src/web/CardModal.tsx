@@ -1,5 +1,5 @@
 import { Loader2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   BACKLOG_COLUMN_ID,
   type Board,
@@ -28,6 +28,7 @@ import { DependencyPicker } from "./DependencyPicker.tsx";
 import { FeedbackForm } from "./FeedbackForm.tsx";
 import { formatTime, useT } from "./i18n/index.ts";
 import { StatusIcon } from "./icons.tsx";
+import { handleImagePaste } from "./imagePaste.ts";
 import { cn } from "./lib/utils.ts";
 import { Markdown } from "./markdown.tsx";
 import { NextColumnButton } from "./NextColumnButton.tsx";
@@ -334,6 +335,16 @@ export function CardModalContent({
   const [descMode, setDescMode] = useState<"preview" | "edit">(card.description.trim() ? "preview" : "edit");
   const descRef = useRef<HTMLTextAreaElement>(null);
   const focusDesc = useRef(false);
+  // Pasted images: uploads in flight (for the hint) and where to put the cursor once their references are inserted.
+  const [uploading, setUploading] = useState(0);
+  const pasteCursor = useRef<number | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: description is the trigger (the inserted references were rendered); the effect only moves the cursor
+  useLayoutEffect(() => {
+    const at = pasteCursor.current;
+    if (at === null) return;
+    pasteCursor.current = null;
+    descRef.current?.setSelectionRange(at, at);
+  }, [description]);
   // Skipped columns are saved on each change; the display follows the board snapshot (the server value wins on every update).
   const serverSkip = card.skipColumnIds ?? [];
   const [skip, setSkip] = useState(serverSkip);
@@ -394,6 +405,11 @@ export function CardModalContent({
             <span id="card-desc-label" className="text-xs font-medium text-muted-foreground">
               {t("card.descriptionLabel")}
             </span>
+            {uploading > 0 && (
+              <span className="card-desc-uploading mr-auto text-xs text-muted-foreground" role="status">
+                {t("card.uploadingImage")}
+              </span>
+            )}
             <Tabs value={descMode} onValueChange={(v) => (v === "edit" ? editDescription() : setDescMode("preview"))}>
               <TabsList aria-labelledby="card-desc-label">
                 <TabsTrigger value="preview">{t("card.preview")}</TabsTrigger>
@@ -408,6 +424,19 @@ export function CardModalContent({
               aria-label={t("card.descriptionMarkdown")}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
+              onPaste={(e) =>
+                void handleImagePaste(e, {
+                  upload: (image) => api.uploadCardImage(project, card.id, image),
+                  apply: (edit) =>
+                    setDescription((text) => {
+                      const next = edit(text);
+                      pasteCursor.current = next.cursor;
+                      return next.text;
+                    }),
+                  onError: notifyError,
+                  busy: (delta) => setUploading((n) => n + delta),
+                })
+              }
               spellCheck
             />
           ) : (
