@@ -17,6 +17,12 @@ export const settings: Record<keyof typeof enSettings, string> = {
   "settings.sound.label": "Sons de notification",
   "settings.sound.help":
     "Joue un son quand une carte a besoin de vous (colonne inerte, question, erreur). Le navigateur exige un premier clic sur la page.",
+  "settings.carryTokens.label": "Contexte porté max (tokens)",
+  "settings.carryTokens.help":
+    "Les sessions auto reprennent celle de la fiche seulement si son dernier run s'est terminé avec au plus ce nombre de tokens de contexte.",
+  "settings.carryAge.label": "Âge max de la session portée (minutes)",
+  "settings.carryAge.help":
+    "Les sessions auto reprennent celle de la fiche seulement si son dernier run s'est terminé il y a moins longtemps (durée de vie du cache du prompt).",
   "settings.claude.title": "Claude",
   "settings.claude.description": "Comment Claude Code est lancé pour chaque carte.",
   "settings.permission.label": "Mode de permission de Claude Code",

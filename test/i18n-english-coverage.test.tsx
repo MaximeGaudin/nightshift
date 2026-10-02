@@ -88,6 +88,8 @@ const settings: Settings = {
   recentProjects: ["/tmp/other", "/tmp/demo"],
   soundNotifications: false,
   language: "auto",
+  carryMaxTokens: 80000,
+  carryMaxAgeMinutes: 5,
 };
 
 const noop = () => {};

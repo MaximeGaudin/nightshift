@@ -80,8 +80,22 @@ test("editor-backlog-locked", () => {
   expect(done).toContain("locked");
 });
 
-test("editor-fresh-session-default: turning a column into a skill column ticks fresh session", async () => {
+test("editor-fresh-session-default: turning a column into a skill column selects Auto", async () => {
   const { typePatch } = await import("../src/web/ColumnsEditor.tsx");
-  expect(typePatch("skill")).toEqual({ type: "skill", freshSession: true });
+  expect(typePatch("skill")).toEqual({ type: "skill", freshSession: "auto" });
   expect(typePatch("inert")).toEqual({ type: "inert" });
+});
+
+test("editor-session-mode: the select shows the stored value and saves the chosen one", async () => {
+  const { SESSION_MODES, sessionModeOf, sessionModePatch } = await import("../src/web/ColumnsEditor.tsx");
+  expect(SESSION_MODES).toEqual(["continue", "fresh", "auto"]);
+  // Stored value → selected option: true stays Fresh, absent stays Continue.
+  expect(sessionModeOf({})).toBe("continue");
+  expect(sessionModeOf({ freshSession: true })).toBe("fresh");
+  expect(sessionModeOf({ freshSession: "auto" })).toBe("auto");
+  // Chosen option → patch: Continue clears the field, it is never stored as false.
+  expect(sessionModePatch("continue")).toEqual({ freshSession: undefined });
+  expect(sessionModePatch("fresh")).toEqual({ freshSession: true });
+  expect(sessionModePatch("auto")).toEqual({ freshSession: "auto" });
+  for (const m of SESSION_MODES) expect(sessionModeOf(sessionModePatch(m))).toBe(m);
 });
