@@ -176,7 +176,7 @@ test("routes-status-codes unknown card, project and skill are 404 with an error 
 
 test("routes-validation PUT /api/settings with an invalid value is a 400 and changes nothing", async () => {
   const before = await srv.call("/api/settings").then((r) => r.json());
-  const bad = await srv.call("/api/settings", { method: "PUT", body: { maxParallel: "many" } });
+  const bad = await srv.call("/api/settings", { method: "PUT", body: { language: "de" } });
   expect(bad.status).toBe(400);
   expect((await bad.json()).error).toBeTruthy();
   expect((await srv.call("/api/settings", { method: "PUT", body: { nope: 1 } })).status).toBe(400);

@@ -1,10 +1,9 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Settings } from "../src/shared/types.ts";
-import { SettingsContent, settingsDirty } from "../src/web/SettingsModal.tsx";
+import { SettingsContent, saveSettingsAndProject, settingsDirty } from "../src/web/SettingsModal.tsx";
 
 const base: Settings = {
-  maxParallel: 3,
   claudePath: "claude",
   permissionMode: "auto",
   model: "",
@@ -54,12 +53,74 @@ test("language-switch-ui: Settings shows the Language select with Auto / English
   expect(settingsDirty(base, { ...base, language: "fr" })).toBe(true);
 });
 
-test("worktree-policy-ui: the project section shows with an open project and a policy, with three options", () => {
+test("settings-ui-project-section: no global cap, the project's cap is editable", () => {
   const html = renderToStaticMarkup(
     <SettingsContent
       value={base}
       onChange={() => {}}
       currentProject="/a/one"
+      projectMaxParallel={4}
+      onProjectMaxParallelChange={() => {}}
+    />,
+  );
+  expect(html).not.toContain("Plafond global");
+  expect(html).toContain(">Ce projet</h3>");
+  expect(html).toContain("/a/one");
+  expect(html).toContain("Agents en parallèle dans ce projet");
+  expect(html).toMatch(/id="set-project-parallel"[^>]*value="4"/);
+  // Without an open project there is nothing to set.
+  expect(render(base)).not.toContain("set-project-parallel");
+});
+
+test("settings-ui-project-section: saving writes the board only when the project cap changed", async () => {
+  const calls: [string, unknown][] = [];
+  const client = {
+    saveSettings: async (s: Partial<Settings>) => {
+      calls.push(["settings", s]);
+      return base;
+    },
+    saveBoard: async (project: string, patch: object) => {
+      calls.push(["board", { project, ...patch }]);
+      return {} as never;
+    },
+  };
+  await saveSettingsAndProject(client, base, { path: "/a/one", saved: 4, draft: 2 });
+  expect(calls.map(([k]) => k)).toEqual(["settings", "board"]);
+  expect(calls[1][1]).toEqual({ project: "/a/one", maxParallel: 2 });
+  expect("maxParallel" in (calls[0][1] as object)).toBe(false);
+  calls.length = 0;
+  await saveSettingsAndProject(client, base, { path: "/a/one", saved: 4, draft: 4 });
+  expect(calls.map(([k]) => k)).toEqual(["settings"]);
+  // A failed settings write stops before the board one.
+  calls.length = 0;
+  const failing = { ...client, saveSettings: async () => Promise.reject(new Error("nope")) };
+  await expect(saveSettingsAndProject(failing, base, { path: "/a/one", saved: 4, draft: 2 })).rejects.toThrow("nope");
+  expect(calls).toEqual([]);
+});
+
+test("settings-dirty: a changed project cap counts as unsaved", () => {
+  expect(settingsDirty(base, base, 3, 3)).toBe(false);
+  expect(settingsDirty(base, base, 3, 5)).toBe(true);
+});
+
+test("header-project-count: running cards and quick runs over the project cap", async () => {
+  const { activeAgents } = await import("../src/web/App.tsx");
+  const snap = {
+    live: { c1: "running", c2: "queued" },
+    quickRuns: [{ status: "running" }, { status: "queued" }],
+    maxParallel: 5,
+  } as unknown as Parameters<typeof activeAgents>[0];
+  expect(activeAgents(snap)).toEqual({ running: 2, max: 5 });
+});
+
+test("worktree-policy-ui: the worktree row shows in the project section with a policy, with its options", () => {
+  const html = renderToStaticMarkup(
+    <SettingsContent
+      value={base}
+      onChange={() => {}}
+      currentProject="/a/one"
+      projectMaxParallel={4}
+      onProjectMaxParallelChange={() => {}}
       worktreePolicy="forbidden"
       onWorktreePolicyChange={() => {}}
     />,
@@ -67,7 +128,41 @@ test("worktree-policy-ui: the project section shows with an open project and a p
   expect(html).toContain(">Ce projet</h3>");
   expect(html).toContain('id="set-worktree"');
   expect(html).toContain("Interdit");
-  const without = renderToStaticMarkup(<SettingsContent value={base} onChange={() => {}} worktreePolicy="auto" />);
-  expect(without).not.toContain('id="set-worktree"');
-  expect(render(base, "/a/one")).not.toContain('id="set-worktree"');
+  const noPolicy = renderToStaticMarkup(
+    <SettingsContent
+      value={base}
+      onChange={() => {}}
+      currentProject="/a/one"
+      projectMaxParallel={4}
+      onProjectMaxParallelChange={() => {}}
+    />,
+  );
+  expect(noPolicy).not.toContain('id="set-worktree"');
+  expect(render(base)).not.toContain('id="set-worktree"');
+});
+
+test("worktree-policy-ui: saving writes the policy only when it changed, after the cap", async () => {
+  const calls: [string, unknown][] = [];
+  const client = {
+    saveSettings: async () => {
+      calls.push(["settings", null]);
+      return base;
+    },
+    saveBoard: async (project: string, patch: object) => {
+      calls.push(["board", { project, ...patch }]);
+      return {} as never;
+    },
+    setWorktreePolicy: async (project: string, policy: string) => {
+      calls.push(["policy", { project, policy }]);
+      return {} as never;
+    },
+  };
+  await saveSettingsAndProject(client, base, { path: "/a/one", saved: 4, draft: 2, policy: { saved: "required", draft: "forbidden" } });
+  expect(calls.map(([k]) => k)).toEqual(["settings", "board", "policy"]);
+  expect(calls[2]?.[1]).toEqual({ project: "/a/one", policy: "forbidden" });
+  calls.length = 0;
+  await saveSettingsAndProject(client, base, { path: "/a/one", saved: 4, draft: 4, policy: { saved: "auto", draft: "auto" } });
+  expect(calls.map(([k]) => k)).toEqual(["settings"]);
+  expect(settingsDirty(base, base, 3, 3, "required", "auto")).toBe(true);
+  expect(settingsDirty(base, base, 3, 3, "auto", "auto")).toBe(false);
 });

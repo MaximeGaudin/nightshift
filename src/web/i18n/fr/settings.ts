@@ -9,10 +9,11 @@ export const settings: Record<keyof typeof enSettings, string> = {
   "settings.language.help": "Auto suit la langue du navigateur.",
   "settings.language.auto": "Auto",
   "settings.agents.title": "Agents",
-  "settings.agents.description": "Combien d'agents peuvent tourner en même temps, et comment vous êtes prévenu.",
-  "settings.maxParallel.label": "Plafond global d'agents en parallèle",
-  "settings.maxParallel.help":
-    "Tous projets confondus. La limite se règle par colonne ; ce plafond empêche seulement d'en lancer trop au total.",
+  "settings.agents.description": "Comment vous êtes prévenu quand les agents ont besoin de vous.",
+  "settings.project.title": "Ce projet",
+  "settings.project.description": "Réglages du projet ouvert uniquement : {path}",
+  "settings.projectParallel.label": "Agents en parallèle dans ce projet",
+  "settings.projectParallel.help": "Enregistré dans le nightshift.json de ce projet. Chaque colonne a aussi sa propre limite.",
   "settings.sound.label": "Sons de notification",
   "settings.sound.help":
     "Joue un son quand une carte a besoin de vous (colonne inerte, question, erreur). Le navigateur exige un premier clic sur la page.",
@@ -33,8 +34,6 @@ export const settings: Record<keyof typeof enSettings, string> = {
   "settings.claudePath.label": "Commande claude",
   "settings.extraArgs.label": "Arguments supplémentaires",
   "settings.extraArgs.placeholder": 'ex. --allowedTools "Bash(git *)" --max-budget-usd 2',
-  "settings.project.title": "Ce projet",
-  "settings.project.description": "Enregistré dans le nightshift.json de ce projet, pas partagé avec vos autres projets.",
   "settings.worktree.label": "Worktrees git",
   "settings.worktree.help":
     "Dit aux agents s'ils doivent travailler dans un worktree git par carte. En mode Interdit, plusieurs agents d'implémentation sur le même projet se marchent dessus : gardez la limite de la colonne Implement à 1.",

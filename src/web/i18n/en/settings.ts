@@ -7,9 +7,11 @@ export const settings = {
   "settings.language.help": "Auto follows your browser language.",
   "settings.language.auto": "Auto",
   "settings.agents.title": "Agents",
-  "settings.agents.description": "How many agents can run at the same time, and how you are notified.",
-  "settings.maxParallel.label": "Global cap on parallel agents",
-  "settings.maxParallel.help": "Across all projects. The limit is set per column; this cap only prevents starting too many in total.",
+  "settings.agents.description": "How you are notified when agents need you.",
+  "settings.project.title": "This project",
+  "settings.project.description": "Settings of the open project only: {path}",
+  "settings.projectParallel.label": "Parallel agents in this project",
+  "settings.projectParallel.help": "Saved in this project's nightshift.json. Each column also has its own limit.",
   "settings.sound.label": "Notification sounds",
   "settings.sound.help":
     "Plays a sound when a card needs you (inert column, question, error). The browser requires a first click on the page.",
@@ -29,8 +31,6 @@ export const settings = {
   "settings.claudePath.label": "claude command",
   "settings.extraArgs.label": "Extra arguments",
   "settings.extraArgs.placeholder": 'e.g. --allowedTools "Bash(git *)" --max-budget-usd 2',
-  "settings.project.title": "This project",
-  "settings.project.description": "Saved in this project's nightshift.json, not shared with your other projects.",
   "settings.worktree.label": "Git worktrees",
   "settings.worktree.help":
     "Tells agents whether they must work in a git worktree per card. With Forbidden, several implementation agents on the same project step on each other: keep the Implement column limit at 1.",
