@@ -20,6 +20,7 @@ import { cn } from "./lib/utils.ts";
 import { NewCardDialog } from "./NewCardDialog.tsx";
 import { notifyError } from "./notify.ts";
 import { ProjectPicker } from "./ProjectPicker.tsx";
+import { questionCount } from "./projectTabs.ts";
 import { QuickRunToasts, showQuickRunResult } from "./QuickRunToasts.tsx";
 import { SettingsModal } from "./SettingsModal.tsx";
 import { ShortcutsHelp } from "./ShortcutsHelp.tsx";
@@ -227,9 +228,7 @@ export function App() {
 
   const { running, max } = activeAgents(snap);
   const queued = Object.values(snap.live).filter((s) => s === "queued").length;
-  const questions = snap.board.cards.filter(
-    (c) => !snap.live[c.id] && c.lastRun?.status === "question" && c.lastRun.columnId === c.columnId,
-  ).length;
+  const questions = questionCount(snap);
 
   return (
     <div className="flex h-full flex-col">
