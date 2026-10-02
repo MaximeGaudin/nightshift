@@ -20,6 +20,8 @@ export const DEFAULT_SETTINGS: Settings = {
   recentProjects: [],
   soundNotifications: true,
   language: "auto",
+  carryMaxTokens: 80000,
+  carryMaxAgeMinutes: 5,
 };
 
 // Kept on globalThis so modules re-evaluated by `bun --hot` share the state seen by the long-lived orchestrator.
