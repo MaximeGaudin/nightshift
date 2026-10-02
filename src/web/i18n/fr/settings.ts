@@ -34,6 +34,12 @@ export const settings: Record<keyof typeof enSettings, string> = {
   "settings.claudePath.label": "Commande claude",
   "settings.extraArgs.label": "Arguments supplémentaires",
   "settings.extraArgs.placeholder": 'ex. --allowedTools "Bash(git *)" --max-budget-usd 2',
+  "settings.worktree.label": "Worktrees git",
+  "settings.worktree.help":
+    "Dit aux agents s'ils doivent travailler dans un worktree git par carte. En mode Interdit, plusieurs agents d'implémentation sur le même projet se marchent dessus : gardez la limite de la colonne Implement à 1.",
+  "settings.worktree.required": "Obligatoire — un worktree par carte",
+  "settings.worktree.auto": "Automatique — l'agent décide",
+  "settings.worktree.forbidden": "Interdit — travail dans le checkout partagé",
   "settings.recent.title": "Projets récents",
   "settings.recent.description": "Projets ouverts récemment. Ouvrir l'un d'eux remplace le tableau affiché.",
   "settings.recent.empty": "Aucun projet récent pour le moment.",

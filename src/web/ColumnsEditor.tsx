@@ -66,6 +66,11 @@ export function freshSessionPatch(checked: boolean): Partial<Column> {
   return { freshSession: checked ? true : undefined };
 }
 
+/** Column type change → patch: a column turned into a skill column starts with a fresh Claude session (the user can untick it). */
+export function typePatch(type: Column["type"]): Partial<Column> {
+  return type === "skill" ? { type, freshSession: true } : { type };
+}
+
 function errorMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
@@ -117,7 +122,7 @@ function SortableColumnRow({ col, skills, skillsLoading, cardCount, reducedMotio
             value={col.name}
             onChange={(e) => onPatch({ name: e.target.value })}
           />
-          <Select value={col.type} onValueChange={(v) => onPatch({ type: v as Column["type"] })}>
+          <Select value={col.type} onValueChange={(v) => onPatch(typePatch(v as Column["type"]))}>
             <SelectTrigger aria-label={t("columns.type")} className="w-24">
               <SelectValue />
             </SelectTrigger>

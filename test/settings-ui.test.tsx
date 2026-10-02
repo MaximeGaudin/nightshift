@@ -112,3 +112,57 @@ test("header-project-count: running cards and quick runs over the project cap", 
   } as unknown as Parameters<typeof activeAgents>[0];
   expect(activeAgents(snap)).toEqual({ running: 2, max: 5 });
 });
+
+test("worktree-policy-ui: the worktree row shows in the project section with a policy, with its options", () => {
+  const html = renderToStaticMarkup(
+    <SettingsContent
+      value={base}
+      onChange={() => {}}
+      currentProject="/a/one"
+      projectMaxParallel={4}
+      onProjectMaxParallelChange={() => {}}
+      worktreePolicy="forbidden"
+      onWorktreePolicyChange={() => {}}
+    />,
+  );
+  expect(html).toContain(">Ce projet</h3>");
+  expect(html).toContain('id="set-worktree"');
+  expect(html).toContain("Interdit");
+  const noPolicy = renderToStaticMarkup(
+    <SettingsContent
+      value={base}
+      onChange={() => {}}
+      currentProject="/a/one"
+      projectMaxParallel={4}
+      onProjectMaxParallelChange={() => {}}
+    />,
+  );
+  expect(noPolicy).not.toContain('id="set-worktree"');
+  expect(render(base)).not.toContain('id="set-worktree"');
+});
+
+test("worktree-policy-ui: saving writes the policy only when it changed, after the cap", async () => {
+  const calls: [string, unknown][] = [];
+  const client = {
+    saveSettings: async () => {
+      calls.push(["settings", null]);
+      return base;
+    },
+    saveBoard: async (project: string, patch: object) => {
+      calls.push(["board", { project, ...patch }]);
+      return {} as never;
+    },
+    setWorktreePolicy: async (project: string, policy: string) => {
+      calls.push(["policy", { project, policy }]);
+      return {} as never;
+    },
+  };
+  await saveSettingsAndProject(client, base, { path: "/a/one", saved: 4, draft: 2, policy: { saved: "required", draft: "forbidden" } });
+  expect(calls.map(([k]) => k)).toEqual(["settings", "board", "policy"]);
+  expect(calls[2]?.[1]).toEqual({ project: "/a/one", policy: "forbidden" });
+  calls.length = 0;
+  await saveSettingsAndProject(client, base, { path: "/a/one", saved: 4, draft: 4, policy: { saved: "auto", draft: "auto" } });
+  expect(calls.map(([k]) => k)).toEqual(["settings"]);
+  expect(settingsDirty(base, base, 3, 3, "required", "auto")).toBe(true);
+  expect(settingsDirty(base, base, 3, 3, "auto", "auto")).toBe(false);
+});

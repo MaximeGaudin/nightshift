@@ -46,6 +46,27 @@ test("next-column-click-order", async () => {
   expect(errors).toEqual(["boom"]);
 });
 
+test("next-column-closes-on-success-only", async () => {
+  let closed = 0;
+  const base = {
+    project: "p",
+    card: cardIn("x1"),
+    target: columns[1],
+    beforeMove: async () => {},
+    onError: () => {},
+    onMoved: () => void closed++,
+  };
+  expect(await sendToNext({ ...base, moveCard: async () => {} })).toBe(true);
+  expect(closed).toBe(1);
+
+  const failing = async () => {
+    throw new Error("nope");
+  };
+  expect(await sendToNext({ ...base, moveCard: failing })).toBe(false);
+  expect(await sendToNext({ ...base, beforeMove: failing, moveCard: async () => {} })).toBe(false);
+  expect(closed).toBe(1);
+});
+
 test("next-column-busy-render", () => {
   const props = { project: "p", board, beforeMove: async () => {}, onError: () => {} };
   const working = renderToStaticMarkup(<NextColumnButton {...props} card={cardIn("x1")} live="running" />);

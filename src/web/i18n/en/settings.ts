@@ -31,6 +31,12 @@ export const settings = {
   "settings.claudePath.label": "claude command",
   "settings.extraArgs.label": "Extra arguments",
   "settings.extraArgs.placeholder": 'e.g. --allowedTools "Bash(git *)" --max-budget-usd 2',
+  "settings.worktree.label": "Git worktrees",
+  "settings.worktree.help":
+    "Tells agents whether they must work in a git worktree per card. With Forbidden, several implementation agents on the same project step on each other: keep the Implement column limit at 1.",
+  "settings.worktree.required": "Required — one worktree per card",
+  "settings.worktree.auto": "Automatic — the agent decides",
+  "settings.worktree.forbidden": "Forbidden — work in the shared checkout",
   "settings.recent.title": "Recent projects",
   "settings.recent.description": "Recently opened projects. Opening one replaces the displayed board.",
   "settings.recent.empty": "No recent project yet.",

@@ -1045,12 +1045,12 @@ test("defaultBoard has the Nightshift pipeline", () => {
   const noId = b.columns.map(({ id: _id, ...rest }) => rest);
   expect(noId).toEqual([
     { name: "Backlog", type: "inert" },
-    { name: "Grill", type: "skill", skill: "nightshift-grill", model: "opus", maxParallel: 3, emoji: "🔥" },
-    { name: "Plan", type: "skill", skill: "nightshift-plan", model: "opus", maxParallel: 3, emoji: "🗺️" },
-    { name: "Implement", type: "skill", skill: "nightshift-implement", model: "sonnet", maxParallel: 3, emoji: "🧑‍💻" },
-    { name: "Review", type: "skill", skill: "nightshift-review", model: "opus", maxParallel: 3, emoji: "🧐" },
+    { name: "Grill", type: "skill", skill: "nightshift-grill", model: "opus", freshSession: true, maxParallel: 3, emoji: "🔥" },
+    { name: "Plan", type: "skill", skill: "nightshift-plan", model: "opus", freshSession: true, maxParallel: 3, emoji: "🗺️" },
+    { name: "Implement", type: "skill", skill: "nightshift-implement", model: "sonnet", freshSession: true, maxParallel: 3, emoji: "🧑‍💻" },
+    { name: "Review", type: "skill", skill: "nightshift-review", model: "opus", freshSession: true, maxParallel: 3, emoji: "🧐" },
     { name: "To Test", type: "inert", emoji: "🪲" },
-    { name: "Merge", type: "skill", skill: "nightshift-merge", model: "sonnet", maxParallel: 1, emoji: "🎉" },
+    { name: "Merge", type: "skill", skill: "nightshift-merge", model: "sonnet", freshSession: true, maxParallel: 1, emoji: "🎉" },
     { name: "Done", type: "inert" },
   ]);
   expect(b.columns.at(-1)).toEqual({ id: DONE_COLUMN_ID, name: "Done", type: "inert" });
@@ -1550,4 +1550,12 @@ test("--no-agents instance records queued but never started", async () => {
   expect(kinds).toContain("queued");
   expect(kinds).not.toContain("started");
   passive.shutdown();
+});
+
+test("fresh session is the default of the default board's skill columns only", () => {
+  const skills = defaultBoard("x").columns.filter((c) => c.type === "skill");
+  expect(skills.length).toBe(5);
+  for (const c of skills) expect(c.freshSession).toBe(true);
+  const loaded = normalizeBoard({ columns: [{ id: "a", name: "A", type: "skill", skill: "s" }], cards: [] }, "x");
+  expect(loaded.columns.find((c) => c.id === "a")?.freshSession).toBeUndefined();
 });

@@ -107,7 +107,7 @@ export interface Card {
   dependsOn?: string[];
   /** Per-skill model overrides (skill name -> alias or ID). Never `{}`; "default" is never stored. */
   models?: Record<string, string>;
-  /** The card's Claude session: every column continues it, except a column with `freshSession`. */
+  /** The card's Claude session: a column continues it unless it has `freshSession` (the default for new skill columns). */
   sessionId?: string;
   history: HistoryEntry[];
   /** Time checkpoint of the history entries dropped by the history cap. */
@@ -126,6 +126,18 @@ export interface Board {
   maxParallel?: number;
   /** Skill names pinned in the command palette for quick runs. Absent when none. */
   favoriteSkills?: string[];
+  /** Whether agents work in a git worktree. Absent = `DEFAULT_WORKTREE_POLICY`; never stored as the default. */
+  worktreePolicy?: WorktreePolicy;
+}
+
+/** Agents must use a worktree per card, may choose, or must never create one. */
+export const WORKTREE_POLICIES = ["required", "auto", "forbidden"] as const;
+export type WorktreePolicy = (typeof WORKTREE_POLICIES)[number];
+export const DEFAULT_WORKTREE_POLICY: WorktreePolicy = "required";
+
+/** The board's worktree policy; the only place that reads `board.worktreePolicy`. */
+export function worktreePolicyOf(board: Pick<Board, "worktreePolicy">): WorktreePolicy {
+  return board.worktreePolicy && WORKTREE_POLICIES.includes(board.worktreePolicy) ? board.worktreePolicy : DEFAULT_WORKTREE_POLICY;
 }
 
 /** Quick human ref of a card, e.g. `#32`. */
