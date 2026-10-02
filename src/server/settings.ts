@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { LANGUAGE_SETTINGS, PERMISSION_MODES, type Settings } from "../shared/types.ts";
+import { DEFAULT_PROJECT_PARALLEL, LANGUAGE_SETTINGS, normalizeProjectParallel, PERMISSION_MODES, type Settings } from "../shared/types.ts";
 import { writeFileAtomic } from "./fsutil.ts";
 
 export const NIGHTSHIFT_HOME = process.env.NIGHTSHIFT_HOME ?? join(homedir(), ".nightshift");
@@ -13,7 +13,6 @@ if (process.env.NODE_ENV === "test" && !process.env.NIGHTSHIFT_HOME) {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  maxParallel: 3,
   claudePath: "claude",
   permissionMode: "auto",
   model: "",
@@ -25,7 +24,13 @@ export const DEFAULT_SETTINGS: Settings = {
 
 // Kept on globalThis so modules re-evaluated by `bun --hot` share the state seen by the long-lived orchestrator.
 const globals = globalThis as {
-  __nightshiftSettings?: { current: Settings | null; listeners: Set<(s: Settings) => void>; readOnly?: boolean };
+  __nightshiftSettings?: {
+    current: Settings | null;
+    listeners: Set<(s: Settings) => void>;
+    readOnly?: boolean;
+    /** Raw `maxParallel` of the file (the former global cap): kept as is on every write, never edited. */
+    legacyMaxParallel?: unknown;
+  };
 };
 if (!globals.__nightshiftSettings) globals.__nightshiftSettings = { current: null, listeners: new Set() };
 const shared = globals.__nightshiftSettings;
@@ -45,8 +50,6 @@ function checkField(key: keyof Settings, value: unknown): string | null {
     case "model":
     case "extraArgs":
       return typeof value === "string" ? null : `${key} must be a string`;
-    case "maxParallel":
-      return typeof value === "number" && Number.isFinite(value) ? null : "maxParallel must be a number";
     case "soundNotifications":
       return typeof value === "boolean" ? null : "soundNotifications must be a boolean";
     case "permissionMode":
@@ -58,13 +61,10 @@ function checkField(key: keyof Settings, value: unknown): string | null {
   }
 }
 
-function clampParallel(n: number): number {
-  return Math.max(1, Math.min(32, Math.floor(n)));
-}
-
 export function getSettings(): Settings {
   if (shared.current) return shared.current;
   const loaded: Settings = { ...DEFAULT_SETTINGS, recentProjects: [] };
+  shared.legacyMaxParallel = undefined;
   let text: string | null = null;
   try {
     text = readFileSync(SETTINGS_FILE, "utf8");
@@ -83,10 +83,10 @@ export function getSettings(): Settings {
     }
     if (raw && typeof raw === "object" && !Array.isArray(raw)) {
       const obj = raw as Record<string, unknown>;
+      if ("maxParallel" in obj) shared.legacyMaxParallel = obj.maxParallel;
       for (const key of KEYS) {
         if (key in obj && checkField(key, obj[key]) === null) (loaded as unknown as Record<string, unknown>)[key] = obj[key];
       }
-      loaded.maxParallel = clampParallel(loaded.maxParallel);
     }
   }
   shared.current = loaded;
@@ -99,7 +99,8 @@ export function updateSettings(patch: Partial<Settings>): Settings {
   if ((patch as Record<string, unknown>).soundNotifications === null) {
     patch = { ...patch, soundNotifications: DEFAULT_SETTINGS.soundNotifications };
   }
-  const entries = Object.entries(patch);
+  // The former global cap is now per project: older clients may still send it, it is ignored.
+  const entries = Object.entries(patch).filter(([key]) => key !== "maxParallel");
   for (const [key] of entries) {
     if (!KEYS.includes(key as keyof Settings)) throw new Error(`Unknown setting: ${key}`);
   }
@@ -107,15 +108,22 @@ export function updateSettings(patch: Partial<Settings>): Settings {
     const err = checkField(key as keyof Settings, value);
     if (err) throw new Error(err);
   }
-  const next: Settings = { ...getSettings(), ...patch };
-  next.maxParallel = clampParallel(next.maxParallel);
+  const next: Settings = { ...getSettings(), ...Object.fromEntries(entries) };
   if (!shared.readOnly) {
     mkdirSync(NIGHTSHIFT_HOME, { recursive: true });
-    writeFileAtomic(SETTINGS_FILE, `${JSON.stringify(next, null, 2)}\n`);
+    const legacy = shared.legacyMaxParallel;
+    const file = legacy === undefined ? next : { maxParallel: legacy, ...next };
+    writeFileAtomic(SETTINGS_FILE, `${JSON.stringify(file, null, 2)}\n`);
   }
   shared.current = next;
   for (const l of listeners) l(next);
   return next;
+}
+
+/** Project cap used when a board has no `maxParallel`: the former global setting, else the default. */
+export function legacyMaxParallel(): number {
+  getSettings();
+  return normalizeProjectParallel(shared.legacyMaxParallel) ?? DEFAULT_PROJECT_PARALLEL;
 }
 
 export function onSettingsChange(fn: (s: Settings) => void) {

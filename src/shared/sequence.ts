@@ -1,5 +1,6 @@
 // Sequential mode: pure helpers shared by the server and the web client. No I/O.
 
+import { isHeld } from "./dependencies.ts";
 import { needsRun } from "./needs-run.ts";
 import { normalizeSkipColumnIds } from "./skip.ts";
 import { type Board, type Card, type Column, cardRef, DONE_COLUMN_ID } from "./types.ts";
@@ -37,11 +38,11 @@ export function sequenceColumns(columns: Column[]): { source: Column; entry: Col
   return { source, entry };
 }
 
-/** First card (array order) sitting in the source column. */
+/** First card (array order) sitting in the source column, except the cards held by their dependencies. */
 export function topSourceCard(board: Board): Card | undefined {
   const cols = sequenceColumns(board.columns);
   if (!cols) return undefined;
-  return board.cards.find((c) => c.columnId === cols.source.id);
+  return board.cards.find((c) => c.columnId === cols.source.id && !isHeld(c));
 }
 
 /** Skip list of a card in the sequence: its own skips plus the inert columns after the source (never Done). */

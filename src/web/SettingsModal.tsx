@@ -1,6 +1,6 @@
 import { TriangleAlert } from "lucide-react";
 import { type ReactNode, useState } from "react";
-import { type LanguageSetting, MAX_PARALLEL, type Settings } from "../shared/types.ts";
+import { type LanguageSetting, MAX_PARALLEL, type Settings, WORKTREE_POLICIES, type WorktreePolicy } from "../shared/types.ts";
 import { api } from "./api.ts";
 import { AppDialog } from "./components/app-dialog.tsx";
 import { Alert } from "./components/ui/alert.tsx";
@@ -29,6 +29,12 @@ export function languageOptions(): { value: LanguageSetting; label: string }[] {
     { value: "fr", label: "Français" },
   ];
 }
+
+const WORKTREE_LABELS: Record<WorktreePolicy, MessageKey> = {
+  required: "settings.worktree.required",
+  auto: "settings.worktree.auto",
+  forbidden: "settings.worktree.forbidden",
+};
 
 function Section({ title, description, children }: { title: string; description: string; children: ReactNode }) {
   return (
@@ -59,11 +65,21 @@ export function SettingsContent({
   onChange,
   currentProject,
   onOpenProject,
+  projectMaxParallel,
+  onProjectMaxParallelChange,
+  worktreePolicy,
+  onWorktreePolicyChange,
 }: {
   value: Settings;
   onChange: (s: Settings) => void;
   currentProject?: string;
   onOpenProject?: (path: string) => void;
+  /** Agent cap of the open project (draft value); the "This project" section shows only with a project. */
+  projectMaxParallel?: number;
+  onProjectMaxParallelChange?: (n: number) => void;
+  /** Worktree policy of the open project (draft value); its row shows in the "This project" section when given. */
+  worktreePolicy?: WorktreePolicy;
+  onWorktreePolicyChange?: (policy: WorktreePolicy) => void;
 }) {
   const s = value;
   const { t } = useT();
@@ -88,20 +104,41 @@ export function SettingsContent({
       </Section>
 
       <Section title={t("settings.agents.title")} description={t("settings.agents.description")}>
-        <Row id="set-max-parallel" label={t("settings.maxParallel.label")} help={t("settings.maxParallel.help")}>
-          <Input
-            id="set-max-parallel"
-            type="number"
-            min={1}
-            max={MAX_PARALLEL}
-            value={s.maxParallel}
-            onChange={(e) => onChange({ ...s, maxParallel: Number(e.target.value) })}
-          />
-        </Row>
         <Row id="set-sound" label={t("settings.sound.label")} help={t("settings.sound.help")}>
           <Switch id="set-sound" checked={s.soundNotifications} onCheckedChange={(v) => onChange({ ...s, soundNotifications: v })} />
         </Row>
       </Section>
+
+      {currentProject && projectMaxParallel !== undefined && (
+        <Section title={t("settings.project.title")} description={t("settings.project.description", { path: currentProject })}>
+          <Row id="set-project-parallel" label={t("settings.projectParallel.label")} help={t("settings.projectParallel.help")}>
+            <Input
+              id="set-project-parallel"
+              type="number"
+              min={1}
+              max={MAX_PARALLEL}
+              value={projectMaxParallel}
+              onChange={(e) => onProjectMaxParallelChange?.(Number(e.target.value))}
+            />
+          </Row>
+          {worktreePolicy && (
+            <Row id="set-worktree" label={t("settings.worktree.label")} help={t("settings.worktree.help")}>
+              <Select value={worktreePolicy} onValueChange={(v) => onWorktreePolicyChange?.(v as WorktreePolicy)}>
+                <SelectTrigger id="set-worktree" className="w-full">
+                  <SelectValue>{t(WORKTREE_LABELS[worktreePolicy])}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {WORKTREE_POLICIES.map((p) => (
+                    <SelectItem key={p} value={p}>
+                      {t(WORKTREE_LABELS[p])}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Row>
+          )}
+        </Section>
+      )}
 
       <Section title={t("settings.claude.title")} description={t("settings.claude.description")}>
         <Row id="set-permission" label={t("settings.permission.label")} help={t("settings.permission.help")}>
@@ -172,11 +209,33 @@ export function SettingsContent({
   );
 }
 
-const EDITABLE = ["maxParallel", "claudePath", "permissionMode", "model", "extraArgs", "soundNotifications", "language"] as const;
+const EDITABLE = ["claudePath", "permissionMode", "model", "extraArgs", "soundNotifications", "language"] as const;
 
-/** True when the form differs from the saved settings on any editable field. */
-export function settingsDirty(saved: Settings, draft: Settings): boolean {
-  return EDITABLE.some((k) => saved[k] !== draft[k]);
+/** True when the form differs from the saved settings on any editable field, or the project cap changed. */
+export function settingsDirty(
+  saved: Settings,
+  draft: Settings,
+  savedCap?: number,
+  draftCap?: number,
+  savedPolicy?: WorktreePolicy,
+  draftPolicy?: WorktreePolicy,
+): boolean {
+  return EDITABLE.some((k) => saved[k] !== draft[k]) || savedCap !== draftCap || savedPolicy !== draftPolicy;
+}
+
+/**
+ * Saves the global settings, then the open project's cap and worktree policy into its nightshift.json, each only
+ * when it changed. Rejects on the first failed write.
+ */
+export async function saveSettingsAndProject(
+  client: Pick<typeof api, "saveSettings" | "saveBoard"> & Partial<Pick<typeof api, "setWorktreePolicy">>,
+  draft: Settings,
+  project?: { path: string; saved: number; draft: number; policy?: { saved: WorktreePolicy; draft: WorktreePolicy } },
+): Promise<void> {
+  await client.saveSettings(Object.fromEntries(EDITABLE.map((k) => [k, draft[k]])) as Partial<Settings>);
+  if (!project) return;
+  if (project.draft !== project.saved) await client.saveBoard(project.path, { maxParallel: project.draft });
+  if (project.policy && project.policy.draft !== project.policy.saved) await client.setWorktreePolicy?.(project.path, project.policy.draft);
 }
 
 export function SettingsModal({
@@ -184,26 +243,35 @@ export function SettingsModal({
   onClose,
   currentProject,
   onOpenProject,
+  projectMaxParallel,
+  worktreePolicy,
 }: {
   settings: Settings;
   onClose: () => void;
   /** Path of the open project (marked in the recent list) and the action to open another one. */
   currentProject?: string;
   onOpenProject?: (path: string) => void;
+  /** Effective agent cap of the open project, from its snapshot. */
+  projectMaxParallel?: number;
+  /** Saved worktree policy of the open project. */
+  worktreePolicy?: WorktreePolicy;
 }) {
   const { t } = useT();
   const [s, setS] = useState(settings);
+  const [cap, setCap] = useState(projectMaxParallel);
+  const [policy, setPolicy] = useState(worktreePolicy);
+  const project =
+    currentProject && projectMaxParallel !== undefined && cap !== undefined
+      ? {
+          path: currentProject,
+          saved: projectMaxParallel,
+          draft: cap,
+          ...(worktreePolicy && policy ? { policy: { saved: worktreePolicy, draft: policy } } : {}),
+        }
+      : undefined;
+  // On a failed write the dialog stays open with the draft.
   const save = () =>
-    api
-      .saveSettings({
-        maxParallel: s.maxParallel,
-        claudePath: s.claudePath,
-        permissionMode: s.permissionMode,
-        model: s.model,
-        extraArgs: s.extraArgs,
-        soundNotifications: s.soundNotifications,
-        language: s.language,
-      })
+    saveSettingsAndProject(api, s, project)
       .then(onClose)
       .catch((e) => notifyError(e.message));
 
@@ -228,10 +296,15 @@ export function SettingsModal({
         value={s}
         onChange={setS}
         currentProject={currentProject}
+        projectMaxParallel={cap}
+        onProjectMaxParallelChange={setCap}
+        worktreePolicy={policy}
+        onWorktreePolicyChange={setPolicy}
         onOpenProject={
           onOpenProject &&
           ((path) => {
-            if (settingsDirty(settings, s) && !confirm(t("settings.discardChanges"))) return;
+            if (settingsDirty(settings, s, projectMaxParallel, cap, worktreePolicy, policy) && !confirm(t("settings.discardChanges")))
+              return;
             onClose();
             onOpenProject(path);
           })

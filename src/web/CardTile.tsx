@@ -39,6 +39,7 @@ export function CardTile({
   onOpen,
   next,
   skipped,
+  waitingFor,
   onSendNext,
   sending,
   sequential,
@@ -57,6 +58,8 @@ export function CardTile({
   onOpen: () => void;
   next?: { name: string };
   skipped?: string[];
+  /** Refs of the unmet dependencies of a card held in Backlog ([] when they are all done); undefined when not held. */
+  waitingFor?: string[];
   onSendNext?: () => void;
   sending?: boolean;
   /** The sequential mode is working on this card. */
@@ -110,6 +113,15 @@ export function CardTile({
             title={override.columnModel ? t("board.card.modelBadge", { column: override.columnModel }) : t("board.card.modelBadgeNone")}
           >
             {override.model}
+          </Badge>
+        )}
+        {waitingFor && (
+          <Badge
+            variant="outline"
+            className="waiting-badge"
+            title={waitingFor.length > 0 ? t("board.card.waitingTitle", { refs: waitingFor.join(", ") }) : undefined}
+          >
+            {waitingFor.length > 0 ? t("board.card.waiting", { refs: waitingFor.join(", ") }) : t("board.card.waitingDone")}
           </Badge>
         )}
         {skipped && skipped.length > 0 && (

@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Subprocess } from "bun";
+import { isReady, releaseReason } from "../shared/dependencies.ts";
 import { describeModelChanges, formatDropped, type ModelSource, mergeModels, resolveModel } from "../shared/models.ts";
 import { resolveNextColumn } from "../shared/skip.ts";
 import type {
@@ -21,12 +22,13 @@ import type {
 } from "../shared/types.ts";
 import { canSendFeedback, cardRef, columnMaxParallel, isDoneColumn } from "../shared/types.ts";
 import { safeHttpUrl } from "../shared/urls.ts";
+import { buildEnvironment } from "./environment.ts";
 import { HttpError } from "./guard.ts";
 import { parseProgressMarker, progressFromTodos } from "./progress.ts";
 import { buildQuickRunPrompt, parseQuickOutput, QUICK_INSTRUCTION_MAX, QUICK_RESULT_SCHEMA } from "./quickrun.ts";
 import { persistScreenshots } from "./screenshots.ts";
 import { SequenceController } from "./sequence.ts";
-import { getSettings, NIGHTSHIFT_HOME, onSettingsChange, rememberProject } from "./settings.ts";
+import { getSettings, legacyMaxParallel, NIGHTSHIFT_HOME, onSettingsChange, rememberProject } from "./settings.ts";
 import { findSkill } from "./skills.ts";
 import { isRaw, needsRun, newId, Project, type Raw } from "./store.ts";
 import { copyTemplateSkills } from "./templates.ts";
@@ -190,7 +192,13 @@ function formatColumns(board: Board): string {
     .join("\n");
 }
 
-export function buildPrompt(board: Board, card: Card, column: Column, skillPath: string | undefined): string {
+export function buildPrompt(
+  board: Board,
+  card: Card,
+  column: Column,
+  skillPath: string | undefined,
+  live: Record<string, LiveStatus> = {},
+): string {
   const next = resolveNextColumn(board.columns, { columnId: column.id, skipColumnIds: card.skipColumnIds });
   const columns = formatColumns(board);
   return `You are an automated worker driven by Nightshift, a kanban board that orchestrates AI agents.
@@ -204,6 +212,8 @@ ${column.instructions ? `\nAdditional instructions for this column:\n${column.in
 ${card.description}
 </description>
 </card>
+
+${buildEnvironment(board, card, live)}
 
 Board columns, in order:
 ${columns}
@@ -232,6 +242,7 @@ export function buildFeedbackPrompt(
   column: Column,
   skill: string | undefined,
   skillPath: string | undefined,
+  live: Record<string, LiveStatus> = {},
 ): string {
   const next = resolveNextColumn(board.columns, { columnId: column.id, skipColumnIds: card.skipColumnIds });
   const skillName = skill ? `the skill "${skill}"` : "the skill you applied earlier in this session";
@@ -250,6 +261,8 @@ Address this feedback on the card below. Follow ${skillName}${skill && skillPath
 ${card.description}
 </description>
 </card>
+
+${buildEnvironment(board, card, live)}
 
 The card may have moved since your session ran; it is now in column "${column.name}" (id: ${column.id}, ${column.type === "skill" ? `skill: ${column.skill}` : "inert"}).
 ${column.instructions ? `\nAdditional instructions for this column:\n${column.instructions}\n` : ""}
@@ -333,6 +346,8 @@ export class Orchestrator {
   private logs = new Map<string, LogLine[]>();
   private listeners = new Set<(e: ServerEvent) => void>();
   private tickScheduled = false;
+  /** Projects waiting for a dependency pass (coalesced per microtask). */
+  private dependencyPending = new Map<string, Project>();
   /** Projects whose agents are run by another live Nightshift process: path -> its pid. */
   private lockedBy = new Map<string, number>();
   private lockTimer: ReturnType<typeof setInterval>;
@@ -389,6 +404,8 @@ export class Orchestrator {
     if (wasLocked !== this.lockedBy.has(p.path)) {
       this.broadcast({ type: "board", project: p.path, snapshot: this.snapshot(p) });
       this.scheduleTick();
+      // Just took the lock over: release the cards whose dependencies finished meanwhile.
+      if (!this.lockedBy.has(p.path)) this.scheduleDependencies(p);
     }
   }
 
@@ -425,9 +442,11 @@ export class Orchestrator {
       this.broadcast({ type: "board", project: path, snapshot: this.snapshot(p) });
       this.scheduleTick();
       this.sequence.schedule(p);
+      this.scheduleDependencies(p);
     });
     rememberProject(path);
     this.scheduleTick();
+    this.scheduleDependencies(p);
     return p;
   }
 
@@ -436,12 +455,23 @@ export class Orchestrator {
     return p;
   }
 
-  snapshot(p: Project): ProjectSnapshot {
+  /** Agents allowed at once in this project: the board's cap, else the legacy global setting, else the default. */
+  projectMaxParallel(p: Project): number {
+    return p.board.maxParallel ?? legacyMaxParallel();
+  }
+
+  /** Run state of the cards that have an agent running or waiting to run. */
+  private liveStatuses(p: Project): Record<string, LiveStatus> {
     const live: Record<string, LiveStatus> = {};
     for (const card of p.board.cards) {
       if (this.jobs.has(this.key(p, card.id))) live[card.id] = "running";
       else if (needsRun(p.board, card)) live[card.id] = "queued";
     }
+    return live;
+  }
+
+  snapshot(p: Project): ProjectSnapshot {
+    const live = this.liveStatuses(p);
     const lockedBy = this.lockedBy.get(p.path);
     const testing = [...this.tests.values()].filter((t) => t.project === p).map((t) => t.cardId);
     const progress: Record<string, RunProgress> = {};
@@ -452,6 +482,7 @@ export class Orchestrator {
     return {
       path: p.path,
       board: p.board,
+      maxParallel: this.projectMaxParallel(p),
       live,
       testing,
       progress,
@@ -538,6 +569,33 @@ export class Orchestrator {
     this.broadcast({ type: "log", project: p.path, cardId, line });
   }
 
+  // ---- dependencies ------------------------------------------------------
+  // A card held in Backlog by its dependencies leaves it once they are all in Done. Only the instance that runs
+  // the project's agents does it, so two processes never release the same card.
+
+  /** Coalesced like scheduleTick: one dependency pass per project per microtask, never inside an emit. */
+  scheduleDependencies(p: Project) {
+    if (this.dependencyPending.has(p.path)) return;
+    this.dependencyPending.set(p.path, p);
+    queueMicrotask(() => {
+      this.dependencyPending.delete(p.path);
+      this.releaseReadyCards(p);
+    });
+  }
+
+  private releaseReadyCards(p: Project) {
+    if (!this.agents || this.lockedBy.has(p.path) || this.projects.get(p.path) !== p) return;
+    // No ready card, no mutation: every mutation emits a change that schedules another pass.
+    if (!p.board.cards.some((c) => isReady(p.board, c))) return;
+    try {
+      p.mutate((board) => {
+        for (const card of board.cards.filter((c) => isReady(board, c))) p.releaseDependencies(board, card, releaseReason(board, card));
+      });
+    } catch (e) {
+      console.error(`Could not release the cards of ${p.path} whose dependencies are done: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
   // ---- scheduling --------------------------------------------------------
 
   scheduleTick() {
@@ -551,13 +609,9 @@ export class Orchestrator {
 
   private tick() {
     if (!this.agents) return;
-    const max = getSettings().maxParallel;
-    if (this.running() >= max) return;
-    let started = this.startQueuedQuickRuns(max);
-    if (this.running() >= max) {
-      if (started) this.broadcastAll();
-      return;
-    }
+    // Each project has its own cap: a full project only makes its own cards and quick runs wait.
+    const full = (p: Project) => this.runningInProject(p) >= this.projectMaxParallel(p);
+    let started = this.startQueuedQuickRuns(full);
     const candidates: { p: Project; card: Card }[] = [];
     for (const p of this.projects.values()) {
       if (this.lockedBy.has(p.path)) continue;
@@ -567,12 +621,11 @@ export class Orchestrator {
     }
     candidates.sort((a, b) => a.card.enteredColumnAt.localeCompare(b.card.enteredColumnAt));
     for (const { p, card } of candidates) {
-      // Global cap over all projects: nothing else can start.
-      if (this.running() >= max) break;
-      // Full column: this card waits, cards of other columns can still start.
+      // Full project or full column: this card waits, cards of other projects and columns can still start.
+      if (full(p)) continue;
       const column = p.column(card.columnId);
       if (!column) continue;
-      // The per-column limit only concerns skill columns; a job in an inert column (feedback) only counts globally.
+      // The per-column limit only concerns skill columns; a job in an inert column (feedback) only counts for its project.
       if (column.type === "skill" && this.runningIn(p, card.columnId) >= columnMaxParallel(column)) continue;
       this.start(p, card);
       started = true;
@@ -584,21 +637,25 @@ export class Orchestrator {
     for (const p of this.projects.values()) this.broadcast({ type: "board", project: p.path, snapshot: this.snapshot(p) });
   }
 
-  /** Agents running now, over all projects: card jobs and running quick runs share the same cap. */
-  private running() {
-    let n = this.jobs.size;
-    for (const q of this.quickRuns.values()) if (q.status === "running") n++;
+  /** Agents running now in this project: its card jobs and its running quick runs share the project's cap. */
+  private runningInProject(p: Project) {
+    let n = 0;
+    for (const job of this.jobs.values()) if (job.project === p) n++;
+    for (const q of this.quickRuns.values()) if (q.project === p && q.status === "running") n++;
     return n;
   }
 
-  /** Starts queued quick runs, oldest first, before any card. They ignore column caps. Returns whether one started. */
-  private startQueuedQuickRuns(max: number): boolean {
+  /**
+   * Starts queued quick runs, oldest first, before any card of their project. They ignore column caps but not
+   * their project's cap. Returns whether one started.
+   */
+  private startQueuedQuickRuns(full: (p: Project) => boolean): boolean {
     const queued = [...this.quickRuns.values()]
       .filter((q) => q.status === "queued" && !this.lockedBy.has(q.project.path))
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     let started = false;
     for (const q of queued) {
-      if (this.running() >= max) break;
+      if (full(q.project)) continue;
       this.startQuick(q);
       started = true;
     }
@@ -925,11 +982,11 @@ export class Orchestrator {
     }
     const skillRef = job.skill ? `the skill "${job.skill}"` : "the skill you applied earlier in this session";
     let prompt = !answer
-      ? buildPrompt(p.board, card, column, skill?.path)
+      ? buildPrompt(p.board, card, column, skill?.path, this.liveStatuses(p))
       : answer.kind === "resume"
         ? RECOVER_PROMPT
         : answer.kind === "feedback"
-          ? buildFeedbackPrompt(p.board, card, column, job.skill, skill?.path)
+          ? buildFeedbackPrompt(p.board, card, column, job.skill, skill?.path, this.liveStatuses(p))
           : buildAnswerPrompt(card.title, skillRef, answer.text);
     if (answer?.kind === "feedback") this.log(p, card.id, "info", `Retour utilisateur : ${answer.text}`);
     else if (answer && answer.kind !== "resume") this.log(p, card.id, "info", `User answer: ${answer.text}`);
@@ -953,7 +1010,7 @@ export class Orchestrator {
         this.log(p, card.id, "info", `Could not continue the card's session ${carried}: starting a new one.`);
         carried = undefined;
         resumeId = undefined;
-        prompt = buildPrompt(p.board, card, column, skill?.path);
+        prompt = buildPrompt(p.board, card, column, skill?.path, this.liveStatuses(p));
         attempt--;
         continue;
       }

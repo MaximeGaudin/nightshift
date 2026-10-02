@@ -2,7 +2,7 @@ import { Columns3, Info, Pause, Play, Settings as SettingsIcon, Sparkles, Triang
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { type SequenceNotice as Notice, sequenceLabel } from "../shared/sequence.ts";
-import type { ProjectSnapshot, SkillInfo } from "../shared/types.ts";
+import { type ProjectSnapshot, type SkillInfo, worktreePolicyOf } from "../shared/types.ts";
 import { api, useServerEvents, useSettings } from "./api.ts";
 import { Board } from "./Board.tsx";
 import { CardModal } from "./CardModal.tsx";
@@ -222,7 +222,7 @@ export function App() {
   }
   if (!snap) return <BoardSkeleton />;
 
-  const running = Object.values(snap.live).filter((s) => s === "running").length;
+  const { running, max } = activeAgents(snap);
   const queued = Object.values(snap.live).filter((s) => s === "queued").length;
   const questions = snap.board.cards.filter(
     (c) => !snap.live[c.id] && c.lastRun?.status === "question" && c.lastRun.columnId === c.columnId,
@@ -247,7 +247,7 @@ export function App() {
         </div>
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground" aria-live="polite">
           <span className={`size-1.5 rounded-full ${running ? "bg-ok" : "bg-muted-foreground/40"}`} aria-hidden="true" />
-          {t("board.app.agentsActive", { running, max: settings?.maxParallel ?? "?" })}
+          {t("board.app.agentsActive", { running, max })}
           {queued > 0 && <span> · {t("board.app.queued", { count: queued })}</span>}
           {questions > 0 && <span className="font-medium text-warn">· {tn("board.app.questions", questions)}</span>}
         </div>
@@ -299,6 +299,7 @@ export function App() {
           testing={snap.testing?.includes(card.id) ?? false}
           sequential={isSequential(snap, card.id)}
           onClose={() => setOpenCard(null)}
+          onOpenCard={setOpenCard}
           onError={notifyError}
         />
       )}
@@ -309,6 +310,8 @@ export function App() {
         <SettingsModal
           settings={settings}
           currentProject={snap.path}
+          projectMaxParallel={snap.maxParallel}
+          worktreePolicy={worktreePolicyOf(snap.board)}
           onOpenProject={(p) => {
             setModal(null);
             setProject(p);
@@ -341,16 +344,24 @@ export function App() {
       {newCard && (
         <NewCardDialog
           columns={snap.board.columns}
+          cards={snap.board.cards}
           initialTitle={newCard.title}
-          onAdd={(title, skip) => {
+          onAdd={(title, skip, dependsOn) => {
             const first = snap.board.columns[0];
-            if (first) guard(api.createCard(snap.path, first.id, title, "", skip));
+            if (first) guard(api.createCard(snap.path, first.id, title, "", skip, dependsOn));
           }}
           onClose={() => setNewCard(null)}
         />
       )}
     </div>
   );
+}
+
+/** Header counter: this project's running card agents and quick runs, against this project's cap (same scope). */
+export function activeAgents(snap: Pick<ProjectSnapshot, "live" | "quickRuns" | "maxParallel">): { running: number; max: number } {
+  const cards = Object.values(snap.live).filter((s) => s === "running").length;
+  const quick = snap.quickRuns.filter((q) => q.status === "running").length;
+  return { running: cards + quick, max: snap.maxParallel };
 }
 
 /** True when the sequential mode is running or paused on this card. */
