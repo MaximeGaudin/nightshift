@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { type Card, type Column, cardRef } from "../shared/types.ts";
+import { type Card, type Column, cardRef, DONE_COLUMN_ID } from "../shared/types.ts";
 import { Input } from "./components/ui/input.tsx";
 import { useT } from "./i18n/index.ts";
 import { cn } from "./lib/utils.ts";
 
 export interface DependencyPickerProps {
-  /** Cards offered, already filtered by the caller (never the card itself). */
+  /** Candidate cards, already filtered by the caller (never the card itself). Done cards are shown only when selected. */
   cards: Card[];
   columns: Column[];
   /** Selected card ids, in selection order. */
@@ -25,9 +25,11 @@ export function filterDependencyCards(cards: Card[], query: string): Card[] {
 export function DependencyPicker({ cards, columns, value, onChange }: DependencyPickerProps) {
   const { t } = useT();
   const [query, setQuery] = useState("");
-  if (cards.length === 0) return null;
+  // Done cards are noise: only offered while still selected, so they can be unchecked.
+  const offered = cards.filter((c) => c.columnId !== DONE_COLUMN_ID || value.includes(c.id));
+  if (offered.length === 0) return null;
   // Selected cards first, in selection order, then the others in board order.
-  const matches = filterDependencyCards(cards, query);
+  const matches = filterDependencyCards(offered, query);
   const shown = [...value.flatMap((id) => matches.filter((c) => c.id === id)), ...matches.filter((c) => !value.includes(c.id))];
   const toggle = (id: string, on: boolean) => onChange(on ? [...value.filter((v) => v !== id), id] : value.filter((v) => v !== id));
   return (

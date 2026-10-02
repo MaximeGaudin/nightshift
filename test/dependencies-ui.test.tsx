@@ -51,14 +51,27 @@ test("the picker lists the cards with their column and filters by number or titl
   expect(html).toContain("Dépend de (1)");
   // The selected card comes first.
   expect(html.indexOf("#15")).toBeLessThan(html.indexOf("#12"));
-  expect(html).toContain("#12");
-  expect(html).toContain("Login");
-  expect(html).toContain("Done");
   expect(html).toContain("Grill");
   expect(filterDependencyCards([d12, d15], "#1").map((c) => c.id)).toEqual(["d12", "d15"]);
   expect(filterDependencyCards([d12, d15], "15").map((c) => c.id)).toEqual(["d15"]);
   expect(filterDependencyCards([d12, d15], "sign").map((c) => c.id)).toEqual(["d15"]);
   expect(renderToStaticMarkup(<DependencyPicker cards={[]} columns={columns} value={[]} onChange={() => {}} />)).toBe("");
+});
+
+test("the picker hides Done cards unless they are selected", () => {
+  const render = (value: string[], cards = [d12, d15]) =>
+    renderToStaticMarkup(<DependencyPicker cards={cards} columns={columns} value={value} onChange={() => {}} />);
+  const hidden = render([]);
+  expect(hidden).toContain("#15");
+  expect(hidden).not.toContain("#12");
+  expect(hidden).not.toContain("Login");
+  // A selected Done card stays, first, and counts in the summary.
+  const kept = render(["d12"]);
+  expect(kept).toContain("Dépend de (1)");
+  expect(kept).toContain("Login");
+  expect(kept.indexOf("#12")).toBeLessThan(kept.indexOf("#15"));
+  // Nothing proposable and nothing selected: no picker.
+  expect(render([], [d12])).toBe("");
 });
 
 test("a held card tile shows its unmet dependencies", () => {
