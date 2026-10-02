@@ -445,7 +445,7 @@ export function CardModalContent({
           }}
         />
         <DependenciesSection project={project} card={card} board={board} onOpenCard={onOpenCard} />
-        <CardModelsEditor project={project} card={card} board={board} settings={settings} />
+        <CardModelsEditor key={card.id} project={project} card={card} board={board} settings={settings} />
         {asking && lr && (
           <form
             className="question flex max-h-[60%] min-w-0 shrink-0 flex-col gap-3 overflow-auto rounded-md border border-warn/30 bg-warn-soft p-3"

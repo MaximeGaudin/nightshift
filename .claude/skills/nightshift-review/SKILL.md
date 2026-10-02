@@ -49,6 +49,18 @@ npx --yes playwright screenshot --browser chromium --full-page --viewport-size=1
 
 Follow extra column instructions in the worker prompt when they do not contradict the steps above.
 
+## Updating the card
+
+Return only what changes, in the structured output's `sections` list: `{"heading": "Result", "content": "…"}` replaces (or adds) the `## Result` section, `"op": "append"` adds lines to a section, `"op": "delete"` removes one. Do not return `description`: Nightshift keeps every section you do not name, byte for byte, and re-emitting the whole note costs minutes of generation. Use `description` only to restructure the whole note.
+
+## Use the context you were given
+
+The card holds the specification and `## Result` (worktree, base, commits, files touched, tests run). Review the change, not the repository.
+
+- Read the diff against the base (step 2) and the code around each hunk; open other files only when a hunk calls into them and the card does not describe the contract.
+- Trust the card's `Context` and `Architecture`: do not re-derive them, and do not re-run what `## Result` says ran unless the tree changed.
+- No repository-wide `grep`/`rg` sweeps, directory listings or Explore agents. Search for one symbol when a hunk needs it.
+
 ## Run the app
 
 A screen usually needs more than its front end: a backend, a database, other services. Start everything it needs from the worktree, backends first, the front end last.
@@ -95,7 +107,7 @@ Blocked:
 ```json
 {
   "title": "current title",
-  "description": "the note plus ## Review, or ## Questions when a product decision is open",
+  "sections": [{"heading": "Review", "content": "…"}, {"heading": "Questions", "content": "…three blank lines under each question…"}],
   "move": "stay",
   "summary": "Stopped: suite still fails after one fix.",
   "questions": []
@@ -107,7 +119,7 @@ Done:
 ```json
 {
   "title": "current title",
-  "description": "the note plus ## Review",
+  "sections": [{"heading": "Review", "content": "…"}],
   "move": "next",
   "summary": "Reviewed the worktree. Fixed 2 findings. Suite passed.",
   "questions": [],
