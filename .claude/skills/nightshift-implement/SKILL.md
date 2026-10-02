@@ -9,7 +9,7 @@ Take a specified brief and implement every task of the ticket yourself, in order
 
 The ticket is the card description: the specification from `nightshift-plan`, with `## Tasks` waves. Tasks run in wave order, then in task order inside the wave. `parallel` in a wave heading only says the tasks are independent: they still run one after another.
 
-Nightshift keeps one Claude session per card: the earlier columns (grill, plan) ran in this session, and review and merge continue it. Do the work yourself so that context stays in it. Never hand a task to a subagent (Agent tool, `claude -p`): what it learns would be lost to the next columns.
+Nightshift runs a column in one Claude session per card, and a column may start a fresh one (the default for new columns), so the next columns read the card and the diff rather than this context. Do the work yourself so that context stays within this run. Never hand a task to a subagent (Agent tool, `claude -p`): what it learns would be lost to this run.
 
 Other implementation cards may run on this repository at the same time. This run uses its own git worktree, and you work only there. Nobody edits the shared checkout.
 
