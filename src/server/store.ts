@@ -17,6 +17,7 @@ import {
   type LastRun,
   normalizeColumnEmoji,
   normalizeColumnParallel,
+  normalizeProjectParallel,
   type TimePart,
   type TimeState,
 } from "../shared/types.ts";
@@ -121,7 +122,7 @@ const CARD_KEYS = [
   "timeBase",
   "models",
 ];
-const BOARD_KEYS = ["version", "name", "columns", "cards", "nextCardNumber", "favoriteSkills"];
+const BOARD_KEYS = ["version", "name", "columns", "cards", "nextCardNumber", "maxParallel", "favoriteSkills"];
 
 /**
  * Fields this version does not know, kept as they are. Several Nightshift versions write the same file
@@ -260,6 +261,7 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
     r.nextCardNumber,
   );
   const favoriteSkills = normalizeFavoriteSkills(r.favoriteSkills);
+  const maxParallel = normalizeProjectParallel(r.maxParallel);
   return {
     ...unknownFields(raw, BOARD_KEYS),
     version: 1,
@@ -267,6 +269,7 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
     columns,
     cards,
     nextCardNumber,
+    ...(maxParallel !== undefined ? { maxParallel } : {}),
     ...(favoriteSkills ? { favoriteSkills } : {}),
   };
 }
