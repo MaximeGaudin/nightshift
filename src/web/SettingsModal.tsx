@@ -41,7 +41,7 @@ function Section({ title, description, children }: { title: string; description:
     <section className="settings-section flex flex-col gap-1">
       <h3 className="text-[15px] font-semibold">{title}</h3>
       <p className="text-xs text-muted-foreground">{description}</p>
-      <div className="mt-2 divide-y rounded-md border bg-card">{children}</div>
+      <div className="mt-2 divide-y rounded-lg border bg-lane">{children}</div>
     </section>
   );
 }
@@ -213,7 +213,11 @@ export function SettingsContent({
                 <span className="min-w-0 flex-1 truncate font-mono text-xs" title={path}>
                   {path}
                 </span>
-                {path === currentProject && <Badge variant="secondary">{t("settings.recent.current")}</Badge>}
+                {path === currentProject && (
+                  <Badge variant="secondary" dot="primary">
+                    {t("settings.recent.current")}
+                  </Badge>
+                )}
                 <Button type="button" size="sm" variant="outline" disabled={path === currentProject} onClick={() => onOpenProject?.(path)}>
                   {t("settings.recent.open")}
                 </Button>

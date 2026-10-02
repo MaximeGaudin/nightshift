@@ -53,7 +53,7 @@ export function SkipColumnsPicker({ columns, value, onChange }: SkipColumnsPicke
               <label
                 key={c.id}
                 className={cn(
-                  "skip-picker-item flex cursor-pointer flex-row items-center gap-1 rounded-sm border px-1.5 py-0.5 text-xs font-normal whitespace-nowrap text-foreground transition-colors duration-150 hover:border-foreground/25",
+                  "skip-picker-item flex cursor-pointer flex-row items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-normal whitespace-nowrap text-foreground transition-colors duration-150 hover:border-foreground/25",
                   on && "border-primary",
                 )}
               >

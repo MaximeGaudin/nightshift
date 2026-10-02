@@ -43,7 +43,9 @@ export function SkillRow({
         <span className="flex items-center gap-1.5">
           <Zap className="size-3.5 shrink-0 text-primary" />
           <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{s.name}</span>
-          <Badge variant={s.scope === "project" ? "default" : "secondary"}>{scopeLabel}</Badge>
+          <Badge variant={s.scope === "project" ? "default" : "secondary"} dot={s.scope === "project" ? "primary" : "muted"}>
+            {scopeLabel}
+          </Badge>
         </span>
         <span className="line-clamp-2 text-xs text-muted-foreground">{s.description}</span>
       </button>
@@ -220,7 +222,7 @@ export function SkillsModal({
                 />
               </>
             ) : (
-              <div className="flex flex-1 items-center justify-center rounded-md border border-dashed">
+              <div className="flex flex-1 items-center justify-center rounded-lg border border-dashed bg-lane">
                 <p className="text-xs text-muted-foreground">{t("skills.pick")}</p>
               </div>
             )}

@@ -53,7 +53,7 @@ export function DependencyPicker({ cards, columns, value, onChange }: Dependency
               <label
                 key={c.id}
                 className={cn(
-                  "dependency-picker-item flex cursor-pointer flex-row items-center gap-1.5 rounded-sm border border-transparent px-1.5 py-0.5 font-normal text-foreground hover:border-foreground/25",
+                  "dependency-picker-item flex cursor-pointer flex-row items-center gap-1.5 rounded-full border border-transparent px-2 py-0.5 font-normal text-foreground hover:border-foreground/25",
                   on && "border-primary",
                 )}
               >
