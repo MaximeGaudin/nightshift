@@ -33,12 +33,12 @@ export function AppDialog({
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent onEscapeKeyDown={onEscapeKeyDown} className={cn("flex max-h-[calc(100dvh-4rem)] flex-col gap-0 p-0", SIZES[size])}>
-        <DialogHeader className="border-b px-4 py-3 pr-11">
+        <DialogHeader className="border-b px-5 py-3.5 pr-11">
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription className={description ? undefined : "sr-only"}>{description ?? title}</DialogDescription>
         </DialogHeader>
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">{children}</div>
-        {footer && <DialogFooter className="border-t px-4 py-3">{footer}</DialogFooter>}
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
+        {footer && <DialogFooter className="border-t bg-panel px-5 py-3">{footer}</DialogFooter>}
       </DialogContent>
     </Dialog>
   );
