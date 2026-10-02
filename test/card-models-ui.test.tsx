@@ -133,6 +133,14 @@ test("card models: editor markup has rows, values, datalist, clear and unused la
   for (const m of ["fable", "opus", "sonnet", "haiku"]) expect(out).toContain(`<option value="${m}"`);
 });
 
+test("card models: block is folded by default and the summary counts saved overrides", () => {
+  const two = editorHtml({ ...baseCard, models: { implement: "haiku", ghost: "opus" } } as Card);
+  expect(two).toMatch(/^<details(?![^>]*\sopen)/);
+  expect(two).toMatch(/<summary[^>]*>Models per skill \(2\)<\/summary>/);
+  expect(two.indexOf("Clear all")).toBeGreaterThan(two.indexOf("</summary>"));
+  expect(editorHtml(baseCard)).toMatch(/<summary[^>]*>Models per skill<\/summary>/);
+});
+
 test("card models: nothing is rendered without skill columns or entries", () => {
   const inert = { ...modelsBoard, columns: [columns[0], columns[3]] } as Board;
   expect(renderToStaticMarkup(<CardModelsEditor project="p" card={baseCard} board={inert} settings={null} />)).toBe("");

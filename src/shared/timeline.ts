@@ -5,6 +5,8 @@ import {
   DONE_COLUMN_ID,
   DONE_COLUMN_NAME,
   type HistoryEntry,
+  isBacklogColumn,
+  isDoneColumn,
   type TimeCursor,
   type TimePart,
   type TimeSlice,
@@ -143,6 +145,19 @@ export function cardTimeSlices(card: Card, columns: Column[], nowMs: number): Ti
   for (const c of columns) pick(`board:${c.id}`);
   for (const dk of deletedOrder) pick(`del:${dk}`);
   return out;
+}
+
+/**
+ * Chronos shown on a board tile: `totalMs` is the time since the card first left Backlog (Backlog and Done
+ * excluded), `stepMs` the time in the current column. Null for a card in Backlog or Done. Never negative or NaN.
+ */
+export function cardTimers(card: Card, columns: Column[], nowMs: number): { totalMs: number; stepMs: number } | null {
+  if (isBacklogColumn(card.columnId) || isDoneColumn(card.columnId)) return null;
+  const totalMs = cardTimeSlices(card, columns, nowMs)
+    .filter((s) => s.columnId === undefined || !isBacklogColumn(s.columnId))
+    .reduce((sum, s) => sum + s.ms, 0);
+  const step = nowMs - Date.parse(card.enteredColumnAt);
+  return { totalMs, stepMs: Number.isFinite(step) && step > 0 ? step : 0 };
 }
 
 /** Unit suffixes of formatDuration; the web passes translated ones, the default is French. */

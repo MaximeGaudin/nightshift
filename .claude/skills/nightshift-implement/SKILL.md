@@ -7,7 +7,7 @@ description: Implements a Nightshift card from its specification, in its own git
 
 Take a specified brief and implement every task of the ticket yourself, in order.
 
-The ticket is the card description: the specification from `nightshift-plan`, with `## Tasks` waves. Tasks run in wave order, then in task order inside the wave. `parallel` in a wave heading only says the tasks are independent: they still run one after another.
+The ticket is the card description: the specification from `nightshift-plan` (`## Tasks`, an ordered list), or the grilled brief with `## Acceptance` when grill sent the card straight here (`Route: implement`). Tasks run in the order written.
 
 Nightshift runs a column in one Claude session per card, and a column may start a fresh one (the default for new columns), so the next columns read the card and the diff rather than this context. Do the work yourself so that context stays within this run. Never hand a task to a subagent (Agent tool, `claude -p`): what it learns would be lost to this run.
 
@@ -25,7 +25,7 @@ Other implementation cards may run on this repository at the same time. By defau
 
 Progress marker: at the start of each step, write `[nightshift-progress] N/M label` alone on its own line, where N is the current step number, M is the total, and label is a few words naming the step. Use the numbering of the card's `## Progress` list; when the card has none, use the numbering of this `## Steps` list. A machine reads this line, so it overrides any concise or no-narration style.
 
-1. Read the card. List every wave in order, and every task under it (`Owns`, `Hard part`, `Done when`, `Depends on`).
+1. Read the card. List the tasks in order (`Files`, `Context`, `Hard part`, `Done when`). A card planned before this format has waves and `Owns`: do its tasks in wave order, one after the other, and read `Owns` as `Files`; ignore `parallel` and the tasks' `Model:` lines.
    - If the prompt has no card: set `move` to `stay`, ask one question for the specification, and stop.
 2. If `## Tasks` is missing and the card does not say `Route: implement`, do not implement. Ask every blocker at once. See Questions.
    - When `## Tasks` is missing and the card says `Route: implement`, the card skipped `nightshift-plan`: plan it yourself, briefly, without asking. Add to the description `## Plan` (the approach in a few lines, the files you expect to touch, the risk to watch), `## Progress` with one line `- [ ] 1. <card title>`, and `## Definition of done` built from `## Acceptance` (plus "affected tests pass" and "full suite: deferred to review"). Then implement it as one task, in this run's worktree: no task branch, no task worktree, no merge.
@@ -38,7 +38,7 @@ Progress marker: at the start of each step, write `[nightshift-progress] N/M lab
    - Seed the test selection cache (worktree only; with no worktree the cache is already in the board project): when the board project keeps one that git ignores (for example `.testmondata` for pytest-testmon), copy it to the same path in the worktree (`cp`, never a link). It tells the runner which tests each piece of code runs, so the affected-tests command runs in seconds instead of running everything.
 4. In the work directory, commit any pending changes before changing anything. Run `git status --porcelain`. If the output is empty, skip the commit. Otherwise commit those paths (with no worktree, only the files this card is about to touch: leave unrelated pending files alone), except `.env` and credential files, in one commit: `chore: save pending work before implementation`. Do not use `--no-verify` and do not amend. If the hook changes files, add them in a new commit.
 5. Do not run the full test suite: it runs once, at the end of `nightshift-review`. Record the starting point instead: run the affected-tests command (see Tests) once, against the base SHA, before any implementation. With no change yet it runs only the tests that already fail on the base, or the tests of the area the card touches: their failures are the baseline, written under `## Result`. Continue even when some fail; the card must not add new failures.
-6. Run every task yourself, in this run's worktree, in wave order. No task branch, no task worktree, no task merge, no subagent. Follow Implementation rules below.
+6. Run every task yourself, in the work directory, in order. No task branch, no task worktree, no task merge, no subagent. Follow Implementation rules below.
    - After each task, check it: the tests that name it in `## Tests` pass, its commits are on `nightshift/<card-id>` (`git log`), and `git status --porcelain` is clean. Then check its line in `## Progress` (`- [ ]` becomes `- [x]`) and start the next task. Leave every later line unchecked. On a stop, return the description with only the finished lines checked.
    - A failing check: fix it once, then check again. A second failure of the same check: set `move` to `stay`, write the command and the output under `## Result`, and stop.
 7. Run the affected-tests command (see Tests) in this run's worktree, against the base SHA. Then the items of `## Definition of done` and the tests of `## Tests` that this command does not cover, except the full suite gate (the project's whole check or test command): write "deferred to review" next to that item instead of running it. A new failure (not in the baseline of step 5): fix it once, then re-run the affected tests. A second failure of that check: set `move` to `stay`, write the command and the output under `## Result`, and stop. Do not commit a red tree.
@@ -50,16 +50,30 @@ Progress marker: at the start of each step, write `[nightshift-progress] N/M lab
 
 Follow extra column instructions in the worker prompt when they do not contradict the steps above.
 
+## Updating the card
+
+Return only what changes, in the structured output's `sections` list: `{"heading": "Result", "content": "…"}` replaces (or adds) the `## Result` section, `"op": "append"` adds lines to a section, `"op": "delete"` removes one. Do not return `description`: Nightshift keeps every section you do not name, byte for byte, and re-emitting the whole note costs minutes of generation. Use `description` only to restructure the whole note.
+
+## Use the context you were given
+
+The card already holds the research: grill and plan read the code and wrote what matters, with `file:line` references, the contracts, the commands and the decisions. Start from it.
+
+- Trust the card's `Context`, `Architecture` and task sections. Do not re-derive what they state, and do not re-check a decision the card records.
+- Read only what a task touches: the referenced lines (`sed -n '<from>,<to>p'`, or Read with an offset), not whole files; the functions you change and their tests. Line numbers may have drifted a little since the card was written: search near them, not across the repository.
+- No broad exploration: no repository-wide `grep`/`rg` sweeps, no directory listings, no Explore agent, no reading of docs the card does not point to. Search only when the card leaves a gap you must fill, and then only for that symbol.
+- What you read stays in this session: do not read the same file twice.
+
 ## Implementation rules
 
 - Work only in the work directory: this run's worktree on `nightshift/<card-id>`, or the board project when the policy has no worktree. With a worktree, do not read or write the shared checkout.
 - Obey the Brief, the Architecture, the current task and the tests that name it.
 - Write the real behavior. No TODO, FIXME, stub, skipped test, or empty body that only throws.
-- Owns is a guide. Stay inside the task's Owns by default. Edit another path only when the task cannot be done otherwise, and list it under `## Result`. Never reformat or rewrite unrelated files.
+- `Files` lists where a task is expected to land: a guide, not a wall. Touch another file when the task needs it, and say so in `## Result`. Do not reformat or rewrite code the card does not need to change.
+- Build on the previous tasks: they are committed in the work directory and you read their code already. Do not re-read what you wrote unless you need a detail.
 - Commit as you go, in small modular commits: one cohesive behavior per commit. Do not save a whole task for a single commit at the end.
 - Commit only after the tests that cover that behavior pass. Run only those tests: the affected-tests command (see Tests), or the project's test runner on your test files. Never the full suite: it runs once at the end of the review.
 - Do not use `--no-verify` and do not amend. If a hook changes files, add them in a new commit. Do not commit `.env` or credential files.
-- The `Model:` lines of the tasks do not switch your model: one session runs on one model, the column's or the card's (`nightshift-plan` sets the card's models). Read them as how careful each task needs to be.
+- Your model is the column's or the card's (`nightshift-plan` writes the card's models). Do not hand a task to another model or agent.
 
 ## Tests
 
@@ -146,7 +160,8 @@ Append this to the specification. Do not delete `## Brief`, `## Progress`, `## A
 - Baseline: pending work commit <sha or "clean">, affected tests → exit <code>, failing: <none, or the tests already failing on the base>
 - Waves: <n> (<n> tasks), all done in the card's session
 - Model: <the model this run used>; repairs: <n>
-- Tasks done: <names, in order>
+- Tasks done: <names, in order>, in this session (no subagent)
+- Files beyond the tasks' `Files`: <paths and why, or none>
 - Tests: <affected-tests command> → exit <code>, failing: <none, or the baseline's>; full suite: deferred to review
 - Commits: <shas, in order>
 - Test: <test command>
@@ -160,9 +175,9 @@ Blocked or failed (`questions` empty unless step 2 asked):
 ```json
 {
   "title": "current title",
-  "description": "the specification plus ## Result",
+  "sections": [{"heading": "Progress", "content": "…only the done lines checked…"}, {"heading": "Result", "content": "…"}],
   "move": "stay",
-  "summary": "Stopped: wave 1 task 2 failed its test twice.",
+  "summary": "Stopped: task 2 failed its test twice.",
   "questions": []
 }
 ```
@@ -172,7 +187,7 @@ Done:
 ```json
 {
   "title": "current title",
-  "description": "the specification plus ## Result, definition of done ticked",
+  "sections": [{"heading": "Progress", "content": "…"}, {"heading": "Definition of done", "content": "…ticked…"}, {"heading": "Result", "content": "…"}, {"heading": "Screenshots", "content": "No screen to capture."}],
   "move": "next",
   "summary": "Implemented 3 tasks in the card's session. Definition of done passed.",
   "questions": [],
