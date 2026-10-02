@@ -1,5 +1,6 @@
 import { copyFileSync, existsSync, type FSWatcher, readFileSync, statSync, watch } from "node:fs";
 import { basename, join } from "node:path";
+import { normalizeDependsOn, releaseTarget } from "../shared/dependencies.ts";
 import { sanitizeModels } from "../shared/models.ts";
 import { needsRun } from "../shared/needs-run.ts";
 import { normalizeSkipColumnIds, resolveNextColumn } from "../shared/skip.ts";
@@ -116,6 +117,7 @@ const CARD_KEYS = [
   "pendingAnswer",
   "test",
   "skipColumnIds",
+  "dependsOn",
   "sessionId",
   "history",
   "timeBase",
@@ -254,6 +256,12 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
       ...(timeBase ? { timeBase } : {}),
     };
   });
+  // Second pass: dependencies can only be checked once every card id is known.
+  const cardIds = new Set(cards.map((c) => c.id));
+  for (const [i, card] of cards.entries()) {
+    const dependsOn = normalizeDependsOn(cardIds, card.id, rawCards[i]?.dependsOn);
+    if (dependsOn) card.dependsOn = dependsOn;
+  }
   const nextCardNumber = assignNumbers(
     cards,
     rawCards.map((c) => c.number),
@@ -422,6 +430,16 @@ export class Project {
   addQueued(card: Card, board: Board = this.board) {
     if (!needsRun(board, card)) return;
     this.addHistory(card, "queued", `Queued in ${this.column(card.columnId)?.name}`, card.columnId);
+  }
+
+  /**
+   * Releases a card held by its dependencies: drops `dependsOn` (so it is never released twice) and moves it to
+   * the first column after Backlog it does not skip. `reason` starts the history entry of the move.
+   */
+  releaseDependencies(board: Board, card: Card, reason: string) {
+    const target = releaseTarget(board.columns, card);
+    delete card.dependsOn;
+    if (target) this.moveCard(board, card.id, target.id, undefined, reason);
   }
 
   /** Moves a card to a column at an index (end when omitted). Resets its run state for that column. */

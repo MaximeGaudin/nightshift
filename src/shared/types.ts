@@ -103,6 +103,8 @@ export interface Card {
   test?: CardTest;
   /** Ids of the columns "next" jumps over for this card. Canonical form: see `normalizeSkipColumnIds`. Absent = none. */
   skipColumnIds?: string[];
+  /** Ids of the cards this card waits for: it leaves Backlog once they are all in Done. Canonical form: see `normalizeDependsOn`. Absent = none. */
+  dependsOn?: string[];
   /** Per-skill model overrides (skill name -> alias or ID). Never `{}`; "default" is never stored. */
   models?: Record<string, string>;
   /** The card's Claude session: every column continues it, except a column with `freshSession`. */
