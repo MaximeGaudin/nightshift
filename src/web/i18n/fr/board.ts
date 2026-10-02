@@ -94,7 +94,6 @@ export const board: Record<keyof typeof enboard, string> = {
   "board.sequence.notice.kept": "Séquence arrêtée : {ref} l'agent a gardé la carte dans {column}",
   "board.card.timerTotalTitle": "Temps total depuis la sortie du Backlog",
   "board.card.timerStepTitle": "Temps dans {column}",
-  "board.card.timerStep": "étape {duration}",
   "time.unit.second": "s",
   "time.unit.minute": "min",
   "time.unit.hour": "h",

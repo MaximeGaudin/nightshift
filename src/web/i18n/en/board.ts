@@ -92,7 +92,6 @@ export const board = {
   "board.sequence.notice.kept": "Sequence stopped: the agent kept {ref} in {column}",
   "board.card.timerTotalTitle": "Total time since leaving Backlog",
   "board.card.timerStepTitle": "Time in {column}",
-  "board.card.timerStep": "step {duration}",
   "time.unit.second": "s",
   "time.unit.minute": "min",
   "time.unit.hour": "h",

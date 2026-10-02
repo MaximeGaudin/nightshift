@@ -57,10 +57,23 @@ test("tile renders both chronos in a work column, none in Backlog, none without 
   expect(html).toContain("card-timer-total");
   expect(html).toContain("card-timer-step");
   expect(html).toContain("Temps dans Plan");
+  expect(html).not.toContain("étape");
+  expect(html.indexOf("card-timer-step")).toBeLessThan(html.indexOf("card-timer-total"));
   expect(renderToStaticMarkup(<CardTile {...props} card={card(backlog, 0)} column={backlog} columns={columns} />)).not.toContain(
     "card-timers",
   );
   expect(renderToStaticMarkup(<CardTile {...props} card={card(plan, 0)} />)).not.toContain("card-timers");
+});
+
+test("tile puts the chronos in parentheses on the status line when it has a status", () => {
+  const props = { project: "/p", onOpen: () => {}, card: card(plan, 0), column: plan, columns };
+  const html = renderToStaticMarkup(<CardTile {...props} live="running" />);
+  const status = html.slice(html.indexOf('class="status'));
+  expect(status.indexOf("status-label")).toBeLessThan(status.indexOf("card-timers"));
+  expect(html.match(/card-timers/g)?.length).toBe(1);
+  expect(html).toContain("(</span>");
+  expect(html).toContain(")</span>");
+  expect(renderToStaticMarkup(<CardTile {...props} />)).not.toContain("(</span>");
 });
 
 test("ticker is idle without subscribers", () => {
