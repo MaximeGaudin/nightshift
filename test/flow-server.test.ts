@@ -198,3 +198,18 @@ test("flow state is in memory", async () => {
   await open(idle, 3, dir);
   expect((await api(idle, dir).snap()).flow).toEqual({ fastForward: false, paused: false });
 });
+
+test("a retry moved elsewhere waits for play again", async () => {
+  const dir = await open(live, 1);
+  const { snap, create, move, flow } = api(live, dir);
+  const busy = await create("slow busy", "col_grill");
+  await waitFor(async () => (await snap()).live[busy.id] === "running");
+  await flow("pause");
+  const { id } = await create("other", "col_grill");
+  expect((await snap()).live[id]).toBe("paused");
+  // The project cap is full: the retried card waits as queued, not paused.
+  await live.call(`/api/cards/${id}/retry`, { body: { project: dir } });
+  await waitFor(async () => (await snap()).live[id] === "queued");
+  await move(id, "col_impl");
+  await waitFor(async () => (await snap()).live[id] === "paused");
+});
