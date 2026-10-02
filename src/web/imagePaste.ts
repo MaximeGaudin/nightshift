@@ -1,4 +1,4 @@
-// Pasting images into the card description: clipboard filtering, upload, and insertion of the markdown references.
+// Pasting or dropping images into the card description: transfer filtering, upload, and insertion of the markdown references.
 import { MAX_CARD_IMAGE_BYTES } from "../shared/screenshots.ts";
 import { t } from "./i18n/index.ts";
 
@@ -6,12 +6,11 @@ const ACCEPTED = ["image/png", "image/jpeg", "image/gif", "image/webp"];
 
 type ClipboardItemLike = { kind: string; type: string; getAsFile(): File | null };
 
-/** The paste event fields this module reads (a React or DOM ClipboardEvent on a textarea fits). */
-export type PasteEventLike = {
-  clipboardData: { items: ArrayLike<ClipboardItemLike> } | null;
-  currentTarget: { selectionStart: number; selectionEnd: number };
-  preventDefault(): void;
-};
+/** The DataTransfer fields this module reads: a paste's `clipboardData` or a drop's `dataTransfer`. */
+export type TransferLike = { items?: ArrayLike<ClipboardItemLike>; files?: ArrayLike<File> } | null;
+
+/** Where the images go: the selection to replace, read when the paste or drop happens. */
+export type Selection = { start: number; end: number };
 
 export type ImagePasteDeps = {
   upload(image: Blob): Promise<{ path: string }>;
@@ -22,15 +21,24 @@ export type ImagePasteDeps = {
   busy(delta: 1 | -1): void;
 };
 
-/** Image files of the clipboard, in clipboard order. */
-export function clipboardImages(items: ArrayLike<ClipboardItemLike>): File[] {
-  const out: File[] = [];
-  for (const item of Array.from(items)) {
+/**
+ * Image files of a paste or a drop, in order. Reads `items` first, then `files`: browsers do not all fill
+ * both (Safari and pasted Finder files may only fill `files`).
+ */
+export function transferImages(transfer: TransferLike): File[] {
+  const fromItems: File[] = [];
+  for (const item of Array.from(transfer?.items ?? [])) {
     if (item.kind !== "file" || !item.type.startsWith("image/")) continue;
     const file = item.getAsFile();
-    if (file) out.push(file);
+    if (file) fromItems.push(file);
   }
-  return out;
+  if (fromItems.length > 0) return fromItems;
+  return Array.from(transfer?.files ?? []).filter((f) => f.type.startsWith("image/"));
+}
+
+/** True while a drag carries files: the drop zone must then accept it, or the browser opens the file instead. */
+export function dragHasFiles(transfer: { types?: ArrayLike<string> } | null): boolean {
+  return Array.from(transfer?.types ?? []).includes("Files");
 }
 
 /**
@@ -56,15 +64,10 @@ export function imageRefusal(image: Blob): string | null {
 }
 
 /**
- * Paste handler of the description textarea. A paste with no image file is left alone (returns null, default paste runs).
- * Otherwise the default paste is prevented, every image is uploaded in parallel, and the ones that succeed are inserted
- * in clipboard order where the selection was at paste time. Each failure shows its own error.
+ * Uploads every image in parallel and inserts the ones that succeed, in their order, at `at`.
+ * Each failure shows its own error.
  */
-export function handleImagePaste(e: PasteEventLike, deps: ImagePasteDeps): Promise<void> | null {
-  const images = clipboardImages(e.clipboardData?.items ?? []);
-  if (images.length === 0) return null;
-  e.preventDefault();
-  const { selectionStart: start, selectionEnd: end } = e.currentTarget;
+export function insertImages(images: File[], at: Selection, deps: ImagePasteDeps): Promise<void> {
   const one = async (image: Blob): Promise<string | null> => {
     const refused = imageRefusal(image);
     if (refused) {
@@ -83,6 +86,23 @@ export function handleImagePaste(e: PasteEventLike, deps: ImagePasteDeps): Promi
   };
   return Promise.all(images.map(one)).then((paths) => {
     const stored = paths.filter((p): p is string => p !== null);
-    if (stored.length > 0) deps.apply((text) => insertImageBlock(text, start, end, stored));
+    if (stored.length > 0) deps.apply((text) => insertImageBlock(text, at.start, at.end, stored));
   });
+}
+
+/**
+ * Paste or drop handler of the description. A transfer with no image file is left alone (returns null, the browser's
+ * default runs: text pastes are untouched). Otherwise the default is prevented and the images are inserted at `at()`,
+ * read right away (the selection at paste or drop time).
+ */
+export function handleImageTransfer(
+  e: { preventDefault(): void },
+  transfer: TransferLike,
+  at: () => Selection,
+  deps: ImagePasteDeps,
+): Promise<void> | null {
+  const images = transferImages(transfer);
+  if (images.length === 0) return null;
+  e.preventDefault();
+  return insertImages(images, at(), deps);
 }

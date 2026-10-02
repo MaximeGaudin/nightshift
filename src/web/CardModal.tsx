@@ -28,7 +28,7 @@ import { DependencyPicker } from "./DependencyPicker.tsx";
 import { FeedbackForm } from "./FeedbackForm.tsx";
 import { formatTime, useT } from "./i18n/index.ts";
 import { StatusIcon } from "./icons.tsx";
-import { handleImagePaste } from "./imagePaste.ts";
+import { dragHasFiles, handleImageTransfer, type ImagePasteDeps, type Selection } from "./imagePaste.ts";
 import { cn } from "./lib/utils.ts";
 import { Markdown } from "./markdown.tsx";
 import { NextColumnButton } from "./NextColumnButton.tsx";
@@ -362,6 +362,24 @@ export function CardModalContent({
     focusDesc.current = true;
     setDescMode("edit");
   };
+  const imageDeps: ImagePasteDeps = {
+    upload: (image) => api.uploadCardImage(project, card.id, image),
+    apply: (edit) =>
+      setDescription((text) => {
+        const next = edit(text);
+        pasteCursor.current = next.cursor;
+        return next.text;
+      }),
+    onError: notifyError,
+    busy: (delta) => setUploading((n) => n + delta),
+  };
+  // Images go where the editor's selection is; from the preview, at the end of the text, and the editor opens.
+  const imageTarget = (): Selection => {
+    const el = descRef.current;
+    if (descMode === "edit" && el) return { start: el.selectionStart, end: el.selectionEnd };
+    editDescription();
+    return { start: description.length, end: description.length };
+  };
 
   useEffect(() => {
     setLogLoaded(false);
@@ -400,7 +418,23 @@ export function CardModalContent({
           </Label>
           <Input id="card-title" value={title} onChange={(e) => setTitle(e.target.value)} />
         </div>
-        <div className="card-desc flex min-h-[220px] min-w-0 flex-1 flex-col gap-1.5">
+        {/* Paste and drop work on the whole description, editor and preview alike. */}
+        {/* biome-ignore lint/a11y/noStaticElementInteractions: paste and drop handlers only; the editor and preview inside stay keyboard accessible */}
+        <div
+          className="card-desc flex min-h-[220px] min-w-0 flex-1 flex-col gap-1.5"
+          onPaste={(e) => void handleImageTransfer(e, e.clipboardData, imageTarget, imageDeps)}
+          onDragOver={(e) => {
+            if (!dragHasFiles(e.dataTransfer)) return;
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "copy";
+          }}
+          onDrop={(e) => {
+            if (!dragHasFiles(e.dataTransfer)) return;
+            // A dropped file that is not an image must not be opened by the browser either (it would leave the board).
+            e.preventDefault();
+            if (!handleImageTransfer(e, e.dataTransfer, imageTarget, imageDeps)) notifyError(t("card.imageUnsupported"));
+          }}
+        >
           <div className="flex items-center justify-between gap-3">
             <span id="card-desc-label" className="text-xs font-medium text-muted-foreground">
               {t("card.descriptionLabel")}
@@ -424,19 +458,6 @@ export function CardModalContent({
               aria-label={t("card.descriptionMarkdown")}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              onPaste={(e) =>
-                void handleImagePaste(e, {
-                  upload: (image) => api.uploadCardImage(project, card.id, image),
-                  apply: (edit) =>
-                    setDescription((text) => {
-                      const next = edit(text);
-                      pasteCursor.current = next.cursor;
-                      return next.text;
-                    }),
-                  onError: notifyError,
-                  busy: (delta) => setUploading((n) => n + delta),
-                })
-              }
               spellCheck
             />
           ) : (

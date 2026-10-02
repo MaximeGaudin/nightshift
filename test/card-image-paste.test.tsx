@@ -1,7 +1,24 @@
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { handleImagePaste, type ImagePasteDeps, insertImageBlock, type PasteEventLike } from "../src/web/imagePaste.ts";
+import {
+  dragHasFiles,
+  handleImageTransfer,
+  type ImagePasteDeps,
+  insertImageBlock,
+  type TransferLike,
+  transferImages,
+} from "../src/web/imagePaste.ts";
+
+/** The paste event fields the card modal passes on: the clipboard and the textarea's selection. */
+type PasteEventLike = {
+  clipboardData: { items: NonNullable<NonNullable<TransferLike>["items"]> } | null;
+  currentTarget: { selectionStart: number; selectionEnd: number };
+  preventDefault(): void;
+};
+/** What the card modal does on paste in the editor. */
+const handleImagePaste = (e: PasteEventLike, d: ImagePasteDeps) =>
+  handleImageTransfer(e, e.clipboardData, () => ({ start: e.currentTarget.selectionStart, end: e.currentTarget.selectionEnd }), d);
 
 const fileItem = (type: string, size = 10) => {
   const file = new File([new Uint8Array(size)], "pasted", { type });
@@ -108,9 +125,32 @@ test("paste refuses unsupported or oversized images before any request, others s
   expect(state.text).toBe("![image](/p/ok.png)");
 });
 
-test("card modal wires the paste handler and the uploading hint", () => {
+test("transfer images fall back to files when items hold none", () => {
+  const png = new File([new Uint8Array(4)], "a.png", { type: "image/png" });
+  const pdf = new File([new Uint8Array(4)], "a.pdf", { type: "application/pdf" });
+  expect(transferImages({ items: [textItem], files: [png, pdf] })).toEqual([png]);
+  expect(transferImages({ files: [pdf] })).toEqual([]);
+  expect(transferImages(null)).toEqual([]);
+});
+
+test("drop inserts images at the given selection", async () => {
+  const { d, state } = deps("ab", async () => ({ path: "/p/d.png" }));
+  let prevented = false;
+  const png = new File([new Uint8Array(4)], "a.png", { type: "image/png" });
+  const done = handleImageTransfer({ preventDefault: () => (prevented = true) }, { files: [png] }, () => ({ start: 2, end: 2 }), d);
+  await done;
+  expect(prevented).toBe(true);
+  expect(state.text).toBe("ab\n![image](/p/d.png)");
+  expect(dragHasFiles({ types: ["Files"] })).toBe(true);
+  expect(dragHasFiles({ types: ["text/plain"] })).toBe(false);
+  expect(dragHasFiles(null)).toBe(false);
+});
+
+test("card modal wires paste and drop on the description and the uploading hint", () => {
   const src = readFileSync(join(import.meta.dir, "../src/web/CardModal.tsx"), "utf8");
-  expect(src).toContain("onPaste={(e) =>");
+  expect(src).toContain("onPaste={(e) => void handleImageTransfer(e, e.clipboardData, imageTarget, imageDeps)}");
+  expect(src).toContain("handleImageTransfer(e, e.dataTransfer, imageTarget, imageDeps)");
+  expect(src).toContain("onDragOver={(e) =>");
   expect(src).toContain("api.uploadCardImage(project, card.id, image)");
   expect(src).toContain('t("card.uploadingImage")');
   // A pasted image previewed before Save fails to load; the preview remounts once the card is saved.
