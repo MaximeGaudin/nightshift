@@ -90,9 +90,13 @@ Most cards do not need a written plan: the implement agent plans small work itse
 
 When one holds, set `move` to `next` (the plan column). Otherwise set `move` to the id of the column whose skill is `nightshift-implement`, read from the board columns in the worker prompt; when no such column exists, use `next`. Write the decision as the last line before `## Acceptance`: `Route: plan — <the rule that holds>` or `Route: implement — no plan needed (<one clause>)`.
 
+## Updating the card
+
+Return only what changes, in the structured output's `sections` list: `{"heading": "Result", "content": "…"}` replaces (or adds) the `## Result` section, `"op": "append"` adds lines to a section, `"op": "delete"` removes one. Do not return `description`: Nightshift keeps every section you do not name, byte for byte, and re-emitting the whole note costs minutes of generation. Use `description` only to restructure the whole note.
+
 ## Writing the note
 
-Return the full description. Nightshift replaces the card description with that string.
+Return the sections you change (Updating the card). A note that needs restructuring as a whole (an empty or one-line note, headings moved around) is the case for `description`.
 
 - Keep the user's sentences verbatim. Add and restructure around them.
 - Fold each decision into prose, a list, or a table under the heading it belongs to.
@@ -108,7 +112,7 @@ Question round (`move` is `stay` whenever `questions` is non-empty):
 ```json
 {
   "title": "current or tightened title",
-  "description": "full markdown note, plus ## Questions with three blank lines under each question",
+  "sections": [{"heading": "Questions", "content": "…three blank lines under each question…"}],
   "move": "stay",
   "summary": "Asked 4 blocking questions before specification.",
   "questions": [
@@ -123,7 +127,7 @@ Ready, needs a plan (`questions` empty, `move` is `next`):
 ```json
 {
   "title": "current title",
-  "description": "full markdown note",
+  "sections": [{"heading": "<a section you completed>", "content": "…"}, {"heading": "Questions", "op": "delete"}, {"heading": "Acceptance", "content": "…"}],
   "move": "next",
   "summary": "Note is ready for specification. No blocking product decisions left.",
   "questions": []
@@ -135,7 +139,7 @@ Ready, small enough to skip the plan (`move` is the implement column's id):
 ```json
 {
   "title": "current title",
-  "description": "full markdown note, Route line, ## Acceptance",
+  "sections": [{"heading": "Acceptance", "content": "…"}],
   "move": "col_implement_id",
   "summary": "Note is ready. No plan needed: one module, existing pattern. Sent to Implement.",
   "questions": []

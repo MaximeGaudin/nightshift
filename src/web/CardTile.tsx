@@ -3,6 +3,7 @@ import type { HTMLAttributes, KeyboardEvent, Ref } from "react";
 import { resolveModel } from "../shared/models.ts";
 import { type Card, type Column, cardRef, type LiveStatus, type RunProgress as RunProgressData, type Settings } from "../shared/types.ts";
 import { CardThumbnail } from "./CardThumbnail.tsx";
+import { CardTimers } from "./CardTimers.tsx";
 import { IconButton } from "./components/icon-button.tsx";
 import { Badge } from "./components/ui/badge.tsx";
 import { useT } from "./i18n/index.ts";
@@ -44,6 +45,7 @@ export function CardTile({
   onSendNext,
   sending,
   column,
+  columns,
   settings,
 }: {
   project: string;
@@ -64,6 +66,8 @@ export function CardTile({
   sending?: boolean;
   /** The column the card is in, and the settings, to flag a card model that overrides the column's. */
   column?: Column;
+  /** The board columns, to compute the card chronos; without them the tile shows none. */
+  columns?: Column[];
   settings?: Pick<Settings, "model"> | null;
 }) {
   const { t, tn } = useT();
@@ -164,6 +168,7 @@ export function CardTile({
         <div className={cn("status mt-2 flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-muted-foreground", `st-${status}`)}>
           <StatusIcon status={status} />
           <span className={cn("status-label shrink-0", statusColor)}>{label[status]}</span>
+          {columns && <CardTimers card={card} columns={columns} column={column} inline />}
           {status === "success" && lr?.summary && (
             <span className="muted min-w-0 truncate font-normal"> · {toPlainText(lr.summary).slice(0, 80)}</span>
           )}
@@ -172,6 +177,7 @@ export function CardTile({
           )}
         </div>
       )}
+      {columns && !status && <CardTimers card={card} columns={columns} column={column} />}
       <RunProgress progress={progress} live={live} />
     </article>
   );

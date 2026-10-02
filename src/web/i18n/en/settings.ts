@@ -15,6 +15,12 @@ export const settings = {
   "settings.sound.label": "Notification sounds",
   "settings.sound.help":
     "Plays a sound when a card needs you (inert column, question, error). The browser requires a first click on the page.",
+  "settings.carryTokens.label": "Max carried context (tokens)",
+  "settings.carryTokens.help":
+    "Auto sessions continue the card's session only if its last run ended with at most this many tokens of context.",
+  "settings.carryAge.label": "Max carried session age (minutes)",
+  "settings.carryAge.help":
+    "Auto sessions continue the card's session only if its last run ended less than this long ago (the prompt cache lifetime).",
   "settings.claude.title": "Claude",
   "settings.claude.description": "How Claude Code is launched for each card.",
   "settings.permission.label": "Claude Code permission mode",

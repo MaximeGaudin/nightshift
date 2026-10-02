@@ -20,6 +20,8 @@ export const DEFAULT_SETTINGS: Settings = {
   recentProjects: [],
   soundNotifications: true,
   language: "auto",
+  carryMaxTokens: 80000,
+  carryMaxAgeMinutes: 5,
 };
 
 // Kept on globalThis so modules re-evaluated by `bun --hot` share the state seen by the long-lived orchestrator.
@@ -56,6 +58,10 @@ function checkField(key: keyof Settings, value: unknown): string | null {
       return PERMISSION_MODES.includes(value as Settings["permissionMode"]) ? null : `Unknown permission mode: ${String(value)}`;
     case "language":
       return LANGUAGE_SETTINGS.includes(value as Settings["language"]) ? null : `Unknown language: ${String(value)}`;
+    case "carryMaxTokens":
+      return Number.isInteger(value) && (value as number) >= 0 ? null : "carryMaxTokens must be an integer of 0 or more";
+    case "carryMaxAgeMinutes":
+      return Number.isInteger(value) && (value as number) >= 1 ? null : "carryMaxAgeMinutes must be an integer of 1 or more";
     case "recentProjects":
       return isStringArray(value) ? null : "recentProjects must be an array of strings";
   }

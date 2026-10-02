@@ -99,20 +99,25 @@ export function CardModelsEditor({
     setError(message);
     return message === null;
   };
+  const overrides = Object.keys(buildModels(server)).length;
   return (
-    <form
-      className="card-models flex min-w-0 flex-col gap-2 rounded-md border p-3"
-      onSubmit={(e) => {
-        e.preventDefault();
-        void submit(values);
-      }}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <strong className="text-xs font-medium">{t("card.models.title")}</strong>
+    <details className="card-models min-w-0 rounded-md border p-3">
+      <summary className="cursor-pointer text-xs font-medium select-none hover:text-foreground">
+        {t("card.models.title")}
+        {overrides > 0 ? ` (${overrides})` : ""}
+      </summary>
+      <form
+        className="mt-2 flex min-w-0 flex-col gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void submit(values);
+        }}
+      >
         <Button
           type="button"
           variant="ghost"
           size="sm"
+          className="self-end"
           disabled={saving || Object.keys(values).length === 0}
           onClick={() => {
             setValues({});
@@ -123,36 +128,36 @@ export function CardModelsEditor({
         >
           {t("card.models.clearAll")}
         </Button>
-      </div>
-      {rows.map((r) => (
-        <div key={r.skill} className="model-row grid gap-1">
-          <label htmlFor={`card-model-${r.skill}`} className="text-xs text-muted-foreground">
-            {r.unused
-              ? t("card.models.unused", { skill: r.skill })
-              : t("card.models.skillRow", { skill: r.skill, columns: r.columns.join(", ") })}
-          </label>
-          <Input
-            id={`card-model-${r.skill}`}
-            list="card-models-list"
-            placeholder={r.fallback}
-            value={values[r.skill] ?? ""}
-            onChange={(e) => setValues((v) => ({ ...v, [r.skill]: e.target.value }))}
-          />
-        </div>
-      ))}
-      <datalist id="card-models-list">
-        {MODEL_ALIASES.map((m) => (
-          <option key={m} value={m} />
+        {rows.map((r) => (
+          <div key={r.skill} className="model-row grid gap-1">
+            <label htmlFor={`card-model-${r.skill}`} className="text-xs text-muted-foreground">
+              {r.unused
+                ? t("card.models.unused", { skill: r.skill })
+                : t("card.models.skillRow", { skill: r.skill, columns: r.columns.join(", ") })}
+            </label>
+            <Input
+              id={`card-model-${r.skill}`}
+              list="card-models-list"
+              placeholder={r.fallback}
+              value={values[r.skill] ?? ""}
+              onChange={(e) => setValues((v) => ({ ...v, [r.skill]: e.target.value }))}
+            />
+          </div>
         ))}
-      </datalist>
-      {error && (
-        <Alert variant="destructive" className="models-error">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-      <Button type="submit" size="sm" className="self-start" disabled={saving || !dirty}>
-        {t("card.models.save")}
-      </Button>
-    </form>
+        <datalist id="card-models-list">
+          {MODEL_ALIASES.map((m) => (
+            <option key={m} value={m} />
+          ))}
+        </datalist>
+        {error && (
+          <Alert variant="destructive" className="models-error">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        <Button type="submit" size="sm" className="self-start" disabled={saving || !dirty}>
+          {t("card.models.save")}
+        </Button>
+      </form>
+    </details>
   );
 }

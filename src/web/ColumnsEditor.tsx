@@ -61,14 +61,22 @@ export function lockModelPatch(checked: boolean): Partial<Column> {
   return { lockModel: checked ? true : undefined };
 }
 
-/** Checkbox state → column patch: `freshSession` is stored as `true` and omitted when off. */
-export function freshSessionPatch(checked: boolean): Partial<Column> {
-  return { freshSession: checked ? true : undefined };
+/** How a skill column treats the card's Claude session: continue it, always start a new one, or decide per run. */
+export const SESSION_MODES = ["continue", "fresh", "auto"] as const;
+export type SessionMode = (typeof SESSION_MODES)[number];
+
+export function sessionModeOf(col: Pick<Column, "freshSession">): SessionMode {
+  return col.freshSession === "auto" ? "auto" : col.freshSession === true ? "fresh" : "continue";
 }
 
-/** Column type change → patch: a column turned into a skill column starts with a fresh Claude session (the user can untick it). */
+/** Select choice → column patch: `freshSession` is omitted for Continue, never stored as false. */
+export function sessionModePatch(mode: SessionMode): Partial<Column> {
+  return { freshSession: mode === "auto" ? "auto" : mode === "fresh" ? true : undefined };
+}
+
+/** Column type change → patch: a column turned into a skill column decides its session per run (the user can change it). */
 export function typePatch(type: Column["type"]): Partial<Column> {
-  return type === "skill" ? { type, freshSession: true } : { type };
+  return type === "skill" ? { type, freshSession: "auto" } : { type };
 }
 
 function errorMessage(e: unknown): string {
@@ -209,14 +217,21 @@ function SortableColumnRow({ col, skills, skillsLoading, cardCount, reducedMotio
                   <input type="checkbox" checked={col.lockModel === true} onChange={(e) => onPatch(lockModelPatch(e.target.checked))} />
                   {t("columns.lockModel")}
                 </label>
-                <label className="fresh-session flex items-center gap-2 text-xs" title={t("columns.freshSessionHint")}>
-                  <input
-                    type="checkbox"
-                    checked={col.freshSession === true}
-                    onChange={(e) => onPatch(freshSessionPatch(e.target.checked))}
-                  />
-                  {t("columns.freshSession")}
-                </label>
+                <div className="fresh-session flex items-center gap-2 text-xs" title={t("columns.freshSessionHint")}>
+                  <Label htmlFor={`session-${col.key}`}>{t("columns.freshSession")}</Label>
+                  <Select value={sessionModeOf(col)} onValueChange={(v) => onPatch(sessionModePatch(v as SessionMode))}>
+                    <SelectTrigger id={`session-${col.key}`} className="w-32">
+                      <SelectValue>{t(`columns.session.${sessionModeOf(col)}`)}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SESSION_MODES.map((m) => (
+                        <SelectItem key={m} value={m}>
+                          {t(`columns.session.${m}`)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <div className="grid gap-1.5 sm:col-span-2">
                 <Label htmlFor={`instructions-${col.key}`}>{t("columns.instructions")}</Label>

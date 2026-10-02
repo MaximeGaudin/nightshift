@@ -11,6 +11,7 @@
 // FAKE_QUICK_SLOW (sleeps ~5 s) or FAKE_QUICK_PROGRESS (emits a progress marker 1/2); otherwise success echoing it.
 // FAKE_EXTRA_OUTPUT, when set, is a JSON object merged into the structured output of card runs.
 // FAKE_ARGS_LOG, when set, receives one JSON line per run: { title, resumed, continuing, resumeId, model, ... }.
+// A card titled "tokens-<n>" reports n context tokens in its assistant usage; "usage-multi" reports several (see usageOf).
 // FAKE_UNKNOWN_SESSION in the prompt of a continuing run answers like claude for a session it does not have.
 import { appendFileSync } from "node:fs";
 
@@ -68,6 +69,20 @@ emit({
     ],
   },
 });
+// Context size: "tokens-<n>" reports n tokens on its own assistant message; "usage-multi" reports two own messages
+// (the last one wins, a missing field counts as 0) around a subagent one that must be ignored.
+const usageOf = (usage: object, extra: object = {}) => ({
+  type: "assistant",
+  ...extra,
+  message: { content: [{ type: "text", text: "usage" }], usage },
+});
+const tokensTitle = title.match(/^tokens-(\d+)/);
+if (tokensTitle) emit(usageOf({ input_tokens: 1, cache_read_input_tokens: Number(tokensTitle[1]) - 1 }));
+if (title.startsWith("usage-multi")) {
+  emit(usageOf({ input_tokens: 10, cache_read_input_tokens: 20, cache_creation_input_tokens: 30 }));
+  emit(usageOf({ input_tokens: 999999 }, { parent_tool_use_id: "toolu_1" }));
+  emit(usageOf({ cache_read_input_tokens: 7 }));
+}
 const todos = (...status: string[]) => ({
   type: "assistant",
   message: {

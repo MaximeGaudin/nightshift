@@ -20,8 +20,11 @@ export interface Column {
   maxParallel?: number;
   /** Single grapheme shown instead of the type icon; absent = type icon. */
   emoji?: string;
-  /** Skill columns only: start a new Claude session instead of continuing the card's. Never stored as false. */
-  freshSession?: true;
+  /**
+   * Skill columns only. Absent: continue the card's Claude session. `true`: always start a new one.
+   * `"auto"`: decide per run from the carried context size and age. Never stored as false.
+   */
+  freshSession?: true | "auto";
 }
 
 export type RunStatus = "success" | "error" | "cancelled" | "question";
@@ -37,6 +40,8 @@ export interface LastRun {
   questions?: string[];
   costUsd?: number;
   sessionId?: string;
+  /** Context size (input + cache read + cache creation tokens) of the run's last own assistant message; absent when unknown. */
+  contextTokens?: number;
   /** Skill name applied in the session; needed so a second feedback in an inert column keeps the reference skill. */
   skill?: string;
 }
@@ -295,6 +300,10 @@ export interface Settings {
   /** Play a sound when a card needs human attention. */
   soundNotifications: boolean;
   language: LanguageSetting;
+  /** Auto fresh-session mode: the largest carried context (tokens) still worth continuing. */
+  carryMaxTokens: number;
+  /** Auto fresh-session mode: the oldest last run (minutes) still worth continuing; the prompt cache lifetime. */
+  carryMaxAgeMinutes: number;
 }
 
 export interface SkillInfo {
