@@ -2,6 +2,7 @@ import { existsSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import type { Server, ServerWebSocket } from "bun";
+import { dependencyCycle, describeCycle, releaseReason, resolveDependencyRefs, unmetDependencies } from "../shared/dependencies.ts";
 import { describeModelChanges, diffModels, validateModelsStrict } from "../shared/models.ts";
 import { normalizeSkipColumnIds, skippedColumns } from "../shared/skip.ts";
 import {
@@ -105,6 +106,8 @@ export function startServer({ port, development, agents = true }: { port: number
     if (!Array.isArray(v) || v.some((x) => typeof x !== "string")) throw new Error("skipColumnIds must be an array of strings");
     return v;
   };
+  /** Optional dependsOn: undefined when absent or null, otherwise checked by `resolveDependencyRefs`. */
+  const optDependsOn = (b: Raw): unknown => (b.dependsOn == null ? undefined : b.dependsOn);
   const reqString = (b: Raw, key: string): string => {
     const v = optString(b, key);
     if (v === undefined) throw new Error(`${key} is required`);
@@ -127,12 +130,15 @@ export function startServer({ port, development, agents = true }: { port: number
       description,
       columnId,
       skipInput,
+      dependsOnInput,
       historyText,
-    }: { title?: string; description?: string; columnId?: string; skipInput?: string[]; historyText?: string },
+    }: { title?: string; description?: string; columnId?: string; skipInput?: string[]; dependsOnInput?: unknown; historyText?: string },
   ): Card => {
     const now = new Date().toISOString();
     if (!columnId || !p.column(columnId)) throw new Error("Unknown column");
     const skipColumnIds = normalizeSkipColumnIds(p.board.columns, skipInput);
+    const dependsOn = dependsOnInput === undefined ? [] : resolveDependencyRefs(p.board, dependsOnInput);
+    if (dependsOn.length > 0 && columnId !== BACKLOG_COLUMN_ID) throw new Error("dependsOn requires the Backlog column");
     return p.mutate((board) => {
       const card: Card = {
         id: newId("card"),
@@ -141,6 +147,7 @@ export function startServer({ port, development, agents = true }: { port: number
         description: description ?? "",
         columnId,
         ...(skipColumnIds ? { skipColumnIds } : {}),
+        ...(dependsOn.length > 0 ? { dependsOn } : {}),
         createdAt: now,
         updatedAt: now,
         enteredColumnAt: now,
@@ -149,7 +156,9 @@ export function startServer({ port, development, agents = true }: { port: number
       board.nextCardNumber += 1;
       p.addHistory(card, "created", historyText ?? `Created in ${p.column(columnId)?.name}`, columnId);
       board.cards.push(card);
-      p.addQueued(card, board);
+      // Every dependency already in Done: the card leaves Backlog right away.
+      if (card.dependsOn && unmetDependencies(board, card).length === 0) p.releaseDependencies(board, card, releaseReason(board, card));
+      else p.addQueued(card, board);
       return card;
     });
   };
@@ -268,6 +277,7 @@ export function startServer({ port, development, agents = true }: { port: number
             description: optString(b, "description"),
             columnId: optString(b, "columnId") ?? p.board.columns[0]?.id,
             skipInput: optSkipIds(b),
+            dependsOnInput: optDependsOn(b),
           });
           return { id: card.id, number: card.number };
         }),
@@ -281,6 +291,7 @@ export function startServer({ port, development, agents = true }: { port: number
           if (!title) throw new Error("title must not be empty");
           const description = optString(b, "description") ?? "";
           const skipInput = optSkipIds(b);
+          const dependsOnInput = optDependsOn(b);
           const source = optString(b, "source")?.trim() ?? "";
           if (source.length > 100) throw new Error("source must be at most 100 characters");
           const path = resolve(raw);
@@ -295,6 +306,7 @@ export function startServer({ port, development, agents = true }: { port: number
             description,
             columnId: BACKLOG_COLUMN_ID,
             skipInput,
+            dependsOnInput,
             historyText: source ? `Created in ${BACKLOG_COLUMN_NAME} by ${source}` : `Created in ${BACKLOG_COLUMN_NAME}`,
           });
           return json({ id: card.id, number: card.number, ref: cardRef(card) }, 201);
@@ -307,6 +319,7 @@ export function startServer({ port, development, agents = true }: { port: number
           const description = optString(b, "description");
           const skipInput = optSkipIds(b);
           const hasModels = b.models !== undefined;
+          const dependsOnInput = optDependsOn(b);
           const modelsCheck = validateModelsStrict(b.models);
           if (!modelsCheck.ok) throw new Error(modelsCheck.error);
           p.mutate((board) => {
@@ -315,7 +328,9 @@ export function startServer({ port, development, agents = true }: { port: number
             if (title !== undefined) card.title = title;
             if (description !== undefined) card.description = description;
             card.updatedAt = new Date().toISOString();
-            if (title !== undefined || description !== undefined || (skipInput === undefined && !hasModels))
+            if (dependsOnInput !== undefined && card.columnId !== BACKLOG_COLUMN_ID)
+              throw new Error("Dependencies can only be edited in Backlog");
+            if (title !== undefined || description !== undefined || (skipInput === undefined && !hasModels && dependsOnInput === undefined))
               p.addHistory(card, "edited", "Edited by user");
             if (hasModels) {
               const changes = diffModels(card.models, modelsCheck.models);
@@ -333,12 +348,42 @@ export function startServer({ port, development, agents = true }: { port: number
                 p.addHistory(card, "edited", names.length > 0 ? `Skipped columns: ${names.join(", ")}` : "Skipped columns cleared");
               }
             }
+            if (dependsOnInput !== undefined) {
+              const ids = resolveDependencyRefs(board, dependsOnInput, card.id);
+              const cycle = dependencyCycle(board, card.id, ids);
+              if (cycle) throw new Error(describeCycle(board, cycle));
+              const had = !!card.dependsOn;
+              if (ids.join("\n") !== (card.dependsOn ?? []).join("\n")) {
+                if (ids.length > 0) card.dependsOn = ids;
+                else delete card.dependsOn;
+                const refs = ids.flatMap((id) => {
+                  const dep = p.card(id);
+                  return dep ? [cardRef(dep)] : [];
+                });
+                p.addHistory(card, "edited", refs.length > 0 ? `Dependencies: ${refs.join(", ")}` : "Dependencies cleared");
+              }
+              // Nothing left to wait for (all in Done, or the list was cleared): the card leaves Backlog now.
+              if ((had || ids.length > 0) && unmetDependencies(board, card).length === 0)
+                p.releaseDependencies(board, card, releaseReason(board, card));
+            }
           });
         }),
         DELETE: h((b, url, req) => {
           const p = project(b, url);
           p.mutate((board) => {
+            const gone = board.cards.find((c) => c.id === req.params.id);
             board.cards = board.cards.filter((c) => c.id !== req.params.id);
+            if (!gone) return;
+            // A deleted dependency counts as met: drop it from every card waiting for it.
+            for (const card of board.cards) {
+              if (!card.dependsOn?.includes(gone.id)) continue;
+              const rest = card.dependsOn.filter((id) => id !== gone.id);
+              if (rest.length > 0) card.dependsOn = rest;
+              else delete card.dependsOn;
+              p.addHistory(card, "edited", `Dependency ${cardRef(gone)} deleted`);
+              if (card.columnId === BACKLOG_COLUMN_ID && unmetDependencies(board, card).length === 0)
+                p.releaseDependencies(board, card, releaseReason(board, card));
+            }
           });
           removeScreenshots(req.params.id);
           orch.purgeCard(p, req.params.id);
