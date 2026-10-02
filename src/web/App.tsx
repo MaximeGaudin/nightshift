@@ -289,7 +289,7 @@ export function App() {
           )}
         </div>
       )}
-      <Board snap={snap} onOpen={setOpenCard} guard={guard} />
+      <Board snap={snap} onOpen={setOpenCard} onEditColumns={() => setModal("columns")} guard={guard} />
 
       {card && (
         <CardModal

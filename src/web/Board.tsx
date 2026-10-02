@@ -24,6 +24,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { MoreHorizontal, Plus } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { isHeld, unmetDependencies } from "../shared/dependencies.ts";
@@ -48,6 +49,7 @@ import {
 } from "./boardDnd.ts";
 import { CardTile } from "./CardTile.tsx";
 import { CompactColumnBand, compactColumnTitle, DROP_TARGET, isCompactColumn, STRIP_COLUMN, WIDE_COLUMN } from "./compactColumn.tsx";
+import { IconButton } from "./components/icon-button.tsx";
 import { Badge } from "./components/ui/badge.tsx";
 import { DoneColumn } from "./DoneColumn.tsx";
 import { readDoneCollapsed, sortDoneCards, writeDoneCollapsed } from "./doneColumn.ts";
@@ -135,10 +137,13 @@ const noReorder: SortingStrategy = () => null;
 export function Board({
   snap,
   onOpen,
+  onEditColumns,
   guard,
 }: {
   snap: ProjectSnapshot;
   onOpen: (id: string) => void;
+  /** Opens the columns editor (the "…" of a column header). */
+  onEditColumns?: () => void;
   guard: (p: Promise<unknown>) => void;
 }) {
   const { t } = useT();
@@ -367,14 +372,14 @@ export function Board({
                 <CompactColumnBand col={col} onAdd={() => setExpanded(col.id)} />
               ) : (
                 <>
-                  <header className="column-head flex min-w-0 items-center gap-2 px-2 pt-1 pb-2">
+                  <header className="column-head group/head flex min-w-0 items-center gap-2 px-1.5 pt-0.5 pb-2">
                     <div className="column-title flex max-w-[60%] min-w-0 shrink-0 items-center gap-2">
                       <ColumnGlyph col={col} />
                       <h2 className="truncate text-[13px] font-medium">{col.name}</h2>
                       <span className="count text-xs text-muted-foreground tabular-nums">{colCards.length}</span>
                       {col.type === "skill" && (
                         <span
-                          className="column-parallel rounded-sm border px-1.5 text-xs text-muted-foreground tabular-nums"
+                          className="column-parallel rounded-full border px-1.5 text-[11px] leading-4 text-muted-foreground tabular-nums"
                           title={t("board.column.parallelTitle")}
                         >
                           {colCards.filter((c) => snap.live[c.id] === "running").length} / {columnMaxParallel(col)}
@@ -383,13 +388,14 @@ export function Board({
                     </div>
                     {col.type === "skill" ? (
                       <div className="column-badges ml-auto flex min-w-0 gap-1">
-                        <Badge variant="default" className="badge skill min-w-0 shrink font-mono" title={col.instructions || undefined}>
+                        <Badge variant="default" dot="primary" className="badge skill min-w-0 shrink" title={col.instructions || undefined}>
                           <span className="truncate">{col.skill || t("board.column.noSkill")}</span>
                         </Badge>
                         {col.model && (
                           <Badge
                             variant="outline"
-                            className="badge model font-mono text-muted-foreground"
+                            dot="muted"
+                            className="badge model text-muted-foreground"
                             title={t("board.column.model", { model: col.model })}
                           >
                             {col.model}
@@ -401,6 +407,7 @@ export function Board({
                         {t("board.column.inert")}
                       </Badge>
                     )}
+                    <ColumnHeadActions onEdit={onEditColumns} onAdd={() => setExpanded(col.id)} />
                   </header>
                   <SortableContext items={colCards.map((c) => c.id)} strategy={verticalListSortingStrategy}>
                     <div className="cards flex min-h-5 flex-col gap-1.5 overflow-y-auto p-0.5">
@@ -440,6 +447,32 @@ export function Board({
         {activeCard ? <div className="cursor-grabbing rotate-1 shadow-xs">{tile(activeCard)}</div> : null}
       </DragOverlay>
     </DndContext>
+  );
+}
+
+/** "…" and "+" of a column header: shown on hover or focus, kept out of the drag sensors. */
+function ColumnHeadActions({ onEdit, onAdd }: { onEdit?: () => void; onAdd: () => void }) {
+  const { t } = useT();
+  const stop = (e: { stopPropagation: () => void }) => e.stopPropagation();
+  const reveal =
+    "size-6 text-muted-foreground opacity-0 hover:text-foreground group-hover/head:opacity-100 group-focus-within/head:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100";
+  return (
+    <div className="column-actions flex shrink-0 items-center gap-0.5">
+      {onEdit && (
+        <IconButton
+          label={t("board.column.edit")}
+          className={cn("column-edit", reveal)}
+          onPointerDown={stop}
+          onKeyDown={stop}
+          onClick={onEdit}
+        >
+          <MoreHorizontal size={14} strokeWidth={1.75} aria-hidden="true" focusable="false" />
+        </IconButton>
+      )}
+      <IconButton label={t("board.column.add")} className={cn("column-add", reveal)} onPointerDown={stop} onKeyDown={stop} onClick={onAdd}>
+        <Plus size={14} strokeWidth={1.75} aria-hidden="true" focusable="false" />
+      </IconButton>
+    </div>
   );
 }
 

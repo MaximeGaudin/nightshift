@@ -56,6 +56,8 @@ export const board = {
   "board.column.model": "Model: {model}",
   "board.column.inert": "inert",
   "board.column.empty": "No cards. Drag a card here or add one.",
+  "board.column.edit": "Edit columns",
+  "board.column.add": "Add a card",
   "board.picker.intro.before": "One folder = one kanban. The state is stored in ",
   "board.picker.intro.after": " at the root of the folder.",
   "board.picker.recent": "Recent projects",

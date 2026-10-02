@@ -58,6 +58,8 @@ export const board: Record<keyof typeof enboard, string> = {
   "board.column.model": "Modèle : {model}",
   "board.column.inert": "inerte",
   "board.column.empty": "Aucune fiche. Glissez une fiche ici ou ajoutez-en une.",
+  "board.column.edit": "Modifier les colonnes",
+  "board.column.add": "Ajouter une fiche",
   "board.picker.intro.before": "Un dossier = un kanban. L'état est stocké dans ",
   "board.picker.intro.after": " à la racine du dossier.",
   "board.picker.recent": "Projets récents",
