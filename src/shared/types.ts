@@ -122,6 +122,8 @@ export interface Board {
   cards: Card[];
   /** Number the next created card receives. Always greater than every card number. */
   nextCardNumber: number;
+  /** Max agents (card jobs and quick runs) running at once in this project. Absent until set from the UI. */
+  maxParallel?: number;
   /** Skill names pinned in the command palette for quick runs. Absent when none. */
   favoriteSkills?: string[];
 }
@@ -133,12 +135,26 @@ export function cardRef(card: Pick<Card, "number">): string {
 
 /** Parallel agents in a skill column when `maxParallel` is absent. */
 export const DEFAULT_COLUMN_PARALLEL = 1;
-/** Upper bound for any parallel limit (column or global). */
+/** Upper bound for any parallel limit (column or project). */
 export const MAX_PARALLEL = 32;
+/** Project cap when neither the board nor the legacy global setting gives one. */
+export const DEFAULT_PROJECT_PARALLEL = 3;
 
 /** Max agents running at once in a column. Never reads the global settings. */
 export function columnMaxParallel(col: Pick<Column, "maxParallel">): number {
   return col.maxParallel ?? DEFAULT_COLUMN_PARALLEL;
+}
+
+/**
+ * Normalizes a raw project `maxParallel` value: finite numbers (or non-blank numeric strings) are floored and
+ * clamped to [1, MAX_PARALLEL]; anything else => undefined (field absent). Unlike columns, 0 becomes 1.
+ */
+export function normalizeProjectParallel(raw: unknown): number | undefined {
+  if (typeof raw !== "number" && typeof raw !== "string") return undefined;
+  if (typeof raw === "string" && !raw.trim()) return undefined;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return undefined;
+  return Math.max(1, Math.min(MAX_PARALLEL, Math.floor(n)));
 }
 
 /**
@@ -259,7 +275,6 @@ export const LANGUAGE_SETTINGS = ["auto", "en", "fr"] as const;
 export type LanguageSetting = (typeof LANGUAGE_SETTINGS)[number];
 
 export interface Settings {
-  maxParallel: number;
   claudePath: string;
   permissionMode: PermissionMode;
   model: string;
@@ -354,6 +369,8 @@ export interface ProjectSnapshot {
   /** Template skills that could not be copied into a newly created project; only in the open response. */
   templateSkillsNotCopied?: string[];
   board: Board;
+  /** Effective agent cap of this project: the board's value, else the legacy global setting, else 3. */
+  maxParallel: number;
   live: Record<string, LiveStatus>;
   /** Pid of another Nightshift process that runs this project's agents; this one does not. */
   lockedBy?: number;

@@ -48,7 +48,7 @@ bun start ~/code/my-project                                  # open a board for 
 - **Inert column**: cards just sit there.
 - **Backlog column**: every board has a system Backlog column (id `col_backlog`, name `Backlog`), always first. It is inert, cannot be removed or reordered, and is recreated if missing; only its emoji can be edited. New cards from other programs land here (see below).
 - **Done column**: every board has a system Done column (id `col_done`), always last. It is inert, cannot be removed or reordered, and is recreated if missing; agents moving a card into it raise no attention notification.
-- **Skill column**: every card that enters it is processed by `claude -p` running the chosen skill, in the project folder. Each skill column has its own parallel agent limit (default 1, set in the columns editor); a global cap (default 3, shared by all open projects) bounds the total number of running agents.
+- **Skill column**: every card that enters it is processed by `claude -p` running the chosen skill, in the project folder. Each skill column has its own parallel agent limit (default 1, set in the columns editor); a per-project cap (default 3, set in Settings > This project and saved as `maxParallel` in the project's `nightshift.json`) bounds the agents running in that project; projects never block each other.
 - When done, the agent returns structured output (`--json-schema`): updated title/description, `move` (`next`, `stay` or a column id) and a summary. Nightshift applies it to the card and, if moved into another skill column, the next skill starts automatically.
 - **One session per card**: the Claude session a card starts in its first skill column is continued by every later column (`claude --resume`), so plan, implement, review and merge keep the context of the earlier steps. Tick "Fresh session" on a column to start a new session there instead; the columns after it continue that new one. If the card's session cannot be resumed (deleted, or created on another machine), the step starts a new one.
 - **Questions**: when an agent is blocked on human decisions, it returns all its `questions` at once and the card waits in its column. Answering in the card resumes the same Claude session (`claude --resume`) with every Q/A pair. `AskUserQuestion` is disabled for agents.
@@ -105,7 +105,7 @@ The server listens on `127.0.0.1` only, and rejects requests whose `Host` or `Or
 ## Files
 
 - `<project>/nightshift.json`: columns and cards. Commit it in your projects. This repository ignores it (`.gitignore`): it is the dogfooding board of Nightshift itself. External edits (e.g. `git pull`) are picked up live.
-- `~/.nightshift/settings.json`: global settings (global cap on parallel agents, permission mode, model, extra `claude` args, recent projects).
+- `~/.nightshift/settings.json`: global settings (permission mode, model, extra `claude` args, recent projects).
 - `~/.nightshift/logs/`: last agent log per card (removed with the card).
 - `~/.nightshift/screenshots/`: card screenshots.
 - `~/.nightshift/locks/`: one lock per open project folder.

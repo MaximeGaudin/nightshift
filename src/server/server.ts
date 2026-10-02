@@ -16,6 +16,7 @@ import {
   isDoneColumn,
   normalizeColumnEmoji,
   normalizeColumnParallel,
+  normalizeProjectParallel,
   type ServerEvent,
 } from "../shared/types.ts";
 import { safeHttpUrl } from "../shared/urls.ts";
@@ -213,8 +214,14 @@ export function startServer({ port, development, agents = true }: { port: number
       "/api/board": {
         PUT: h((b, url) => {
           const p = project(b, url);
+          let projectParallel: number | undefined;
+          if ("maxParallel" in b) {
+            projectParallel = normalizeProjectParallel(b.maxParallel);
+            if (projectParallel === undefined) throw new Error("maxParallel must be a number");
+          }
           p.mutate((board) => {
             if (typeof b.name === "string" && b.name.trim()) board.name = b.name.trim();
+            if (projectParallel !== undefined) board.maxParallel = projectParallel;
             if (Array.isArray(b.columns)) {
               const userCols: Column[] = b.columns.map((c: unknown, i: number) => {
                 if (!isRaw(c)) throw new Error(`Column ${i + 1} must be an object`);
