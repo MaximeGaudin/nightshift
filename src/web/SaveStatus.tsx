@@ -24,18 +24,51 @@ export async function trackSave(
   return ok;
 }
 
+/**
+ * One indicator for successive saves: only the latest one drives it, so an earlier save that answers
+ * while a newer one runs neither shows "saved" too early nor clears "saving".
+ */
+export function createSaveTracker({
+  set,
+  holdMs = SAVED_HOLD_MS,
+  setTimer = setTimeout,
+  clearTimer = clearTimeout,
+}: {
+  set: (state: SaveState) => void;
+  holdMs?: number;
+  setTimer?: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>;
+  clearTimer?: (timer: ReturnType<typeof setTimeout> | undefined) => void;
+}) {
+  let latest = 0;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const track = (run: () => Promise<boolean>) => {
+    clearTimer(timer);
+    const id = ++latest;
+    const current = () => id === latest;
+    return trackSave(
+      run,
+      (state) => {
+        if (current()) set(state);
+      },
+      (reset) => {
+        if (current()) timer = setTimer(reset, holdMs);
+      },
+    );
+  };
+  const dispose = () => {
+    latest++;
+    clearTimer(timer);
+  };
+  return { track, dispose };
+}
+
 /** State for a `SaveStatus` indicator; `track` wraps a save that resolves to whether it succeeded. */
 export function useSaveStatus(holdMs = SAVED_HOLD_MS) {
   const [state, setState] = useState<SaveState>("idle");
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useEffect(() => () => clearTimeout(timer.current), []);
-  const track = (run: () => Promise<boolean>) => {
-    clearTimeout(timer.current);
-    return trackSave(run, setState, (reset) => {
-      timer.current = setTimeout(reset, holdMs);
-    });
-  };
-  return { state, track };
+  const tracker = useRef<ReturnType<typeof createSaveTracker> | undefined>(undefined);
+  tracker.current ??= createSaveTracker({ set: setState, holdMs });
+  useEffect(() => () => tracker.current?.dispose(), []);
+  return { state, track: tracker.current.track };
 }
 
 /** Polite live region next to a block title: always mounted so screen readers announce the change. */

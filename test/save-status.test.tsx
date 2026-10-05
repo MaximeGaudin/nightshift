@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import { type SaveState, SaveStatus, trackSave } from "../src/web/SaveStatus.tsx";
+import { createSaveTracker, type SaveState, SaveStatus, trackSave } from "../src/web/SaveStatus.tsx";
 
 function run(result: boolean) {
   const states: SaveState[] = [];
@@ -38,4 +38,30 @@ test("the indicator is a polite status region, empty when idle", () => {
 test("the indicator shows the saving and saved labels", () => {
   expect(renderToStaticMarkup(<SaveStatus state="saving" />)).toMatch(/Enregistrement…|Saving…/);
   expect(renderToStaticMarkup(<SaveStatus state="saved" />)).toMatch(/Enregistré|Saved/);
+});
+
+test("only the latest of overlapping saves drives the indicator", async () => {
+  const states: SaveState[] = [];
+  const timers: Array<() => void> = [];
+  const tracker = createSaveTracker({
+    set: (s) => states.push(s),
+    setTimer: (fn) => {
+      timers.push(fn);
+      return 0 as unknown as ReturnType<typeof setTimeout>;
+    },
+    clearTimer: () => {},
+  });
+  let finishFirst: (ok: boolean) => void = () => {};
+  let finishSecond: (ok: boolean) => void = () => {};
+  const first = tracker.track(() => new Promise<boolean>((r) => (finishFirst = r)));
+  const second = tracker.track(() => new Promise<boolean>((r) => (finishSecond = r)));
+  finishFirst(false);
+  expect(await first).toBe(false);
+  expect(states).toEqual(["saving", "saving"]);
+  finishSecond(true);
+  expect(await second).toBe(true);
+  expect(states).toEqual(["saving", "saving", "saved"]);
+  expect(timers).toHaveLength(1);
+  timers[0]?.();
+  expect(states.at(-1)).toBe("idle");
 });
