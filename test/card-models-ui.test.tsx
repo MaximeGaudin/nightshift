@@ -136,9 +136,9 @@ test("card models: editor markup has rows, values, datalist, clear and unused la
 test("card models: block is folded by default and the summary counts saved overrides", () => {
   const two = editorHtml({ ...baseCard, models: { implement: "haiku", ghost: "opus" } } as Card);
   expect(two).toMatch(/^<details(?![^>]*\sopen)/);
-  expect(two).toMatch(/<summary[^>]*>Models per skill \(2\)<\/summary>/);
+  expect(two).toMatch(/<summary[^>]*>Models per skill \(2\)<span[^>]*><\/span><\/summary>/);
   expect(two.indexOf("Clear all")).toBeGreaterThan(two.indexOf("</summary>"));
-  expect(editorHtml(baseCard)).toMatch(/<summary[^>]*>Models per skill<\/summary>/);
+  expect(editorHtml(baseCard)).toMatch(/<summary[^>]*>Models per skill<span[^>]*><\/span><\/summary>/);
 });
 
 test("card models: nothing is rendered without skill columns or entries", () => {

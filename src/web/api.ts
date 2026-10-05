@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { FlowState } from "../shared/flow.ts";
 import type { CardImageStored, CardImageUpload } from "../shared/screenshots.ts";
 import type { LogLine, ProjectSnapshot, ServerEvent, Settings, SkillInfo, WorktreePolicy } from "../shared/types.ts";
+import type { QuotaSnapshot } from "../shared/usage.ts";
 
 async function call<T = unknown>(method: string, url: string, body?: unknown): Promise<T> {
   const res = await fetch(url, {
@@ -27,6 +28,7 @@ const q = (project: string) => `project=${encodeURIComponent(project)}`;
 
 export const api = {
   settings: () => call<Settings>("GET", "/api/settings"),
+  usage: () => call<{ usage: QuotaSnapshot | null }>("GET", "/api/usage"),
   saveSettings: (s: Partial<Settings>) => call<Settings>("PUT", "/api/settings", s),
   open: (path: string) => call<ProjectSnapshot>("POST", "/api/projects/open", { path }),
   fs: (dir?: string) =>
@@ -147,4 +149,17 @@ export function useSettings(onError?: (message: string) => void) {
   }, []);
   useServerEvents((e) => e.type === "settings" && setSettings(e.settings));
   return settings;
+}
+
+/** Claude quota snapshot (account-wide): loaded once, then pushed by the server on every change. */
+export function useUsage(): QuotaSnapshot | null {
+  const [usage, setUsage] = useState<QuotaSnapshot | null>(null);
+  useEffect(() => {
+    api
+      .usage()
+      .then((r) => setUsage((cur) => cur ?? r.usage))
+      .catch(() => {});
+  }, []);
+  useServerEvents((e) => e.type === "usage" && setUsage(e.usage));
+  return usage;
 }

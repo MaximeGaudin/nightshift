@@ -34,6 +34,7 @@ import { Markdown } from "./markdown.tsx";
 import { NextColumnButton } from "./NextColumnButton.tsx";
 import { notifyError } from "./notify.ts";
 import { RunProgress } from "./RunProgress.tsx";
+import { SaveStatus, useSaveStatus } from "./SaveStatus.tsx";
 import { renderCardImage } from "./Screenshot.tsx";
 import { SkipColumnsPicker } from "./SkipColumnsPicker.tsx";
 import { TestPanel } from "./TestPanel.tsx";
@@ -107,6 +108,7 @@ export function DependenciesSection({
   const serverDeps = card.dependsOn ?? [];
   const [deps, setDeps] = useState(serverDeps);
   const [error, setError] = useState<string | null>(null);
+  const saveStatus = useSaveStatus();
   const depsKey = serverDeps.join(",");
   // biome-ignore lint/correctness/useExhaustiveDependencies: depsKey is the trigger (the server list changed); serverDeps is derived from it
   useEffect(() => setDeps(serverDeps), [depsKey]);
@@ -118,7 +120,11 @@ export function DependenciesSection({
   });
   return (
     <section className="card-deps flex flex-col gap-1.5 text-xs">
-      <span className="font-medium text-muted-foreground">{t("card.deps.heading")}</span>
+      <span className="font-medium text-muted-foreground">
+        {t("card.deps.heading")}
+        {editable && <SaveStatus state={saveStatus.state} />}
+      </span>
+      {editable && <span className="card-deps-hint text-muted-foreground">{t("card.autoSaved")}</span>}
       {listed.length > 0 && (
         <ul className="card-deps-list m-0 flex list-none flex-col gap-0.5 p-0">
           {listed.map((dep) => {
@@ -150,9 +156,11 @@ export function DependenciesSection({
           onChange={(ids) => {
             setDeps(ids);
             setError(null);
-            void saveDependencies({ project, cardId: card.id, ids, onError: setError, update }).then((ok) => {
-              if (!ok) setDeps(serverDeps);
-            });
+            void saveStatus
+              .track(() => saveDependencies({ project, cardId: card.id, ids, onError: setError, update }))
+              .then((ok) => {
+                if (!ok) setDeps(serverDeps);
+              });
           }}
         />
       ) : (
@@ -346,6 +354,7 @@ export function CardModalContent({
   // Skipped columns are saved on each change; the display follows the board snapshot (the server value wins on every update).
   const serverSkip = card.skipColumnIds ?? [];
   const [skip, setSkip] = useState(serverSkip);
+  const skipStatus = useSaveStatus();
   const skipKey = serverSkip.join(",");
   // biome-ignore lint/correctness/useExhaustiveDependencies: skipKey is the trigger (the server list changed); serverSkip is derived from it
   useEffect(() => setSkip(serverSkip), [skipKey]);
@@ -486,11 +495,15 @@ export function CardModalContent({
         <SkipColumnsPicker
           columns={skipOptions}
           value={skip}
+          status={<SaveStatus state={skipStatus.state} />}
+          hint={t("card.autoSaved")}
           onChange={(ids) => {
             setSkip(ids);
-            void saveSkipColumns({ project, cardId: card.id, ids, onError: notifyError }).then((ok) => {
-              if (!ok) setSkip(serverSkip);
-            });
+            void skipStatus
+              .track(() => saveSkipColumns({ project, cardId: card.id, ids, onError: notifyError }))
+              .then((ok) => {
+                if (!ok) setSkip(serverSkip);
+              });
           }}
         />
         <DependenciesSection project={project} card={card} board={board} onOpenCard={onOpenCard} />
