@@ -23,9 +23,9 @@ export function fastForwardSkipIds(columns: Column[], card: Pick<Card, "skipColu
   return normalizeSkipColumnIds(columns, [...(card.skipColumnIds ?? []), ...inert]);
 }
 
-/** Backlog cards fast forward moves out: every one not held by its dependencies, in board order. */
+/** Backlog cards fast forward moves out: every one not held by its dependencies and not a draft, in board order. */
 export function fastForwardCandidates(board: Board): Card[] {
-  return board.cards.filter((c) => c.columnId === BACKLOG_COLUMN_ID && !isHeld(c));
+  return board.cards.filter((c) => c.columnId === BACKLOG_COLUMN_ID && !c.draft && !isHeld(c));
 }
 
 /** Column a fast-forwarded card goes to: the first after the Backlog it does not skip (Done at worst). */

@@ -111,6 +111,8 @@ export interface Card {
   skipColumnIds?: string[];
   /** Ids of the cards this card waits for: it leaves Backlog once they are all in Done. Canonical form: see `normalizeDependsOn`. Absent = none. */
   dependsOn?: string[];
+  /** Draft: the card stays in Backlog until a human moves it or clears the flag; no automatic release touches it. Only ever `true`, and only in Backlog. */
+  draft?: true;
   /** Per-skill model overrides (skill name -> alias or ID). Never `{}`; "default" is never stored. */
   models?: Record<string, string>;
   /** The card's Claude session: a column continues it unless it has `freshSession` (the default for new skill columns). */

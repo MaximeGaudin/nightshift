@@ -89,9 +89,9 @@ export function isHeld(card: Pick<Card, "columnId" | "dependsOn">): boolean {
   return card.columnId === BACKLOG_COLUMN_ID && !!card.dependsOn;
 }
 
-/** A held card whose dependencies are all in Done: it must be released. */
+/** A held card whose dependencies are all in Done: it must be released. A draft is never ready. */
 export function isReady(board: Pick<Board, "cards">, card: Card): boolean {
-  return isHeld(card) && unmetDependencies(board, card).length === 0;
+  return !card.draft && isHeld(card) && unmetDependencies(board, card).length === 0;
 }
 
 /** Column a released card goes to: the first after Backlog it does not skip (Done at worst). */

@@ -122,6 +122,7 @@ const CARD_KEYS = [
   "test",
   "skipColumnIds",
   "dependsOn",
+  "draft",
   "sessionId",
   "history",
   "timeBase",
@@ -242,13 +243,14 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
     if (rawHistory.length > 50) timeBase = replayHistory(timeBase, rawHistory.slice(0, -50), asString(c.createdAt) ?? now());
     const skipColumnIds = normalizeSkipColumnIds(columns, c.skipColumnIds);
     const { models } = sanitizeModels(c.models);
+    const columnId = typeof c.columnId === "string" && colIds.has(c.columnId) ? c.columnId : columns[0]?.id;
     return {
       ...unknownFields(c, CARD_KEYS),
       id: c.id,
       number: 0,
       title: String(c.title ?? ""),
       description: String(c.description ?? ""),
-      columnId: typeof c.columnId === "string" && colIds.has(c.columnId) ? c.columnId : columns[0]?.id,
+      columnId,
       createdAt: asString(c.createdAt) ?? now(),
       updatedAt: asString(c.updatedAt) ?? now(),
       enteredColumnAt: asString(c.enteredColumnAt) ?? asString(c.updatedAt) ?? now(),
@@ -259,6 +261,7 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
         ? { test: { command: c.test.command, ...(c.test.url ? { url: String(c.test.url) } : {}) } }
         : {}),
       ...(skipColumnIds ? { skipColumnIds } : {}),
+      ...(c.draft === true && columnId === BACKLOG_COLUMN_ID ? { draft: true as const } : {}),
       ...(models ? { models } : {}),
       ...(typeof c.sessionId === "string" && c.sessionId ? { sessionId: c.sessionId } : {}),
       history: rawHistory.slice(-50),
@@ -474,6 +477,7 @@ export class Project {
       card.enteredColumnAt = now();
       card.updatedAt = now();
       delete card.pendingAnswer;
+      if (columnId !== BACKLOG_COLUMN_ID) delete card.draft;
       this.addHistory(card, "moved", `${reason}: ${from?.name ?? "?"} → ${col.name}`, columnId);
       this.addQueued(card, board);
     }

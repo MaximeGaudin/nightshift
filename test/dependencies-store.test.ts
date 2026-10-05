@@ -91,3 +91,36 @@ test("releaseDependencies drops dependsOn and follows the skips", () => {
     ["queued", "Queued in Plan"],
   ]);
 });
+
+test("draft: normalizeBoard keeps draft only on Backlog cards and never false", () => {
+  const b = normalizeBoard(
+    {
+      version: 1,
+      name: "t",
+      columns,
+      cards: [
+        card("a", 1, { draft: true }),
+        card("b", 2, { draft: true, columnId: "col_grill" }),
+        card("c", 3, { draft: false }),
+      ],
+      nextCardNumber: 4,
+    },
+    "t",
+  );
+  expect(b.cards.map((c) => "draft" in c)).toEqual([true, false, false]);
+  expect(b.cards[0]?.draft).toBe(true);
+});
+
+test("draft: moveCard out of Backlog removes draft", () => {
+  const dir = tempDir("ns-draft-");
+  writeFileSync(
+    join(dir, "nightshift.json"),
+    JSON.stringify({ version: 1, name: "t", columns, cards: [card("x", 1, { draft: true })], nextCardNumber: 2 }),
+  );
+  const p = new Project(dir);
+  p.mutate((board) => p.moveCard(board, "x", "col_grill"));
+  const x = must(p.card("x"));
+  p.close();
+  expect(x.columnId).toBe("col_grill");
+  expect("draft" in x).toBe(false);
+});

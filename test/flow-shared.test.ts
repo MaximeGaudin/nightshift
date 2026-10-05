@@ -41,3 +41,7 @@ test("fast forward target follows skips", () => {
   expect(fastForwardTarget(columns, fastForwardSkipIds(columns, {}))?.id).toBe("col_grill");
   expect(fastForwardTarget(columns, ["col_grill", "col_impl", "col_totest", "col_merge"])?.id).toBe(DONE_COLUMN_ID);
 });
+
+test("draft: fast forward candidates exclude a draft card", () => {
+  expect(fastForwardCandidates(board([card("a"), card("d", { draft: true }), card("b")])).map((c) => c.id)).toEqual(["a", "b"]);
+});
