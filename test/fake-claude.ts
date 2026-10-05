@@ -11,6 +11,7 @@
 // FAKE_QUICK_SLOW (sleeps ~5 s) or FAKE_QUICK_PROGRESS (emits a progress marker 1/2); otherwise success echoing it.
 // FAKE_EXTRA_OUTPUT, when set, is a JSON object merged into the structured output of card runs.
 // FAKE_ARGS_LOG, when set, receives one JSON line per run: { title, resumed, continuing, resumeId, model, ... }.
+// A card titled "rate-limit" emits a rate_limit_event (5 h 38 %, 7 d 88 %); "rate-limit-bad" emits a malformed one.
 // A card titled "tokens-<n>" reports n context tokens in its assistant usage; "usage-multi" reports several (see usageOf).
 // FAKE_UNKNOWN_SESSION in the prompt of a continuing run answers like claude for a session it does not have.
 import { appendFileSync } from "node:fs";
@@ -60,6 +61,26 @@ if (continuing && prompt.includes("FAKE_UNKNOWN_SESSION")) {
   process.exit(1);
 }
 emit({ type: "system", subtype: "init", session_id: "sess-1", model: "fake" });
+if (title === "rate-limit") {
+  emit({
+    type: "rate_limit_event",
+    rate_limit_info: {
+      status: "allowed_warning",
+      resetsAt: 1791237600,
+      rateLimitType: "seven_day",
+      utilization: 0.88,
+      isUsingOverage: false,
+      surpassedThreshold: 0.75,
+      unifiedWindows: {
+        five_hour: { utilization: 0.38, resetsAt: 1791193200 },
+        seven_day: { utilization: 0.88, resetsAt: 1791237600 },
+      },
+    },
+  });
+}
+if (title === "rate-limit-bad") {
+  emit({ type: "rate_limit_event", rate_limit_info: { unifiedWindows: { five_hour: { utilization: "x" } }, status: 42 } });
+}
 emit({
   type: "assistant",
   message: {

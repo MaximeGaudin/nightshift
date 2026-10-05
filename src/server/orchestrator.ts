@@ -35,6 +35,7 @@ import { getSettings, legacyMaxParallel, NIGHTSHIFT_HOME, onSettingsChange, reme
 import { findSkill } from "./skills.ts";
 import { isRaw, needsRun, newId, Project, type Raw } from "./store.ts";
 import { copyTemplateSkills } from "./templates.ts";
+import { recordRateLimit } from "./usage.ts";
 
 /** One block of an assistant message in `claude -p --output-format stream-json` (only what Nightshift reads). */
 interface StreamBlock {
@@ -52,6 +53,7 @@ interface StreamEvent {
   model?: string;
   parent_tool_use_id?: string | null;
   message?: { content?: StreamBlock[]; usage?: unknown };
+  rate_limit_info?: unknown;
   is_error?: boolean;
   result?: unknown;
   total_cost_usd?: number;
@@ -1242,6 +1244,10 @@ export class Orchestrator {
           }
         }
       }
+    } else if (ev.type === "rate_limit_event") {
+      // The quota belongs to the account: any agent's event counts, subagents included.
+      const usage = recordRateLimit(ev.rate_limit_info);
+      if (usage) this.broadcast({ type: "usage", usage });
     } else if (ev.type === "system" && ev.subtype === "init") {
       if (ev.session_id) job.sessionId = ev.session_id;
       target.log("info", `Session ${ev.session_id} (model ${ev.model ?? "default"})`);

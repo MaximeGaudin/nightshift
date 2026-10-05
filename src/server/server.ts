@@ -31,6 +31,7 @@ import { removeScreenshots, resolveScreenshot, storeCardImage } from "./screensh
 import { getSettings, updateSettings } from "./settings.ts";
 import { createSkill, listSkills, readSkill, saveSkill } from "./skills.ts";
 import { BOARD_FILE, COLUMN_KEYS, isRaw, newId, type Project, type Raw, remapColumnId, unknownFields } from "./store.ts";
+import { getUsage } from "./usage.ts";
 
 export function startServer({ port, development, agents = true }: { port: number; development?: boolean; agents?: boolean }) {
   // `bun --hot` re-runs this module on every change. Reuse the orchestrator from the previous run:
@@ -178,6 +179,10 @@ export function startServer({ port, development, agents = true }: { port: number
       "/api/settings": {
         GET: h(() => getSettings()),
         PUT: h((b) => updateSettings(b)),
+      },
+
+      "/api/usage": {
+        GET: h(() => ({ usage: getUsage() })),
       },
 
       "/api/projects/open": {
@@ -556,6 +561,7 @@ export function startServer({ port, development, agents = true }: { port: number
       open(ws) {
         sockets.add(ws);
         ws.send(JSON.stringify({ type: "settings", settings: getSettings() } satisfies ServerEvent));
+        ws.send(JSON.stringify({ type: "usage", usage: getUsage() } satisfies ServerEvent));
       },
       close(ws) {
         sockets.delete(ws);
