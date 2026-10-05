@@ -67,7 +67,7 @@ export function ProjectTabs({
                 )}
                 {waiting > 0 && (
                   <span
-                    className="tab-waiting rounded-full bg-accent px-1.5 text-[11px] leading-4 font-medium text-foreground tabular-nums"
+                    className="tab-waiting rounded-full bg-ok-soft px-1.5 text-[11px] leading-4 font-medium text-ok tabular-nums"
                     title={t("board.tabs.waiting")}
                   >
                     {waiting}
