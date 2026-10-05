@@ -125,6 +125,11 @@ export function CardTile({
             {override.model}
           </Badge>
         )}
+        {card.draft && (
+          <Badge variant="outline" dot="muted" className="draft-badge" title={t("card.draft.hint")}>
+            {t("board.card.draft")}
+          </Badge>
+        )}
         {waitingFor && (
           <Badge
             variant="outline"

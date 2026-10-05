@@ -34,7 +34,15 @@ export const api = {
   fs: (dir?: string) =>
     call<{ dir: string; parent: string | null; dirs: string[] }>("GET", `/api/fs${dir ? `?dir=${encodeURIComponent(dir)}` : ""}`),
   saveBoard: (project: string, patch: object) => call<ProjectSnapshot>("PUT", "/api/board", { project, ...patch }),
-  createCard: (project: string, columnId: string, title: string, description = "", skipColumnIds?: string[], dependsOn?: string[]) =>
+  createCard: (
+    project: string,
+    columnId: string,
+    title: string,
+    description = "",
+    skipColumnIds?: string[],
+    dependsOn?: string[],
+    draft?: boolean,
+  ) =>
     call<{ id: string }>("POST", "/api/cards", {
       project,
       columnId,
@@ -42,6 +50,7 @@ export const api = {
       description,
       ...(skipColumnIds && skipColumnIds.length > 0 ? { skipColumnIds } : {}),
       ...(dependsOn && dependsOn.length > 0 ? { dependsOn } : {}),
+      ...(draft ? { draft: true } : {}),
     }),
   updateCard: (
     project: string,
@@ -51,6 +60,7 @@ export const api = {
       description?: string;
       skipColumnIds?: string[];
       dependsOn?: string[];
+      draft?: boolean;
       models?: Record<string, string> | null;
     },
   ) => call("PATCH", `/api/cards/${id}`, { project, ...patch }),

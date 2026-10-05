@@ -62,6 +62,8 @@ export const card = {
   "card.models.save": "Save models",
   "card.saving": "Saving…",
   "card.saved": "Saved",
+  "card.draft.label": "Draft",
+  "card.draft.hint": "Stays in Backlog: fast forward and dependencies ignore it.",
   "card.autoSaved": "Saved automatically",
   "card.deps.heading": "Dependencies",
   "card.deps.readonly": "Editable only in Backlog",

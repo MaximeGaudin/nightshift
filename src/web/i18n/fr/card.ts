@@ -64,6 +64,8 @@ export const card: Record<keyof typeof enCard, string> = {
   "card.models.save": "Enregistrer les modèles",
   "card.saving": "Enregistrement…",
   "card.saved": "Enregistré",
+  "card.draft.label": "Brouillon",
+  "card.draft.hint": "Reste dans Backlog : fast forward et dépendances l'ignorent.",
   "card.autoSaved": "Enregistré automatiquement",
   "card.deps.heading": "Dépendances",
   "card.deps.readonly": "Modifiables seulement dans Backlog",

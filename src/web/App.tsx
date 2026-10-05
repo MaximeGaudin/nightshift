@@ -429,9 +429,9 @@ export function App() {
           columns={snap.board.columns}
           cards={snap.board.cards}
           initialTitle={newCard.title}
-          onAdd={(title, skip, dependsOn) => {
+          onAdd={(title, skip, dependsOn, draft) => {
             const first = snap.board.columns[0];
-            if (first) guard(api.createCard(snap.path, first.id, title, "", skip, dependsOn));
+            if (first) guard(api.createCard(snap.path, first.id, title, "", skip, dependsOn, draft));
           }}
           onClose={() => setNewCard(null)}
         />

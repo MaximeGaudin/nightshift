@@ -19,6 +19,7 @@ import { attempt, deleteThenClose, sendThenClear } from "./cardActions.ts";
 import { AppDialog } from "./components/app-dialog.tsx";
 import { Alert, AlertDescription } from "./components/ui/alert.tsx";
 import { Button } from "./components/ui/button.tsx";
+import { Checkbox } from "./components/ui/checkbox.tsx";
 import { Input } from "./components/ui/input.tsx";
 import { Label } from "./components/ui/label.tsx";
 import { Skeleton } from "./components/ui/skeleton.tsx";
@@ -171,6 +172,36 @@ export function DependenciesSection({
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
+    </section>
+  );
+}
+
+/** Draft toggle of a Backlog card: a draft never leaves Backlog on its own. Hidden outside Backlog. */
+export function DraftSection({
+  project,
+  card,
+  update = api.updateCard,
+  onError = notifyError,
+}: {
+  project: string;
+  card: Card;
+  update?: (project: string, id: string, patch: { draft: boolean }) => Promise<unknown>;
+  onError?: (message: string) => void;
+}) {
+  const { t } = useT();
+  if (card.columnId !== BACKLOG_COLUMN_ID) return null;
+  return (
+    <section className="card-draft flex flex-col gap-1 text-xs">
+      <Label className="flex items-center gap-2 font-medium text-muted-foreground">
+        <Checkbox
+          checked={!!card.draft}
+          onCheckedChange={(v) => {
+            update(project, card.id, { draft: v === true }).catch((e) => onError(e instanceof Error ? e.message : String(e)));
+          }}
+        />
+        {t("card.draft.label")}
+      </Label>
+      <span className="card-draft-hint text-muted-foreground">{t("card.draft.hint")}</span>
     </section>
   );
 }
@@ -506,6 +537,7 @@ export function CardModalContent({
               });
           }}
         />
+        <DraftSection project={project} card={card} />
         <DependenciesSection project={project} card={card} board={board} onOpenCard={onOpenCard} />
         <CardModelsEditor key={card.id} project={project} card={card} board={board} settings={settings} />
         {asking && lr && (

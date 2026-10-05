@@ -180,7 +180,8 @@ export function startServer({ port, development, agents = true }: { port: number
       p.addHistory(card, "created", historyText ?? `Created in ${p.column(columnId)?.name}`, columnId);
       board.cards.push(card);
       // Every dependency already in Done: the card leaves Backlog right away.
-      if (!card.draft && card.dependsOn && unmetDependencies(board, card).length === 0) p.releaseDependencies(board, card, releaseReason(board, card));
+      if (!card.draft && card.dependsOn && unmetDependencies(board, card).length === 0)
+        p.releaseDependencies(board, card, releaseReason(board, card));
       else p.addQueued(card, board);
       return card;
     });

@@ -3,7 +3,9 @@ import type { Card, Column } from "../shared/types.ts";
 import { skipOptions, submitAddCard } from "./AddCard.tsx";
 import { AppDialog } from "./components/app-dialog.tsx";
 import { Button } from "./components/ui/button.tsx";
+import { Checkbox } from "./components/ui/checkbox.tsx";
 import { Input } from "./components/ui/input.tsx";
+import { Label } from "./components/ui/label.tsx";
 import { DependencyPicker } from "./DependencyPicker.tsx";
 import { useT } from "./i18n/index.ts";
 import { SkipColumnsPicker } from "./SkipColumnsPicker.tsx";
@@ -20,7 +22,7 @@ export function NewCardDialog({
   /** Cards the new one can depend on. */
   cards?: Card[];
   initialTitle?: string;
-  onAdd: (title: string, skip: string[], dependsOn: string[]) => void;
+  onAdd: (title: string, skip: string[], dependsOn: string[], draft: boolean) => void;
   onClose: () => void;
 }) {
   const { t } = useT();
@@ -28,10 +30,11 @@ export function NewCardDialog({
   const [title, setTitle] = useState(initialTitle);
   const [skip, setSkip] = useState<string[]>([]);
   const [dependsOn, setDependsOn] = useState<string[]>([]);
+  const [draft, setDraft] = useState(false);
   if (!first) return null;
   const submit = () => {
     if (!title.trim()) return;
-    submitAddCard(title, skip, (t, s) => onAdd(t, s, dependsOn));
+    submitAddCard(title, skip, (t, s) => onAdd(t, s, dependsOn, draft));
     onClose();
   };
   return (
@@ -67,6 +70,10 @@ export function NewCardDialog({
         />
         <SkipColumnsPicker columns={skipOptions(columns, first.id)} value={skip} onChange={setSkip} />
         <DependencyPicker cards={cards} columns={columns} value={dependsOn} onChange={setDependsOn} />
+        <Label className="new-card-draft flex items-center gap-2 text-xs font-normal">
+          <Checkbox checked={draft} onCheckedChange={(v) => setDraft(v === true)} />
+          {t("board.newCard.draft")}
+        </Label>
       </div>
     </AppDialog>
   );
