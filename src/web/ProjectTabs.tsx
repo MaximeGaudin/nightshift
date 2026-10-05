@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { IconButton } from "./components/icon-button.tsx";
 import { useT } from "./i18n/index.ts";
 import { cn } from "./lib/utils.ts";
-import { questionCount, type TabsState, tabLabel } from "./projectTabs.ts";
+import { questionCount, type TabsState, tabLabel, waitingCount } from "./projectTabs.ts";
 
 /** Browser-like tab bar of the open projects, above the board panel. */
 export function ProjectTabs({
@@ -33,6 +33,7 @@ export function ProjectTabs({
           const snap = state.snaps[path];
           const error = state.errors[path];
           const questions = snap ? questionCount(snap) : 0;
+          const waiting = snap ? waitingCount(snap) : 0;
           const name = tabLabel(path);
           return (
             <div
@@ -62,6 +63,14 @@ export function ProjectTabs({
                     title={t("board.tabs.questions")}
                   >
                     {questions}
+                  </span>
+                )}
+                {waiting > 0 && (
+                  <span
+                    className="tab-waiting rounded-full bg-accent px-1.5 text-[11px] leading-4 font-medium text-foreground tabular-nums"
+                    title={t("board.tabs.waiting")}
+                  >
+                    {waiting}
                   </span>
                 )}
               </button>

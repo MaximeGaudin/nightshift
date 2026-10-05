@@ -93,6 +93,7 @@ export const board = {
   "board.tabs.close": "Close tab {name}",
   "board.tabs.openFailed": "Could not open this project: {error}",
   "board.tabs.questions": "Cards waiting for your answer",
+  "board.tabs.waiting": "Cards waiting in an inert column",
   "board.card.timerTotalTitle": "Total time since leaving Backlog",
   "board.card.timerStepTitle": "Time in {column}",
   "time.unit.second": "s",

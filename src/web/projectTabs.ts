@@ -1,6 +1,6 @@
 // Project tabs of the app shell: pure state, the App owns the React state and the storage.
 
-import type { ProjectSnapshot } from "../shared/types.ts";
+import { isBacklogColumn, isDoneColumn, type ProjectSnapshot } from "../shared/types.ts";
 
 /** Resolved project paths (as `snap.path` returns them), in opening order, without duplicates. */
 export type Tabs = string[];
@@ -64,6 +64,12 @@ export function tabLabel(path: string): string {
 /** Cards waiting for a human answer: not live, and their last run asked questions in their current column. */
 export function questionCount(snap: Pick<ProjectSnapshot, "board" | "live">): number {
   return snap.board.cards.filter((c) => !snap.live[c.id] && c.lastRun?.status === "question" && c.lastRun.columnId === c.columnId).length;
+}
+
+/** Cards idle in an inert column other than Backlog and Done (To Test…): not live, waiting for a human to look. */
+export function waitingCount(snap: Pick<ProjectSnapshot, "board" | "live">): number {
+  const waiting = new Set(snap.board.columns.filter((c) => c.type === "inert" && !isBacklogColumn(c) && !isDoneColumn(c)).map((c) => c.id));
+  return snap.board.cards.filter((c) => !snap.live[c.id] && waiting.has(c.columnId)).length;
 }
 
 /** Everything the tab bar knows: open tabs, the last snapshot of each opened project, and why a tab failed to open. */

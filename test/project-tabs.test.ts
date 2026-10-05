@@ -1,6 +1,16 @@
 import { expect, test } from "bun:test";
 import type { Card } from "../src/shared/types.ts";
-import { addTab, closeTab, loadTabs, questionCount, renameTab, saveTabs, type TabStorage, tabLabel } from "../src/web/projectTabs.ts";
+import {
+  addTab,
+  closeTab,
+  loadTabs,
+  questionCount,
+  renameTab,
+  saveTabs,
+  type TabStorage,
+  tabLabel,
+  waitingCount,
+} from "../src/web/projectTabs.ts";
 
 const memory = (): TabStorage & { data: Map<string, string> } => {
   const data = new Map<string, string>();
@@ -69,4 +79,28 @@ test("project-tabs: questionCount", () => {
   const cards = [card("asks", "c1", "c1"), card("live", "c1", "c1"), card("moved", "c2", "c1")];
   const board = { version: 1 as const, name: "P", columns: [], cards, nextCardNumber: 4 };
   expect(questionCount({ board, live: { live: "running" } })).toBe(1);
+});
+
+test("project-tabs: waitingCount", () => {
+  const at = "2026-10-02T09:00:00.000Z";
+  const card = (id: string, columnId: string): Card => ({
+    id,
+    number: 1,
+    title: id,
+    description: "",
+    columnId,
+    createdAt: at,
+    updatedAt: at,
+    enteredColumnAt: at,
+    history: [],
+  });
+  const columns = [
+    { id: "col_backlog", name: "Backlog", type: "inert" as const },
+    { id: "work", name: "Work", type: "skill" as const, skill: "x" },
+    { id: "test", name: "To Test", type: "inert" as const },
+    { id: "col_done", name: "Done", type: "inert" as const },
+  ];
+  const cards = [card("b", "col_backlog"), card("w", "work"), card("t", "test"), card("d", "col_done"), card("live", "test")];
+  const board = { version: 1 as const, name: "P", columns, cards, nextCardNumber: 6 };
+  expect(waitingCount({ board, live: { live: "running" } })).toBe(1);
 });

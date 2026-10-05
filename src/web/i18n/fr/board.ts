@@ -95,6 +95,7 @@ export const board: Record<keyof typeof enboard, string> = {
   "board.tabs.close": "Fermer l'onglet {name}",
   "board.tabs.openFailed": "Impossible d'ouvrir ce projet : {error}",
   "board.tabs.questions": "Fiches qui attendent votre réponse",
+  "board.tabs.waiting": "Fiches en attente dans une colonne inerte",
   "board.card.timerTotalTitle": "Temps total depuis la sortie du Backlog",
   "board.card.timerStepTitle": "Temps dans {column}",
   "time.unit.second": "s",
