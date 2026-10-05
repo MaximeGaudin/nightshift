@@ -38,7 +38,7 @@ Create one card in the Backlog column of a Nightshift board.
    - `404`: the folder has no board. Stop and report the path you used.
    - `400`: fix the field named in `error` once and retry (`Unknown card in dependsOn: …`: check the ref in `nightshift.json`). A second failure: stop and report it.
 
-Optional fields: `skipColumnIds` (array of column ids that `next` skips for this card) and `source` (up to 100 characters, shown in the card history). The card always lands in Backlog; `columnId` is ignored.
+Optional fields: `skipColumnIds` (array of column ids that `next` skips for this card), `draft` (boolean, default false: a draft card stays in Backlog, neither fast forward nor finished dependencies move it, until a human moves it or clears the flag; set it only when the user asks for a draft) and `source` (up to 100 characters, shown in the card history). The card always lands in Backlog; `columnId` is ignored.
 
 ## Done when
 
