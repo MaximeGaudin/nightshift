@@ -114,6 +114,12 @@ export function startServer({ port, development, agents = true }: { port: number
   };
   /** Optional dependsOn: undefined when absent or null, otherwise checked by `resolveDependencyRefs`. */
   const optDependsOn = (b: Raw): unknown => (b.dependsOn == null ? undefined : b.dependsOn);
+  /** Optional draft flag: undefined when absent or null, otherwise it must be a boolean. */
+  const optDraft = (b: Raw): boolean | undefined => {
+    if (b.draft == null) return undefined;
+    if (typeof b.draft !== "boolean") throw new Error("draft must be a boolean");
+    return b.draft;
+  };
   const reqString = (b: Raw, key: string): string => {
     const v = optString(b, key);
     if (v === undefined) throw new Error(`${key} is required`);
@@ -137,14 +143,24 @@ export function startServer({ port, development, agents = true }: { port: number
       columnId,
       skipInput,
       dependsOnInput,
+      draft,
       historyText,
-    }: { title?: string; description?: string; columnId?: string; skipInput?: string[]; dependsOnInput?: unknown; historyText?: string },
+    }: {
+      title?: string;
+      description?: string;
+      columnId?: string;
+      skipInput?: string[];
+      dependsOnInput?: unknown;
+      draft?: boolean;
+      historyText?: string;
+    },
   ): Card => {
     const now = new Date().toISOString();
     if (!columnId || !p.column(columnId)) throw new Error("Unknown column");
     const skipColumnIds = normalizeSkipColumnIds(p.board.columns, skipInput);
     const dependsOn = dependsOnInput === undefined ? [] : resolveDependencyRefs(p.board, dependsOnInput);
     if (dependsOn.length > 0 && columnId !== BACKLOG_COLUMN_ID) throw new Error("dependsOn requires the Backlog column");
+    if (draft && columnId !== BACKLOG_COLUMN_ID) throw new Error("draft requires the Backlog column");
     return p.mutate((board) => {
       const card: Card = {
         id: newId("card"),
@@ -154,6 +170,7 @@ export function startServer({ port, development, agents = true }: { port: number
         columnId,
         ...(skipColumnIds ? { skipColumnIds } : {}),
         ...(dependsOn.length > 0 ? { dependsOn } : {}),
+        ...(draft ? { draft: true as const } : {}),
         createdAt: now,
         updatedAt: now,
         enteredColumnAt: now,
@@ -163,7 +180,7 @@ export function startServer({ port, development, agents = true }: { port: number
       p.addHistory(card, "created", historyText ?? `Created in ${p.column(columnId)?.name}`, columnId);
       board.cards.push(card);
       // Every dependency already in Done: the card leaves Backlog right away.
-      if (card.dependsOn && unmetDependencies(board, card).length === 0) p.releaseDependencies(board, card, releaseReason(board, card));
+      if (!card.draft && card.dependsOn && unmetDependencies(board, card).length === 0) p.releaseDependencies(board, card, releaseReason(board, card));
       else p.addQueued(card, board);
       return card;
     });
@@ -294,6 +311,7 @@ export function startServer({ port, development, agents = true }: { port: number
             columnId: optString(b, "columnId") ?? p.board.columns[0]?.id,
             skipInput: optSkipIds(b),
             dependsOnInput: optDependsOn(b),
+            draft: optDraft(b),
           });
           return { id: card.id, number: card.number };
         }),
@@ -308,6 +326,7 @@ export function startServer({ port, development, agents = true }: { port: number
           const description = optString(b, "description") ?? "";
           const skipInput = optSkipIds(b);
           const dependsOnInput = optDependsOn(b);
+          const draft = optDraft(b);
           const source = optString(b, "source")?.trim() ?? "";
           if (source.length > 100) throw new Error("source must be at most 100 characters");
           const path = resolve(raw);
@@ -323,6 +342,7 @@ export function startServer({ port, development, agents = true }: { port: number
             columnId: BACKLOG_COLUMN_ID,
             skipInput,
             dependsOnInput,
+            draft,
             historyText: source ? `Created in ${BACKLOG_COLUMN_NAME} by ${source}` : `Created in ${BACKLOG_COLUMN_NAME}`,
           });
           return json({ id: card.id, number: card.number, ref: cardRef(card) }, 201);
@@ -336,6 +356,7 @@ export function startServer({ port, development, agents = true }: { port: number
           const skipInput = optSkipIds(b);
           const hasModels = b.models !== undefined;
           const dependsOnInput = optDependsOn(b);
+          const draftInput = optDraft(b);
           const modelsCheck = validateModelsStrict(b.models);
           if (!modelsCheck.ok) throw new Error(modelsCheck.error);
           p.mutate((board) => {
@@ -346,7 +367,14 @@ export function startServer({ port, development, agents = true }: { port: number
             card.updatedAt = new Date().toISOString();
             if (dependsOnInput !== undefined && card.columnId !== BACKLOG_COLUMN_ID)
               throw new Error("Dependencies can only be edited in Backlog");
-            if (title !== undefined || description !== undefined || (skipInput === undefined && !hasModels && dependsOnInput === undefined))
+            if (draftInput === true && card.columnId !== BACKLOG_COLUMN_ID) throw new Error("Draft can only be set in Backlog");
+            if (draftInput === true) card.draft = true;
+            else if (draftInput === false) delete card.draft;
+            if (
+              title !== undefined ||
+              description !== undefined ||
+              (skipInput === undefined && !hasModels && dependsOnInput === undefined && draftInput === undefined)
+            )
               p.addHistory(card, "edited", "Edited by user");
             if (hasModels) {
               const changes = diffModels(card.models, modelsCheck.models);
@@ -379,7 +407,7 @@ export function startServer({ port, development, agents = true }: { port: number
                 p.addHistory(card, "edited", refs.length > 0 ? `Dependencies: ${refs.join(", ")}` : "Dependencies cleared");
               }
               // Nothing left to wait for (all in Done, or the list was cleared): the card leaves Backlog now.
-              if ((had || ids.length > 0) && unmetDependencies(board, card).length === 0)
+              if (!card.draft && (had || ids.length > 0) && unmetDependencies(board, card).length === 0)
                 p.releaseDependencies(board, card, releaseReason(board, card));
             }
           });
@@ -397,7 +425,7 @@ export function startServer({ port, development, agents = true }: { port: number
               if (rest.length > 0) card.dependsOn = rest;
               else delete card.dependsOn;
               p.addHistory(card, "edited", `Dependency ${cardRef(gone)} deleted`);
-              if (card.columnId === BACKLOG_COLUMN_ID && unmetDependencies(board, card).length === 0)
+              if (card.columnId === BACKLOG_COLUMN_ID && !card.draft && unmetDependencies(board, card).length === 0)
                 p.releaseDependencies(board, card, releaseReason(board, card));
             }
           });
