@@ -23,6 +23,7 @@ import { ProjectPicker } from "./ProjectPicker.tsx";
 import { ProjectTabs } from "./ProjectTabs.tsx";
 import { loadTabs, questionCount, saveTabs, type TabsState, tabBoardEvent, tabClosed, tabOpened, tabOpenFailed } from "./projectTabs.ts";
 import { QuickRunToasts, showQuickRunResult } from "./QuickRunToasts.tsx";
+import { QuotaIndicator } from "./QuotaIndicator.tsx";
 import { SettingsModal } from "./SettingsModal.tsx";
 import { ShortcutsHelp } from "./ShortcutsHelp.tsx";
 import { SkillsModal } from "./SkillsModal.tsx";
@@ -336,6 +337,7 @@ export function App() {
             {queued > 0 && <span> · {t("board.app.queued", { count: queued })}</span>}
             {questions > 0 && <span className="font-medium text-warn">· {tn("board.app.questions", questions)}</span>}
           </div>
+          <QuotaIndicator />
           <nav className="ml-auto flex items-center gap-0.5">
             <FlowButtons snap={snap} guard={guard} />
             <IconButton label={t("board.app.columns")} onClick={() => setModal("columns")}>
