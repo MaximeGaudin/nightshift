@@ -1,6 +1,7 @@
 // Types shared by the server and the web client.
 
 import type { FlowState } from "./flow.ts";
+import type { QuotaSnapshot } from "./usage.ts";
 
 export type ColumnType = "inert" | "skill";
 
@@ -418,5 +419,6 @@ export type ServerEvent =
   | { type: "log"; project: string; cardId: string; line: LogLine }
   | { type: "testlog"; project: string; cardId: string; line: LogLine }
   | { type: "settings"; settings: Settings }
+  | { type: "usage"; usage: QuotaSnapshot | null }
   | { type: "attention"; project: string; cardId: string; kind: AttentionKind }
   | { type: "quickrun"; project: string; result: QuickRunResult };
