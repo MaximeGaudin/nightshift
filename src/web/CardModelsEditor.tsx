@@ -6,6 +6,7 @@ import { Alert, AlertDescription } from "./components/ui/alert.tsx";
 import { Button } from "./components/ui/button.tsx";
 import { Input } from "./components/ui/input.tsx";
 import { useT } from "./i18n/index.ts";
+import { SaveStatus, useSaveStatus } from "./SaveStatus.tsx";
 
 export interface ModelRow {
   skill: string;
@@ -87,6 +88,7 @@ export function CardModelsEditor({
   const [values, setValues] = useState<Record<string, string>>(server);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const saveStatus = useSaveStatus();
   // biome-ignore lint/correctness/useExhaustiveDependencies: serverKey is the trigger (the server map changed); server is derived from it
   useEffect(() => setValues(server), [serverKey]);
   const rows = modelRows(board, card, settings);
@@ -94,10 +96,14 @@ export function CardModelsEditor({
   const dirty = JSON.stringify(buildModels(values)) !== JSON.stringify(buildModels(server));
   const submit = async (next: Record<string, string>) => {
     setSaving(true);
-    const message = await saveCardModels({ project, cardId: card.id, values: next });
+    let message: string | null = null;
+    const ok = await saveStatus.track(async () => {
+      message = await saveCardModels({ project, cardId: card.id, values: next });
+      return message === null;
+    });
     setSaving(false);
     setError(message);
-    return message === null;
+    return ok;
   };
   const overrides = Object.keys(buildModels(server)).length;
   return (
@@ -105,6 +111,7 @@ export function CardModelsEditor({
       <summary className="cursor-pointer text-xs font-medium select-none hover:text-foreground">
         {t("card.models.title")}
         {overrides > 0 ? ` (${overrides})` : ""}
+        <SaveStatus state={saveStatus.state} />
       </summary>
       <form
         className="mt-2 flex min-w-0 flex-col gap-2"

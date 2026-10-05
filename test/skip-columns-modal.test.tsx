@@ -84,3 +84,9 @@ test("nextInertTarget jumps over the skipped column", () => {
   expect(nextInertTarget(board, card("col_2e5738f5a3", ["col_f95bc1734d"]))?.id).toBe("col_done");
   expect(nextInertTarget(board, card("col_0fc8f00a6b", ["col_2e5738f5a3"]))).toBeUndefined();
 });
+
+test("modal picker has a status region and the auto-save hint", () => {
+  const html = render(card("col_0fc8f00a6b"));
+  expect(html).toContain('role="status"');
+  expect(html).toContain("Enregistré automatiquement");
+});

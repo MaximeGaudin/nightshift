@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { type Column, columnEmoji } from "../shared/types.ts";
 import { Button } from "./components/ui/button.tsx";
 import { useT } from "./i18n/index.ts";
@@ -8,6 +9,10 @@ export interface SkipColumnsPickerProps {
   columns: Column[];
   value: string[];
   onChange: (ids: string[]) => void;
+  /** Save indicator shown next to the title (the modal saves on each change). */
+  status?: ReactNode;
+  /** Short help shown above the checkboxes. */
+  hint?: string;
 }
 
 /**
@@ -26,7 +31,7 @@ export function toggleInertColumns(columns: Column[], value: string[]): string[]
 }
 
 /** Collapsed list of checkboxes: the columns a card jumps over when it goes to the next column. */
-export function SkipColumnsPicker({ columns, value, onChange }: SkipColumnsPickerProps) {
+export function SkipColumnsPicker({ columns, value, onChange, status, hint }: SkipColumnsPickerProps) {
   const { t } = useT();
   if (columns.length === 0) return null;
   const checked = columns.filter((c) => value.includes(c.id)).length;
@@ -44,7 +49,9 @@ export function SkipColumnsPicker({ columns, value, onChange }: SkipColumnsPicke
         <summary className="cursor-pointer leading-6 select-none hover:text-foreground">
           {t("board.skip.summary")}
           {checked > 0 ? ` (${checked})` : ""}
+          {status}
         </summary>
+        {hint && <p className="skip-picker-hint m-0 pt-1.5">{hint}</p>}
         <div className="skip-picker-list flex flex-wrap gap-1 pt-1.5">
           {columns.map((c) => {
             const emoji = columnEmoji(c);
