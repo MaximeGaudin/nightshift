@@ -29,6 +29,21 @@ export function submitAddCard(
   return { title: "", skip: [], close: true };
 }
 
+/**
+ * Submits the inline add-card form with its draft checkbox. The draft flag is sent only when the column accepts drafts
+ * (Backlog), and it resets with the rest of the form once the card is created.
+ */
+export function submitQuickAddCard(
+  title: string,
+  skip: string[],
+  draft: boolean,
+  draftable: boolean,
+  onAdd: (title: string, skip: string[], draft: boolean) => void,
+): { title: string; skip: string[]; draft: boolean; close: boolean } {
+  const fresh = submitAddCard(title, skip, (t, s) => onAdd(t, s, draftable && draft));
+  return { ...fresh, draft: fresh.close ? false : draft };
+}
+
 export function AddCard({
   skipOptions: skipColumns = [],
   draftable = false,
@@ -68,13 +83,11 @@ export function AddCard({
       </Button>
     );
   const submit = () => {
-    const fresh = submitAddCard(title, skip, (t, s) => onAdd(t, s, draftable && draft));
+    const fresh = submitQuickAddCard(title, skip, draft, draftable, onAdd);
     setTitle(fresh.title);
     setSkip(fresh.skip);
-    if (fresh.close) {
-      setDraft(false);
-      close();
-    }
+    setDraft(fresh.draft);
+    if (fresh.close) close();
   };
   return (
     <div className="add-card-form flex flex-col gap-1.5 px-0.5 pb-2" ref={formRef}>

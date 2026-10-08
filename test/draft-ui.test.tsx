@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { BACKLOG_COLUMN_ID, type Card } from "../src/shared/types.ts";
-import { AddCard } from "../src/web/AddCard.tsx";
+import { AddCard, submitQuickAddCard } from "../src/web/AddCard.tsx";
 import { DraftSection } from "../src/web/CardModal.tsx";
 import { CardTile } from "../src/web/CardTile.tsx";
 
@@ -37,4 +37,19 @@ test("draft: the quick add-card form shows the checkbox only when the column is 
   const onAdd = () => {};
   expect(renderToStaticMarkup(<AddCard initialOpen draftable onAdd={onAdd} />)).toContain("add-card-draft");
   expect(renderToStaticMarkup(<AddCard initialOpen onAdd={onAdd} />)).not.toContain("add-card-draft");
+});
+
+test("draft: the quick add-card form sends the draft flag only for a draftable column and resets it", () => {
+  const sent: [string, string[], boolean][] = [];
+  const onAdd = (title: string, skip: string[], draft: boolean) => sent.push([title, skip, draft]);
+  expect(submitQuickAddCard(" A ", [], true, true, onAdd)).toEqual({ title: "", skip: [], draft: false, close: true });
+  submitQuickAddCard("B", [], true, false, onAdd);
+  submitQuickAddCard("C", [], false, true, onAdd);
+  expect(sent).toEqual([
+    ["A", [], true],
+    ["B", [], false],
+    ["C", [], false],
+  ]);
+  expect(submitQuickAddCard("  ", ["col_x"], true, true, onAdd)).toEqual({ title: "  ", skip: ["col_x"], draft: true, close: false });
+  expect(sent).toHaveLength(3);
 });
