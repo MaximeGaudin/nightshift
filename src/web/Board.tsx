@@ -29,7 +29,15 @@ import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { isHeld, unmetDependencies } from "../shared/dependencies.ts";
 import { resolveNextColumn, skippedColumns } from "../shared/skip.ts";
-import { type Card, type Column, cardRef, columnMaxParallel, isDoneColumn, type ProjectSnapshot } from "../shared/types.ts";
+import {
+  BACKLOG_COLUMN_ID,
+  type Card,
+  type Column,
+  cardRef,
+  columnMaxParallel,
+  isDoneColumn,
+  type ProjectSnapshot,
+} from "../shared/types.ts";
 import { AddCard, skipOptions } from "./AddCard.tsx";
 import { api, useSettings } from "./api.ts";
 import {
@@ -433,13 +441,15 @@ export function Board({
                       closeOnEmptyBlur
                       onClose={() => setExpanded(null)}
                       skipOptions={skipOptions(columns, col.id)}
-                      onAdd={(title, skip) => guard(api.createCard(snap.path, col.id, title, "", skip))}
+                      draftable={col.id === BACKLOG_COLUMN_ID}
+                      onAdd={(title, skip, draft) => guard(api.createCard(snap.path, col.id, title, "", skip, undefined, draft))}
                     />
                   ) : (
                     <AddCard
                       key="plain"
                       skipOptions={skipOptions(columns, col.id)}
-                      onAdd={(title, skip) => guard(api.createCard(snap.path, col.id, title, "", skip))}
+                      draftable={col.id === BACKLOG_COLUMN_ID}
+                      onAdd={(title, skip, draft) => guard(api.createCard(snap.path, col.id, title, "", skip, undefined, draft))}
                     />
                   )}
                 </>

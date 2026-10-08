@@ -2,6 +2,8 @@ import { Plus } from "lucide-react";
 import { useRef, useState } from "react";
 import { type Column, DONE_COLUMN_ID } from "../shared/types.ts";
 import { Button } from "./components/ui/button.tsx";
+import { Checkbox } from "./components/ui/checkbox.tsx";
+import { Label } from "./components/ui/label.tsx";
 import { Textarea } from "./components/ui/textarea.tsx";
 import { useT } from "./i18n/index.ts";
 import { SkipColumnsPicker } from "./SkipColumnsPicker.tsx";
@@ -29,13 +31,16 @@ export function submitAddCard(
 
 export function AddCard({
   skipOptions: skipColumns = [],
+  draftable = false,
   onAdd,
   initialOpen,
   onClose,
   closeOnEmptyBlur,
 }: {
   skipOptions?: Column[];
-  onAdd: (title: string, skip: string[]) => void;
+  /** Show the draft checkbox: only Backlog accepts drafts. */
+  draftable?: boolean;
+  onAdd: (title: string, skip: string[], draft: boolean) => void;
   initialOpen?: boolean;
   onClose?: () => void;
   closeOnEmptyBlur?: boolean;
@@ -44,6 +49,7 @@ export function AddCard({
   const [open, setOpen] = useState(initialOpen ?? false);
   const [title, setTitle] = useState("");
   const [skip, setSkip] = useState<string[]>([]);
+  const [draft, setDraft] = useState(false);
   const formRef = useRef<HTMLDivElement>(null);
   const close = () => {
     setOpen(false);
@@ -62,10 +68,13 @@ export function AddCard({
       </Button>
     );
   const submit = () => {
-    const fresh = submitAddCard(title, skip, onAdd);
+    const fresh = submitAddCard(title, skip, (t, s) => onAdd(t, s, draftable && draft));
     setTitle(fresh.title);
     setSkip(fresh.skip);
-    if (fresh.close) close();
+    if (fresh.close) {
+      setDraft(false);
+      close();
+    }
   };
   return (
     <div className="add-card-form flex flex-col gap-1.5 px-0.5 pb-2" ref={formRef}>
@@ -92,6 +101,12 @@ export function AddCard({
       {/* biome-ignore lint/a11y/noStaticElementInteractions: mouse-only focus guard, the picker inside stays keyboard accessible */}
       <div onMouseDown={(e) => e.target instanceof HTMLInputElement || e.preventDefault()}>
         <SkipColumnsPicker columns={skipColumns} value={skip} onChange={setSkip} />
+        {draftable && (
+          <Label className="add-card-draft flex items-center gap-2 text-xs font-normal">
+            <Checkbox checked={draft} onCheckedChange={(v) => setDraft(v === true)} />
+            {t("board.newCard.draft")}
+          </Label>
+        )}
       </div>
       <div className="row flex gap-1.5">
         <Button type="button" onClick={submit}>
