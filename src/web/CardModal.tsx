@@ -41,6 +41,7 @@ import { SkipColumnsPicker } from "./SkipColumnsPicker.tsx";
 import { TestPanel } from "./TestPanel.tsx";
 import { TimePanel } from "./TimePanel.tsx";
 import { timeAgo } from "./ui.tsx";
+import { useImagePaste } from "./useImagePaste.ts";
 
 /** Saves the skipped columns at once, on their own: the title/description draft is neither sent nor touched. */
 export async function saveSkipColumns({
@@ -341,6 +342,50 @@ function CardModalFooter({
   );
 }
 
+/** Answers can be sent once one has text and no image upload is running in any of them. */
+export function canAnswer(answers: string[], uploads: number): boolean {
+  return uploads === 0 && answers.some((a) => a?.trim());
+}
+
+/** One answer to an agent question; pasted or dropped images are uploaded and referenced at its cursor. */
+function AnswerField({
+  index,
+  value,
+  setValue,
+  upload,
+  busy,
+}: {
+  index: number;
+  value: string;
+  setValue(update: (text: string) => string): void;
+  upload(image: Blob): Promise<{ path: string }>;
+  busy(delta: 1 | -1): void;
+}) {
+  const { t } = useT();
+  const ref = useRef<HTMLTextAreaElement>(null);
+  const images = useImagePaste({ ref, text: value, setText: setValue, upload, onError: notifyError, busy });
+  return (
+    <Textarea
+      ref={ref}
+      aria-label={t("card.answerLabel", { number: index + 1 })}
+      autoFocus={index === 0}
+      className="min-h-14"
+      value={value}
+      placeholder={t("card.answerPlaceholder")}
+      onChange={(e) => {
+        const text = e.target.value;
+        setValue(() => text);
+      }}
+      onPaste={images.onPaste}
+      onDragOver={images.onDragOver}
+      onDrop={images.onDrop}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) e.currentTarget.form?.requestSubmit();
+      }}
+    />
+  );
+}
+
 const LAST_RUN_TONE: Partial<Record<string, string>> = {
   success: "border-ok/30 bg-ok-soft",
   error: "border-err/30 bg-err-soft",
@@ -367,6 +412,8 @@ export function CardModalContent({
   const [logLoaded, setLogLoaded] = useState(false);
   const [tab, setTab] = useState<"log" | "history" | "time">("log");
   const [answers, setAnswers] = useState<string[]>([]);
+  // Image uploads in flight across every answer: the answers are not sent before they end.
+  const [answerUploads, setAnswerUploads] = useState(0);
   const logRef = useRef<HTMLDivElement>(null);
   // Description shows rendered markdown by default; an empty one opens straight in the editor.
   const [descMode, setDescMode] = useState<"preview" | "edit">(card.description.trim() ? "preview" : "edit");
@@ -545,7 +592,7 @@ export function CardModalContent({
             className="question flex max-h-[60%] min-w-0 shrink-0 flex-col gap-3 overflow-auto rounded-lg border border-warn/30 bg-warn-soft p-3"
             onSubmit={(e) => {
               e.preventDefault();
-              if (answers.some((a) => a.trim()))
+              if (canAnswer(answers, answerUploads))
                 void sendThenClear(api.answer(project, card.id, answers), () => setAnswers([]), notifyError);
             }}
           >
@@ -561,20 +608,21 @@ export function CardModalContent({
                   <span className="qa-num shrink-0 text-muted-foreground tabular-nums">{i + 1}.</span>
                   <Markdown source={q} className="min-w-0 flex-1" />
                 </div>
-                <Textarea
-                  aria-label={t("card.answerLabel", { number: i + 1 })}
-                  autoFocus={i === 0}
-                  className="min-h-14"
+                <AnswerField
+                  index={i}
                   value={answers[i] ?? ""}
-                  placeholder={t("card.answerPlaceholder")}
-                  onChange={(e) => setAnswers((a) => Object.assign([...a], { [i]: e.target.value }))}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) e.currentTarget.form?.requestSubmit();
-                  }}
+                  setValue={(update) => setAnswers((a) => Object.assign([...a], { [i]: update(a[i] ?? "") }))}
+                  upload={(image) => api.uploadCardImage(project, card.id, image)}
+                  busy={(delta) => setAnswerUploads((n) => n + delta)}
                 />
               </div>
             ))}
-            <Button className="self-end" type="submit" disabled={!answers.some((a) => a?.trim())}>
+            {answerUploads > 0 && (
+              <span className="qa-uploading text-xs text-muted-foreground" role="status">
+                {t("card.uploadingImage")}
+              </span>
+            )}
+            <Button className="self-end" type="submit" disabled={!canAnswer(answers, answerUploads)}>
               {t("card.answerAndResume")}
             </Button>
           </form>
