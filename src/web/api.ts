@@ -42,16 +42,22 @@ export const api = {
     skipColumnIds?: string[],
     dependsOn?: string[],
     draft?: boolean,
+    /** Images pasted before the card exists, keyed by the id of their `pending:N` marker in `description`. */
+    images?: Map<number, Blob>,
   ) =>
-    call<{ id: string }>("POST", "/api/cards", {
-      project,
-      columnId,
-      title,
-      description,
-      ...(skipColumnIds && skipColumnIds.length > 0 ? { skipColumnIds } : {}),
-      ...(dependsOn && dependsOn.length > 0 ? { dependsOn } : {}),
-      ...(draft ? { draft: true } : {}),
-    }),
+    (async () =>
+      call<{ id: string; number: number; imageErrors?: string[] }>("POST", "/api/cards", {
+        project,
+        columnId,
+        title,
+        description,
+        ...(skipColumnIds && skipColumnIds.length > 0 ? { skipColumnIds } : {}),
+        ...(dependsOn && dependsOn.length > 0 ? { dependsOn } : {}),
+        ...(draft ? { draft: true } : {}),
+        ...(images && images.size > 0
+          ? { images: Object.fromEntries(await Promise.all([...images].map(async ([n, blob]) => [String(n), await toBase64(blob)]))) }
+          : {}),
+      }))(),
   updateCard: (
     project: string,
     id: string,
