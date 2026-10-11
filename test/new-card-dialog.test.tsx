@@ -12,7 +12,9 @@ mock.module("../src/web/components/app-dialog.tsx", () => ({
     </div>
   ),
 }));
-const { NewCardDialog, insertPendingImages, pendingImagesInText, removePendingImage } = await import("../src/web/NewCardDialog.tsx");
+const { NewCardDialog, insertPendingImages, pendingImagesInText, pendingToSend, removePendingImage } = await import(
+  "../src/web/NewCardDialog.tsx"
+);
 
 const image = (id: number) => ({ id, file: new File([new Uint8Array(4)], "p.png", { type: "image/png" }), url: `blob:${id}` });
 
@@ -44,4 +46,17 @@ test("new-card-dialog-sends-only-markers-left", () => {
   const pending = [image(1), image(2), image(3)];
   // Marker 2 was deleted by hand; the others are sent in text order.
   expect(pendingImagesInText(`${pendingMarker(3)}\nx\n${pendingMarker(1)}`, pending).map((p) => p.id)).toEqual([3, 1]);
+});
+
+test("new-card-dialog-send-drops-orphan-markers", () => {
+  // Marker 5 has no image (restored by undo after removal): it is not sent as `pending:`.
+  const out = pendingToSend(`a\n${pendingMarker(1)}\n${pendingMarker(5)}\nb`, [image(1)]);
+  expect(out.description).toBe(`a\n${pendingMarker(1)}\nb`);
+  expect([...out.images.keys()]).toEqual([1]);
+  // Beyond the cap, the extra images and their markers are dropped instead of failing the whole creation.
+  const many = Array.from({ length: 12 }, (_, i) => image(i + 1));
+  const capped = pendingToSend(many.map((p) => pendingMarker(p.id)).join("\n"), many);
+  expect(capped.images.size).toBe(10);
+  expect(capped.description).not.toContain("pending:11");
+  expect(capped.description).not.toContain("pending:12");
 });

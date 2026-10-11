@@ -34,6 +34,19 @@ export function pendingImagesInText(description: string, pending: PendingImage[]
   return pendingIds(description).flatMap((n) => pending.filter((p) => p.id === n));
 }
 
+/**
+ * What Create sends: the first `MAX_PENDING_IMAGES` images still in the text, and the text without any other marker
+ * (one restored by undo after its image was removed, or beyond the cap), so no `pending:` reaches the card.
+ */
+export function pendingToSend(description: string, pending: PendingImage[]): { description: string; images: Map<number, Blob> } {
+  const sent = pendingImagesInText(description, pending).slice(0, MAX_PENDING_IMAGES);
+  const kept = new Set(sent.map((p) => p.id));
+  return {
+    description: resolvePending(description, new Map(pendingIds(description).map((n) => [n, kept.has(n) ? pendingPath(n) : null]))),
+    images: new Map(sent.map((p) => [p.id, p.file])),
+  };
+}
+
 /** Create a card in the first column (Backlog), same rules as the inline add-card form. */
 export function NewCardDialog({
   columns,
@@ -121,8 +134,8 @@ export function NewCardDialog({
   };
   const submit = () => {
     if (!title.trim()) return;
-    const images = new Map<number, Blob>(shown.map((p) => [p.id, p.file]));
-    submitAddCard(title, skip, (t, s) => onAdd(t, s, dependsOn, draft, description, images));
+    const out = pendingToSend(description, pending);
+    submitAddCard(title, skip, (t, s) => onAdd(t, s, dependsOn, draft, out.description, out.images));
     onClose();
   };
   return (
