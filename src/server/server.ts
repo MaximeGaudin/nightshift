@@ -4,6 +4,7 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import type { Server, ServerWebSocket } from "bun";
 import { dependencyCycle, describeCycle, releaseReason, resolveDependencyRefs, unmetDependencies } from "../shared/dependencies.ts";
 import { describeModelChanges, diffModels, validateModelsStrict } from "../shared/models.ts";
+import { MAX_PENDING_IMAGES, pendingIds, resolvePending } from "../shared/pendingImages.ts";
 import { type CardImageStored, cardImageType } from "../shared/screenshots.ts";
 import { normalizeSkipColumnIds, skippedColumns } from "../shared/skip.ts";
 import {
@@ -120,6 +121,21 @@ export function startServer({ port, development, agents = true }: { port: number
     if (typeof b.draft !== "boolean") throw new Error("draft must be a boolean");
     return b.draft;
   };
+  /** Optional images of a new card, `{ "<N>": "<base64>" }` keyed by pending marker id; checked before anything is written. */
+  const optImages = (b: Raw): Map<number, string> | undefined => {
+    const v = b.images;
+    if (v == null) return undefined;
+    if (!isRaw(v)) throw new Error("images must be an object");
+    const entries = Object.entries(v);
+    if (entries.length > MAX_PENDING_IMAGES) throw new Error(`images holds more than ${MAX_PENDING_IMAGES} entries`);
+    const out = new Map<number, string>();
+    for (const [key, data] of entries) {
+      if (!/^[1-9][0-9]*$/.test(key)) throw new Error("images keys must be positive integers");
+      if (typeof data !== "string") throw new Error("images values must be strings");
+      out.set(Number(key), data);
+    }
+    return out;
+  };
   const reqString = (b: Raw, key: string): string => {
     const v = optString(b, key);
     if (v === undefined) throw new Error(`${key} is required`);
@@ -144,6 +160,8 @@ export function startServer({ port, development, agents = true }: { port: number
       skipInput,
       dependsOnInput,
       draft,
+      images,
+      imageErrors,
       historyText,
     }: {
       title?: string;
@@ -152,6 +170,10 @@ export function startServer({ port, development, agents = true }: { port: number
       skipInput?: string[];
       dependsOnInput?: unknown;
       draft?: boolean;
+      /** Pasted images by pending marker id, stored before the card is visible. */
+      images?: Map<number, string>;
+      /** Collects the message of each image that could not be stored (its marker is removed). */
+      imageErrors?: string[];
       historyText?: string;
     },
   ): Card => {
@@ -177,6 +199,21 @@ export function startServer({ port, development, agents = true }: { port: number
         history: [],
       };
       board.nextCardNumber += 1;
+      // Images are written and their markers resolved before the card joins the board: no observer sees `pending:`.
+      if (images) {
+        const paths = new Map<number, string | null>();
+        for (const n of pendingIds(card.description)) {
+          const data = images.get(n);
+          if (data === undefined) continue;
+          try {
+            paths.set(n, storeCardImage(card.id, data));
+          } catch (e) {
+            paths.set(n, null);
+            imageErrors?.push((e as Error).message);
+          }
+        }
+        card.description = resolvePending(card.description, paths);
+      }
       p.addHistory(card, "created", historyText ?? `Created in ${p.column(columnId)?.name}`, columnId);
       board.cards.push(card);
       // Every dependency already in Done: the card leaves Backlog right away.
@@ -306,6 +343,7 @@ export function startServer({ port, development, agents = true }: { port: number
       "/api/cards": {
         POST: h((b, url) => {
           const p = project(b, url);
+          const imageErrors: string[] = [];
           const card = createCard(p, {
             title: optString(b, "title"),
             description: optString(b, "description"),
@@ -313,8 +351,10 @@ export function startServer({ port, development, agents = true }: { port: number
             skipInput: optSkipIds(b),
             dependsOnInput: optDependsOn(b),
             draft: optDraft(b),
+            images: optImages(b),
+            imageErrors,
           });
-          return { id: card.id, number: card.number };
+          return { id: card.id, number: card.number, ...(imageErrors.length > 0 ? { imageErrors } : {}) };
         }),
       },
       "/api/backlog": {
