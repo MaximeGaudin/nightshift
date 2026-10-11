@@ -78,8 +78,8 @@ export function NewCardDialog({
   if (!first) return null;
   const shown = pendingImagesInText(description, pending);
 
-  /** Keeps the accepted images of a paste or drop and puts their markers at `at`. False when it holds no image. */
-  const addImages = (transfer: TransferLike, at: Selection): boolean => {
+  /** Keeps the accepted images of a paste or drop and puts their markers at `at` (null: the end). False when it holds no image. */
+  const addImages = (transfer: TransferLike, at: Selection | null): boolean => {
     const files = transferImages(transfer);
     if (files.length === 0) return false;
     let room = MAX_PENDING_IMAGES - shown.length;
@@ -97,13 +97,16 @@ export function NewCardDialog({
     }
     if (added.length === 0) return true;
     setPending((p) => [...p, ...added]);
-    const next = insertPendingImages(
-      description,
-      at,
-      added.map((a) => a.id),
-    );
-    cursor.current = next.cursor;
-    setDescription(next.text);
+    // Applied to the current text: two pastes in a row must not overwrite each other.
+    setDescription((d) => {
+      const next = insertPendingImages(
+        d,
+        at ?? { start: d.length, end: d.length },
+        added.map((a) => a.id),
+      );
+      cursor.current = next.cursor;
+      return next.text;
+    });
     return true;
   };
   const selection = (): Selection => {
@@ -148,7 +151,7 @@ export function NewCardDialog({
           onChange={(e) => setTitle(e.target.value)}
           onPaste={(e) => {
             // An image pasted in the title goes to the end of the description; the title keeps its text.
-            if (addImages(e.clipboardData, { start: description.length, end: description.length })) e.preventDefault();
+            if (addImages(e.clipboardData, null)) e.preventDefault();
           }}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
