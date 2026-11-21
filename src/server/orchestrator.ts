@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import type { Subprocess } from "bun";
 import { isReady, releaseReason } from "../shared/dependencies.ts";
 import { fastForwardSkipIds } from "../shared/flow.ts";
+import { describeEffortChanges, type EffortLevel, type EffortSource, effortLabel, formatDroppedEffort, mergeEfforts, resolveEffort, resolveQuickEffort } from "../shared/effort.ts";
 import { describeModelChanges, formatDropped, type ModelSource, mergeModels, resolveModel } from "../shared/models.ts";
 import { resolveNextColumn } from "../shared/skip.ts";
 import type {
@@ -61,7 +62,7 @@ interface StreamEvent {
 }
 
 /** Structured output of an agent (--json-schema). Untrusted: every field is checked before use; `questions` is normalized. */
-type AgentOutput = Raw & { questions: string[]; models?: unknown };
+type AgentOutput = Raw & { questions: string[]; models?: unknown; efforts?: unknown };
 
 /** What a spawned `claude -p` process needs to track, shared by card jobs and quick runs. */
 interface Runner {
@@ -88,10 +89,12 @@ interface RunTarget {
   model: string | undefined;
   /** Where `model` comes from, shown in the start log line. */
   modelSource: ModelSource;
+  effort: EffortLevel | undefined;
+  effortSource: EffortSource;
   log(kind: LogLine["kind"], text: string): void;
   setProgress(v: { step: number; total: number; label: string }, source: RunProgress["source"]): void;
   /** First log line, once the model and permission mode are known. */
-  startMessage(model: string | undefined, permissionMode: string, source: ModelSource): string;
+  startMessage(model: string | undefined, permissionMode: string, source: ModelSource, effort: EffortLevel | undefined, effortSource: EffortSource): string;
 }
 
 /** A skill launched from the command palette: in memory only, never written to nightshift.json. */
@@ -196,6 +199,12 @@ export const RESULT_SCHEMA = {
         'Optional: the model each later skill column should use for this card, keyed by skill name, for example {"nightshift-implement": "opus", "nightshift-review": "sonnet"}. Use "default" to remove an entry. Omit to keep the card\'s current models.',
       additionalProperties: { type: "string" },
     },
+    efforts: {
+      type: "object",
+      description:
+        'Optional: the effort level (low, medium, high, xhigh, max) each later skill column should use for this card, keyed by skill name, for example {"nightshift-implement": "medium"}. Use "default" to remove an entry. Omit to keep the card\'s current efforts.',
+      additionalProperties: { type: "string" },
+    },
     questions: {
       type: "array",
       items: { type: "string" },
@@ -264,7 +273,8 @@ ${PROGRESS_RULE}
   - summary: a short summary of what you did.
   - questions: only when you need the user's input (see above).
   - test: optional, a command (and url) a human can run to try what you produced; the card shows a "Tester" button that runs it.
-  - models: optional, the model each later skill column should use for this card, keyed by skill name (e.g. {"nightshift-implement": "opus"}); "default" removes an entry. The plan agent should set it from the task's complexity; other agents usually omit it.`;
+  - models: optional, the model each later skill column should use for this card, keyed by skill name (e.g. {"nightshift-implement": "opus"}); "default" removes an entry. The plan agent should set it from the task's complexity; other agents usually omit it.
+  - efforts: optional, the effort level (low, medium, high, xhigh, max) each later skill column should use for this card, keyed by skill name; "default" removes an entry. The plan agent may set it from the task's complexity; other agents usually omit it.`;
 }
 
 /** Prompt resuming a session with free feedback from the user, in whatever column the card is now. */
@@ -318,7 +328,8 @@ When resuming, re-emit the marker of the step currently in progress before anyth
   - summary: a short summary of what you did.
   - questions: only when you need the user's input (see above).
   - test: optional, a command (and url) a human can run to try what you produced.
-  - models: optional, the model each later skill column should use for this card, keyed by skill name (e.g. {"nightshift-implement": "opus"}); "default" removes an entry. The plan agent should set it from the task's complexity; other agents usually omit it.`;
+  - models: optional, the model each later skill column should use for this card, keyed by skill name (e.g. {"nightshift-implement": "opus"}); "default" removes an entry. The plan agent should set it from the task's complexity; other agents usually omit it.
+  - efforts: optional, the effort level (low, medium, high, xhigh, max) each later skill column should use for this card, keyed by skill name; "default" removes an entry. The plan agent may set it from the task's complexity; other agents usually omit it.`;
 }
 
 /** Prompt resuming a session with the user's answers to its questions. */
@@ -839,6 +850,10 @@ export class Orchestrator {
       schema: QUICK_RESULT_SCHEMA,
       model: getSettings().model.trim() || undefined,
       modelSource: getSettings().model.trim() ? "settings" : "default",
+      ...(() => {
+        const r = resolveQuickEffort(q.skill, getSettings());
+        return { effort: r.effort, effortSource: r.source };
+      })(),
       log: (kind, text) => {
         const line: LogLine = { at: new Date().toISOString(), kind, text };
         try {
@@ -846,8 +861,8 @@ export class Orchestrator {
         } catch {}
       },
       setProgress: (v, source) => this.setProgress(q, v, source),
-      startMessage: (model, permissionMode, source) =>
-        `Starting quick run of skill "${q.skill}" (permission mode: ${permissionMode}, model: ${modelLabel(model, source)}).`,
+      startMessage: (model, permissionMode, source, effort, effortSource) =>
+        `Starting quick run of skill "${q.skill}" (permission mode: ${permissionMode}, model: ${modelLabel(model, source)}, effort: ${effortLabel(effort, effortSource)}).`,
     };
   }
 
@@ -1124,15 +1139,18 @@ export class Orchestrator {
     // Read the card again at each spawn: the previous column's run may have set its models.
     const fresh = p.card(job.cardId) ?? card;
     const resolved = resolveModel(column, getSettings(), fresh);
+    const effort = resolveEffort(column, getSettings(), fresh);
     return {
       name: `nightshift: ${card.title}`.slice(0, 80),
       schema: RESULT_SCHEMA,
       model: resolved.model,
       modelSource: resolved.source,
+      effort: effort.effort,
+      effortSource: effort.source,
       log: (kind, text) => this.log(p, card.id, kind, text),
       setProgress: (v, source) => this.setProgress(job, v, source),
-      startMessage: (model, permissionMode, source) =>
-        `${verb} ${job.skill ? `skill "${job.skill}"` : "session"} in "${column.name}" (permission mode: ${permissionMode}, model: ${modelLabel(model, source)}).`,
+      startMessage: (model, permissionMode, source, effort, effortSource) =>
+        `${verb} ${job.skill ? `skill "${job.skill}"` : "session"} in "${column.name}" (permission mode: ${permissionMode}, model: ${modelLabel(model, source)}, effort: ${effortLabel(effort, effortSource)}).`,
     };
   }
 
@@ -1167,9 +1185,10 @@ export class Orchestrator {
       "--name",
       target.name,
       ...(model ? ["--model", model] : []),
+      ...(target.effort ? ["--effort", target.effort] : []),
       ...splitArgs(settings.extraArgs),
     ];
-    target.log("info", target.startMessage(model, settings.permissionMode, target.modelSource));
+    target.log("info", target.startMessage(model, settings.permissionMode, target.modelSource, target.effort, target.effortSource));
 
     let result: StreamEvent | null = null;
     let stderr = "";
@@ -1329,6 +1348,11 @@ export class Orchestrator {
       else delete card.models;
       if (merged.changes.length > 0) p.addHistory(card, "edited", describeModelChanges(merged.changes, "agent"));
       if (merged.dropped.length > 0) this.log(p, job.cardId, "info", merged.dropped.map(formatDropped).join("; "));
+      const mergedEfforts = mergeEfforts(card.efforts, out.efforts);
+      if (mergedEfforts.efforts) card.efforts = mergedEfforts.efforts;
+      else delete card.efforts;
+      if (mergedEfforts.changes.length > 0) p.addHistory(card, "edited", describeEffortChanges(mergedEfforts.changes, "agent"));
+      if (mergedEfforts.dropped.length > 0) this.log(p, job.cardId, "info", mergedEfforts.dropped.map(formatDroppedEffort).join("; "));
       card.updatedAt = now;
       if (status === "question") {
         out.questions.forEach((q, i) => {
