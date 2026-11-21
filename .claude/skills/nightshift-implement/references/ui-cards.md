@@ -1,6 +1,6 @@
 # Cards that change a screen
 
-Read this only when the card changes a screen: `git diff --name-only <base sha>` lists UI code, or the brief names a page.
+Read this only when the card changes a screen. Capture (`## Screenshots`) only when `Card path` has no `nightshift-review` column left; otherwise review captures: `git diff --name-only <base sha>` lists UI code, or the brief names a page.
 
 ## Start the app
 
@@ -20,6 +20,6 @@ A screen usually needs more than its front end: a backend, a database, other ser
 ## Screenshots
 
 1. Start `test.command` in the background with the start command's no-browser flag or variable for this run only (`NIGHTSHIFT_NO_OPEN=1` for Nightshift itself); the stored `test.command` does not change. Retry `curl -sf -o /dev/null <url>` 10 times, one second apart. If it never answers, stop the process, write the error under `## Screenshots`, and continue: a missed screenshot never fails the card.
-2. Save one PNG per screen the brief names (else `test.url` once as `01-home.png`) in `<worktree>/nightshift-screenshots/`, numbered `01-slug.png`, `02-slug.png`, from the worktree with `npx --yes playwright screenshot --browser chromium --full-page --viewport-size=1280,800 "<url>" "<png>"`. Retry a failed file once, then write its error under `## Screenshots` and go on.
+2. Save one PNG per screen the brief names (else `test.url` once as `01-home.png`) in `<worktree>/nightshift-screenshots/`, numbered `01-slug.png`, `02-slug.png`, from the worktree with the project's Playwright (`<worktree>/node_modules/.bin/playwright`, else the board project's; `bunx playwright` when `bun.lock` exists and `package.json` declares `playwright` or `@playwright/test`; else `npx --yes playwright`, which resolves the package on every call; on a missing browser, retry once with `npx --yes playwright`): `playwright screenshot --browser chromium --full-page --viewport-size=1280,800 "<url>" "<png>"`. Retry a failed file once, then write its error under `## Screenshots` and go on.
 3. Stop the server you started, so the port is free for the Tester button. Do not stage or commit `nightshift-screenshots`.
 4. Append `## Screenshots`: one markdown image per PNG, absolute path, alt text the screen name (`![Home](/abs/path/nightshift-screenshots/01-home.png)`).

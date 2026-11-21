@@ -25,12 +25,12 @@ The worktree is the one implementation left: the `Worktree` line under `## Resul
 3. List every finding. A finding is a defect: behavior that contradicts the spec, a failing check, a stub (`TODO`, `FIXME`, skipped test, empty body that only throws), or a security hole. A rename or a formatting note is not a finding. Do not change those.
 4. Fix every finding in the worktree. One commit per fix, message `fix: <what>`, only the files that fix needs. Do not use `--no-verify` and do not amend. Do not stage `.env`, credential files, `nightshift.json`, or `nightshift-screenshots`. If a fix needs a product decision the spec does not answer, do not guess. Ask every such decision at once (see Asking questions). Set `move` to `stay` and stop.
 5. Run the full test suite here, once, after the last fix of step 4: the only place in the Nightshift flow where it runs. Use the suite command of `## Definition of done` when it names one, else the project's whole check (lint, types and all tests: a `check` or `test` script, or what the README names) for every part the card changed. Then the items of `## Definition of done` and `## Tests` the suite does not cover, including those marked "deferred to review". While fixing in step 4, run only the affected-tests command written under `## Result`.
-   - Tests already failing on the base (the `Baseline` line of `## Result`) are not findings of this card; any other failure is.
+   - Tests already failing on the base (the `Baseline` line of `## Result`) are not findings of this card. A failure absent from it: re-run only that test on the base (throwaway detached worktree); a finding unless it fails there too.
    - When a later run of this skill finds no fix to make and `git rev-parse HEAD^{tree}` equals the tree of the latest `Suite` line under `## Review`, do not re-run the suite: write `Suite: reused, tree <sha>`.
    - A failure is a finding: fix it and run the suite again. A second failure of the same check: set `move` to `stay`, write the command and the output under `## Review`, and stop. Do not commit a red tree.
    - Write the `Suite` line under `## Review` in the same format as `## Result` (`Suite: <command> → exit <code>, failing: <…>, tree <sha>`), so `nightshift-merge` can reuse it.
 6. Check `test` on every run, even with nothing to fix: the "Tester" button runs `test.command` as written, and an output without `test` keeps the old one.
-   - The card changes a screen (`git diff --name-only <base>` lists UI code, or the brief names a page): read references/ui-cards.md, check `test` and refresh the screenshots as it says.
+   - The card changes a screen (`git diff --name-only <base>` lists UI code, or the brief names a page): read references/ui-cards.md, check `test` and capture the screenshots as it says.
    - Otherwise `test.command` is the affected-tests command in the worktree, with no `url`; start no server. It must `cd` into this run's worktree: rewrite the path when the worktree changed. Return it in the output. Omit `test` only when the card had none.
 8. Append `## Review`, with the line `- Test: <test.command>` when the card has a `test`. Set `move` to `next` and `questions` to an empty array. Keep the worktree.
 
@@ -38,7 +38,7 @@ The worktree is the one implementation left: the `Worktree` line under `## Resul
 
 - Read the diff against the base (step 2) and the code around each hunk; open other files only when a hunk calls into them and the card does not describe the contract.
 - Trust the card's `Context` and `Architecture`: do not re-derive them, and do not re-run what `## Result` says ran unless the tree changed.
-- No repository-wide `grep`/`rg` sweeps, directory listings or Explore agents. Search for one symbol when a hunk needs it.
+- No repository-wide sweeps, directory listings or Explore agents. Search one symbol when a hunk needs it.
 
 ## Asking questions
 

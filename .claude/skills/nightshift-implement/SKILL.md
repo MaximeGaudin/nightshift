@@ -31,15 +31,15 @@ Other cards may run on this repository at the same time, so by default this run 
    Create the worktree before any commit, test or edit. First record the base: the branch checked out in the shared checkout (`git symbolic-ref --short HEAD`, for example `WIP` or `main`; `detached` on a detached `HEAD`) and its SHA (`git rev-parse HEAD`). Branch `nightshift/<card-id>`, directory from `mktemp -d`, then `git worktree add -b nightshift/<card-id> <dir> HEAD`. On failure: delete nothing, Stop rule. Every command from here runs in that directory; leave pending files in the shared checkout alone.
    - Worktree only: `cp` (never link) a git-ignored test selection cache (for example `.testmondata`) to the same path in the worktree.
 4. In the work directory, commit any pending changes before changing anything. Run `git status --porcelain`. If the output is empty, skip the commit. Otherwise commit those paths (with no worktree, only the files this card is about to touch: leave unrelated pending files alone), except `.env` and credential files, in one commit: `chore: save pending work before implementation`. Never `--no-verify`, never amend.
-5. Never run the full suite (`nightshift-review` does, once). Before any implementation, run the affected-tests command (see Tests) once against the base SHA: its failures are the baseline, written under `## Result`. Continue even when some fail; the card must add none.
+5. Never run the full suite (`nightshift-review` does, once). No base run before implementing: see step 7.
 6. Run every task in order in the work directory, following Implementation rules below.
    - After each task, check it: the tests that name it in `## Tests` pass, its commits are on `nightshift/<card-id>` (`git log`), and `git status --porcelain` is clean. Then tick its line in `## Progress`.
    - A failing check: fix it once; a second failure: Stop rule.
-7. Run the affected-tests command against the base SHA. Then the items of `## Definition of done` and the tests of `## Tests` it does not cover, except the full suite gate (the project's whole check or test command): write "deferred to review" next to that item. A new failure (not in the baseline): fix it once and re-run; a second failure: Stop rule. No red commit.
+7. Run the affected-tests command (see Tests) on the work directory. When some fail, re-run only those on the base SHA in a throwaway detached worktree (`git worktree add --detach`, same links, removed after): those failing there too are the baseline. All pass: base not run. Then the items of `## Definition of done` and the tests of `## Tests` it does not cover, except the full suite gate (the project's whole check or test command): write "deferred to review" next to that item. A new failure (not failing on the base): fix it once and re-run; a second failure: Stop rule. No red commit.
 8. Commit everything still uncommitted, in small modular commits (one cohesive behavior each), never `.env` or credential files. When those commits change code (`git rev-parse HEAD^{tree}` differs from the tree of step 7), re-run the affected tests; a failure follows step 7.
 9. `git status --porcelain` in this run's worktree must be empty except ignored secrets (with no worktree: no file this card changed is left uncommitted). Tick the definition-of-done items that passed. Append `## Result`. Keep this run's worktree, if any. Set `move` to `next` and `questions` to an empty array.
 10. Set `test` so a human can try the card with one click (see Test command).
-11. Capture screenshots when `test.url` is set (see Screenshots). Skip on a stop.
+11. Capture screenshots (see Screenshots). Skip on a stop.
 
 Stop rule: set `move` to `stay`, write the command and its output under `## Result`, check only the finished `## Progress` lines, omit `test`, and stop.
 
@@ -48,7 +48,7 @@ Stop rule: set `move` to `stay`, write the command and its output under `## Resu
 The card holds the research (`file:line` references, contracts, commands, decisions). Trust it: do not re-derive what it states or re-check a decision it records.
 
 - Read only what a task touches: the referenced lines, the functions you change and their tests.
-- No broad exploration: no repository-wide `grep`/`rg` sweeps, no directory listings, no Explore agent. Search only for a symbol the card leaves a gap on.
+- No broad exploration (no repository-wide sweeps, directory listings or Explore agent). Search only for a symbol the card leaves a gap on.
 
 ## Implementation rules
 
@@ -57,7 +57,7 @@ The card holds the research (`file:line` references, contracts, commands, decisi
 - Write the real behavior: no TODO, FIXME, stub or skipped test.
 - `Files` is a guide, not a wall: touch another file when the task needs it, and say so in `## Result`. Do not reformat code the card does not need to change.
 - Commit as you go, in small modular commits, each only after the tests covering it pass (affected tests, never the full suite). Do not save a whole task for one final commit.
-- Never `--no-verify`, never amend; if a hook changes files, add them in a new commit. Never commit `.env` or credential files.
+- Never `--no-verify`, never amend (a hook's changes go in a new commit), never commit `.env` or credentials.
 
 ## Tests
 
@@ -76,7 +76,7 @@ Also write the command under `## Result` as `- Test: <command>`.
 
 ## Screenshots
 
-Only when `test.url` is set (see references/ui-cards.md). Otherwise `## Screenshots` is the line `No screen to capture.`.
+Only when `test.url` is set and no `nightshift-review` column remains in `Card path` (see references/ui-cards.md): the card skips Review. When Review remains, start no app and write `## Screenshots` as `Deferred to review.`. With no `test.url`: `No screen to capture.`.
 
 ## Asking questions
 
@@ -93,7 +93,7 @@ Append this to the specification. Do not delete `## Progress`, `## Architecture`
 - Branch: nightshift/<card-id> (with `Worktree: none`, the base branch)
 - Base: <branch, or detached> at <sha>
 - Shared checkout: untouched (or committed to directly)
-- Baseline: pending work commit <sha or "clean">, affected tests → exit <code>, failing: <none, or the base's>
+- Baseline: pending work commit <sha or "clean">, base not run (tests pass) or base run on <tests>, failing: <none, or those failing on the base>
 - Model: <the model this run used>; repairs: <n>
 - Tasks done: <names, in order>, all done in the card's session
 - Files beyond the tasks' `Files`: <paths and why, or none>
@@ -121,6 +121,6 @@ Done (on a stop: `move` is `stay`, only the finished `## Progress` lines are che
 ## Done when
 
 - [ ] Only the work directory changed: the shared checkout is untouched, or `Worktree: none` says the policy allowed it
-- [ ] The baseline was recorded before the first edit, and the full suite was not run
+- [ ] No test ran on the base unless one failed after the change, and the full suite was not run
 - [ ] Every task ran in this session, in this run's worktree, with no subagent, as small commits; the work directory is clean except ignored secrets
 - [ ] `move` is `next` only when the affected tests pass with no failure beyond the baseline
