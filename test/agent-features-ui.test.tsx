@@ -1,7 +1,9 @@
 import { afterAll, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { Settings } from "../src/shared/types.ts";
+import { defaultBoard } from "../src/server/store.ts";
+import type { Card, Settings } from "../src/shared/types.ts";
 import { AgentFeaturesFields, agentFeaturesPatch, inheritedFeatures } from "../src/web/AgentFeaturesFields.tsx";
+import { CardAgentFeaturesEditor } from "../src/web/CardAgentFeaturesEditor.tsx";
 import { getLocale, setLocale } from "../src/web/i18n/index.ts";
 import { SettingsContent, settingsDirty } from "../src/web/SettingsModal.tsx";
 
@@ -64,4 +66,17 @@ test("patch: inherit drops the key, an empty object becomes undefined", () => {
 test("settingsDirty sees an agent features change", () => {
   expect(settingsDirty(base, { ...base, agentFeatures: { mcp: true } })).toBe(true);
   expect(settingsDirty(base, { ...base, agentFeatures: {} })).toBe(false);
+});
+
+test("card editor: shows the column's value as inherited and the number of card overrides", () => {
+  setLocale("en");
+  const board = {
+    ...defaultBoard("x"),
+    columns: [{ id: "c", name: "Work", type: "skill" as const, skill: "s", agentFeatures: { hooks: true } }],
+  };
+  const card = { id: "k", columnId: "c", agentFeatures: { mcp: true } } as unknown as Card;
+  const html = renderToStaticMarkup(<CardAgentFeaturesEditor project="/p" card={card} board={board} settings={null} />);
+  expect(html).toContain("Agent features (1)");
+  expect(html).toContain("Inherit (on)");
+  expect(html).toContain("Inherit (off)");
 });

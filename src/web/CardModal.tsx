@@ -13,6 +13,7 @@ import {
   type RunProgress as RunProgressData,
 } from "../shared/types.ts";
 import { api, useServerEvents, useSettings } from "./api.ts";
+import { CardAgentFeaturesEditor } from "./CardAgentFeaturesEditor.tsx";
 import { CardModelsEditor } from "./CardModelsEditor.tsx";
 import { PausedBadge } from "./CardTile.tsx";
 import { attempt, deleteThenClose, sendThenClear } from "./cardActions.ts";
@@ -587,6 +588,7 @@ export function CardModalContent({
         <DraftSection project={project} card={card} />
         <DependenciesSection project={project} card={card} board={board} onOpenCard={onOpenCard} />
         <CardModelsEditor key={card.id} project={project} card={card} board={board} settings={settings} />
+        <CardAgentFeaturesEditor key={`features-${card.id}`} project={project} card={card} board={board} settings={settings} />
         {asking && lr && (
           <form
             className="question flex max-h-[60%] min-w-0 shrink-0 flex-col gap-3 overflow-auto rounded-lg border border-warn/30 bg-warn-soft p-3"

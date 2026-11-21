@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { AgentFeaturesOverride } from "../shared/agentFeatures.ts";
 import type { FlowState } from "../shared/flow.ts";
 import type { CardImageStored, CardImageUpload } from "../shared/screenshots.ts";
 import type { LogLine, ProjectSnapshot, ServerEvent, Settings, SkillInfo, WorktreePolicy } from "../shared/types.ts";
@@ -68,6 +69,7 @@ export const api = {
       dependsOn?: string[];
       draft?: boolean;
       models?: Record<string, string> | null;
+      agentFeatures?: AgentFeaturesOverride | null;
     },
   ) => call("PATCH", `/api/cards/${id}`, { project, ...patch }),
   /** Stores a pasted image in the card's folder; the answer is its absolute path. */
