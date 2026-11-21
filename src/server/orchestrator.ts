@@ -1327,6 +1327,16 @@ export class Orchestrator {
     }
     const unavailable = (reason: string, costUsd: number) => {
       this.log(p, card.id, "info", `Smart unavailable (${reason}): resolving without smart.`);
+      // A stale entry would hand an answer or feedback on this session a configuration it never ran with.
+      if (cached) {
+        p.mutate(() => {
+          const c = p.card(job.cardId);
+          if (!c?.smartChoices?.[column.id]) return;
+          const { [column.id]: _stale, ...rest } = c.smartChoices;
+          if (Object.keys(rest).length > 0) c.smartChoices = rest;
+          else delete c.smartChoices;
+        });
+      }
       return { costUsd };
     };
     let env: Record<string, string | undefined> = process.env;

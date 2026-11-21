@@ -171,6 +171,16 @@ test("smart-run: a retry reads the cache; a new description calls again", async 
   await waitFor(() => smartCalls("stay").length === before + 1);
 });
 
+test("smart-run: a failed call drops the stale cache entry, so a later answer runs without smart", async () => {
+  const { enrich, card, create, dir } = await setup();
+  const { id } = await create("stay", "cached first");
+  await waitFor(async () => !!(await card(id)).smartChoices?.[enrich.id]);
+  await waitFor(async () => (await card(id)).lastRun?.status === "success");
+  await send(`/api/cards/${id}`, { project: dir, title: "smart-fail now" }, "PATCH");
+  await send(`/api/cards/${id}/retry`, { project: dir });
+  await waitFor(async () => (await card(id)).smartChoices === undefined && (await card(id)).lastRun?.status === "success");
+});
+
 test("smart-run: off globally or on the column", async () => {
   const col = await setup({ smartMode: false });
   const a = await col.create("stay", "column off");
