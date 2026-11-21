@@ -7,3 +7,5 @@ plugins = ["bun-plugin-tailwind"]
 
 [test]
 preload = ["./test/preload.ts"]
+# Default is 5000 ms, shorter than waitFor's 8000 ms: a slow file watcher under load killed the test with no message.
+timeout = 15000
