@@ -59,6 +59,7 @@ test("git-remote-parse", () => {
   expect(parseGitRemote("ssh://git@github.com/o/r")).toEqual({ provider: "github", baseUrl: "https://api.github.com", repo: "o/r" });
   expect(parseGitRemote("https://git.example.com/o/r.git")).toEqual({ provider: "gitea", baseUrl: "https://git.example.com", repo: "o/r" });
   expect(parseGitRemote("git@git.example.com:o/r.git")).toBeUndefined();
+  expect(parseGitRemote("http://git.local:3000/o/r.git")).toEqual({ provider: "gitea", baseUrl: "http://git.local:3000", repo: "o/r" });
   expect(parseGitRemote("file:///x")).toBeUndefined();
 });
 

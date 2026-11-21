@@ -224,6 +224,7 @@ export function parseGitRemote(remote: string): { provider: string; baseUrl: str
   let host: string | undefined;
   let path: string | undefined;
   let https = false;
+  let scheme = "https:";
   const scp = /^[^@/\s]+@([^:/\s]+):(.+)$/.exec(s);
   if (scp) {
     host = scp[1];
@@ -231,8 +232,10 @@ export function parseGitRemote(remote: string): { provider: string; baseUrl: str
   } else {
     try {
       const u = new URL(s);
-      if (u.protocol === "https:" || u.protocol === "http:") https = true;
-      else if (u.protocol !== "ssh:" && u.protocol !== "git:") return undefined;
+      if (u.protocol === "https:" || u.protocol === "http:") {
+        https = true;
+        scheme = u.protocol;
+      } else if (u.protocol !== "ssh:" && u.protocol !== "git:") return undefined;
       host = u.host;
       path = u.pathname;
     } catch {
@@ -251,5 +254,5 @@ export function parseGitRemote(remote: string): { provider: string; baseUrl: str
   if (!https) return undefined;
   const fallback = PROVIDERS.find((p) => p.fallbackForHttps);
   if (!fallback) return undefined;
-  return { provider: fallback.id, baseUrl: `https://${host}`, repo };
+  return { provider: fallback.id, baseUrl: `${scheme}//${host}`, repo };
 }
