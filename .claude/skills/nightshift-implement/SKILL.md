@@ -159,7 +159,7 @@ Append this to the specification. Do not delete `## Progress`, `## Architecture`
 - Shared checkout: untouched (or, with `Worktree: none`, committed to directly)
 - Baseline: pending work commit <sha or "clean">, affected tests → exit <code>, failing: <none, or the tests already failing on the base>
 - Model: <the model this run used>; repairs: <n>
-- Tasks done: <names, in order>, in this session (no subagent)
+- Tasks done: <names, in order>, all done in the card's session (no subagent)
 - Files beyond the tasks' `Files`: <paths and why, or none>
 - Tests: <affected-tests command> → exit <code>, failing: <none, or the baseline's>; full suite: deferred to review
 - Commits: <shas, in order>
