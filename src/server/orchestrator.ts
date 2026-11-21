@@ -26,9 +26,10 @@ import { safeHttpUrl } from "../shared/urls.ts";
 import { buildEnvironment } from "./environment.ts";
 import { FlowController } from "./flow.ts";
 import { HttpError } from "./guard.ts";
+import { IssueSync } from "./issues/sync.ts";
 import { parseProgressMarker, progressFromTodos } from "./progress.ts";
 import { buildQuickRunPrompt, parseQuickOutput, QUICK_INSTRUCTION_MAX, QUICK_RESULT_SCHEMA } from "./quickrun.ts";
-import { persistScreenshots } from "./screenshots.ts";
+import { persistScreenshots, removeScreenshots } from "./screenshots.ts";
 import { applySections, parseSections } from "./sections.ts";
 import { contextTokensOf, decideCarry } from "./sessionCarry.ts";
 import { getSettings, legacyMaxParallel, NIGHTSHIFT_HOME, onSettingsChange, rememberProject } from "./settings.ts";
@@ -399,6 +400,23 @@ export class Orchestrator {
   /** False for a test instance (`--no-agents`): it shows and edits boards but never runs agents nor takes locks. */
   readonly agents: boolean;
 
+  /** Issue sources: imports issues into Backlog and writes back on Done, only where this process runs the agents. */
+  readonly issues = new IssueSync({
+    canRun: (p) => this.canRunAgents(p),
+    onState: (p) => {
+      if (this.projects.get(p.path) === p) this.broadcast({ type: "board", project: p.path, snapshot: this.snapshot(p) });
+    },
+    purge: (p, cardId) => {
+      removeScreenshots(cardId);
+      this.purgeCard(p, cardId);
+    },
+  });
+
+  /** True when this process runs the project's agents: started with agents and holding the project's lock. */
+  canRunAgents(p: Project): boolean {
+    return this.agents && !this.lockedBy.has(p.path);
+  }
+
   constructor({ agents = true }: { agents?: boolean } = {}) {
     this.agents = agents;
     onSettingsChange((settings) => {
@@ -439,8 +457,11 @@ export class Orchestrator {
     if (wasLocked !== this.lockedBy.has(p.path)) {
       this.broadcast({ type: "board", project: p.path, snapshot: this.snapshot(p) });
       this.scheduleTick();
-      // Just took the lock over: release the cards whose dependencies finished meanwhile.
-      if (!this.lockedBy.has(p.path)) this.scheduleDependencies(p);
+      // Just took the lock over: release the cards whose dependencies finished meanwhile, and sync the issues.
+      if (!this.lockedBy.has(p.path)) {
+        this.scheduleDependencies(p);
+        if (this.projects.get(p.path) === p) this.issues.start(p);
+      }
     }
   }
 
@@ -478,10 +499,12 @@ export class Orchestrator {
       this.scheduleTick();
       this.flow.schedule(p);
       this.scheduleDependencies(p);
+      this.issues.scheduleWriteBack(p);
     });
     rememberProject(path);
     this.scheduleTick();
     this.scheduleDependencies(p);
+    if (this.agents) this.issues.start(p);
     return p;
   }
 
@@ -523,6 +546,7 @@ export class Orchestrator {
   snapshot(p: Project): ProjectSnapshot {
     const live = this.liveStatuses(p);
     const lockedBy = this.lockedBy.get(p.path);
+    const issueSources = this.issues.status(p);
     const testing = [...this.tests.values()].filter((t) => t.project === p).map((t) => t.cardId);
     const progress: Record<string, RunProgress> = {};
     for (const card of p.board.cards) {
@@ -550,6 +574,7 @@ export class Orchestrator {
       flow: this.flow.get(p),
       ...(lockedBy ? { lockedBy } : {}),
       ...(this.agents ? {} : { agentsDisabled: true }),
+      ...(issueSources ? { issueSources } : {}),
     };
   }
 
@@ -692,7 +717,8 @@ export class Orchestrator {
     if (started) this.broadcastAll();
   }
 
-  private broadcastAll() {
+  /** Sends a fresh snapshot of every open project (e.g. after a token change, which changes `hasToken`). */
+  broadcastAll() {
     for (const p of this.projects.values()) this.broadcast({ type: "board", project: p.path, snapshot: this.snapshot(p) });
   }
 
@@ -1441,6 +1467,7 @@ export class Orchestrator {
    */
   async shutdown(graceMs = SHUTDOWN_GRACE_MS) {
     clearInterval(this.lockTimer);
+    this.issues.shutdown();
     const groups = [...this.tests.values()].map((t) => t.proc.pid).filter((pid): pid is number => !!pid);
     // Queued quick runs are dropped; the running ones are stopped like jobs.
     for (const q of [...this.quickRuns.values()]) if (q.status === "queued") this.quickRuns.delete(q.id);

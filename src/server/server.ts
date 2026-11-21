@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import type { Server, ServerWebSocket } from "bun";
 import { dependencyCycle, describeCycle, releaseReason, resolveDependencyRefs, unmetDependencies } from "../shared/dependencies.ts";
+import { effectiveBaseUrl, matchesLabels, parseGitRemote, providerInfo } from "../shared/issues.ts";
 import { describeModelChanges, diffModels, validateModelsStrict } from "../shared/models.ts";
 import { MAX_PENDING_IMAGES, pendingIds, resolvePending } from "../shared/pendingImages.ts";
 import { type CardImageStored, cardImageType } from "../shared/screenshots.ts";
@@ -27,6 +28,9 @@ import {
 import { safeHttpUrl } from "../shared/urls.ts";
 import index from "../web/index.html";
 import { checkRequest, HttpError } from "./guard.ts";
+import { checkSourceInput, replaceSources } from "./issues/input.ts";
+import { providerFor } from "./issues/registry.ts";
+import { getToken, setToken } from "./issues/tokens.ts";
 import { Orchestrator } from "./orchestrator.ts";
 import { removeScreenshots, resolveScreenshot, storeCardImage } from "./screenshots.ts";
 import { getSettings, updateSettings } from "./settings.ts";
@@ -576,6 +580,63 @@ export function startServer({ port, development, agents = true }: { port: number
             else board.worktreePolicy = policy as WorktreePolicy;
           });
           return orch.snapshot(p);
+        }),
+      },
+      "/api/issue-sources": {
+        PUT: h((b, url) => {
+          const p = project(b, url);
+          if (!Array.isArray(b.sources)) throw new Error("sources must be an array");
+          const inputs = b.sources.map(checkSourceInput);
+          const changed = p.mutate((board) => replaceSources(board, inputs));
+          if (orch.canRunAgents(p)) for (const id of changed) void orch.issues.syncSource(p, id);
+          return orch.snapshot(p);
+        }),
+      },
+      "/api/issue-sources/test": {
+        POST: h(async (b, url) => {
+          project(b, url);
+          const src = checkSourceInput(b.source);
+          const impl = providerFor(src.provider);
+          if (!impl) throw new Error(`Unknown issue provider: ${src.provider}`);
+          const token = (optString(b, "token") ?? "").trim() || getToken(src.provider, src.baseUrl);
+          const issues = await impl.listOpenIssues({ ...src, id: src.id ?? "test", importedIds: [] }, token);
+          return { count: issues.filter((i) => matchesLabels(i, src.labels)).length };
+        }),
+      },
+      "/api/issue-sources/sync": {
+        POST: h(async (b, url) => {
+          const p = project(b, url);
+          if (!orch.canRunAgents(p)) throw new HttpError(409, "This instance does not run this project's agents");
+          const sourceId = optString(b, "sourceId");
+          if (sourceId) {
+            if (!p.board.issueSources?.some((s) => s.id === sourceId)) throw new HttpError(404, "Unknown issue source");
+            await orch.issues.syncSource(p, sourceId);
+          } else await orch.issues.syncAll(p);
+          return orch.snapshot(p);
+        }),
+      },
+      "/api/issue-sources/detect": {
+        GET: h((b, url) => {
+          const p = project(b, url);
+          try {
+            const out = Bun.spawnSync(["git", "-C", p.path, "remote", "get-url", "origin"], { timeout: 5000 });
+            if (out.exitCode !== 0) return {};
+            return parseGitRemote(out.stdout.toString()) ?? {};
+          } catch {
+            return {};
+          }
+        }),
+      },
+      "/api/issue-tokens": {
+        PUT: h((b) => {
+          const provider = reqString(b, "provider");
+          const info = providerInfo(provider);
+          if (!info) throw new Error(`Unknown issue provider: ${provider}`);
+          const baseUrl = effectiveBaseUrl(info, optString(b, "baseUrl"));
+          if (!baseUrl) throw new Error("baseUrl must be an http(s) URL");
+          setToken(info.id, baseUrl, reqString(b, "token"));
+          orch.broadcastAll();
+          return { ok: true };
         }),
       },
       "/api/quick-runs": {
