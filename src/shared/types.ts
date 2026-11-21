@@ -1,6 +1,7 @@
 // Types shared by the server and the web client.
 
 import type { FlowState } from "./flow.ts";
+import type { CardExternal, IssueSource, IssueSourceStatus } from "./issues.ts";
 import type { QuotaSnapshot } from "./usage.ts";
 
 export type ColumnType = "inert" | "skill";
@@ -17,6 +18,8 @@ export interface Column {
   model?: string;
   /** Skill columns only: the column model wins over the card's per-skill model. Never stored as false. */
   lockModel?: true;
+  /** Skill columns only: niveau d'effort (`--effort`) des runs de cette colonne ; absent = réglage global. */
+  effort?: "low" | "medium" | "high" | "xhigh" | "max";
   /** Max agents running at once in this column; absent = 1. The global setting still caps the total. */
   maxParallel?: number;
   /** Single grapheme shown instead of the type icon; absent = type icon. */
@@ -115,8 +118,14 @@ export interface Card {
   draft?: true;
   /** Per-skill model overrides (skill name -> alias or ID). Never `{}`; "default" is never stored. */
   models?: Record<string, string>;
+  /** Per-skill effort overrides (skill name -> low|medium|high|xhigh|max). Never `{}`; "default" is never stored. */
+  efforts?: Record<string, "low" | "medium" | "high" | "xhigh" | "max">;
   /** The card's Claude session: a column continues it unless it has `freshSession` (the default for new skill columns). */
   sessionId?: string;
+  /** Link to the external issue this card was imported from. Absent on manual cards. */
+  external?: CardExternal;
+  /** The description as session `sessionId` last saw it: a run resuming that session only gets what changed since. Server-only. */
+  seenDescription?: { sessionId: string; text: string };
   history: HistoryEntry[];
   /** Time checkpoint of the history entries dropped by the history cap. */
   timeBase?: TimeState;
@@ -136,6 +145,8 @@ export interface Board {
   favoriteSkills?: string[];
   /** Whether agents work in a git worktree. Absent = `DEFAULT_WORKTREE_POLICY`; never stored as the default. */
   worktreePolicy?: WorktreePolicy;
+  /** External issue trackers feeding the Backlog. Absent when none. Never holds a token. */
+  issueSources?: IssueSource[];
 }
 
 /** Agents must use a worktree per card, may choose, or must never create one. */
@@ -230,6 +241,7 @@ export function ensureDoneColumn(columns: Column[]): Column[] {
   delete done.skill;
   delete done.instructions;
   delete done.model;
+  delete done.effort;
   delete done.lockModel;
   delete done.maxParallel;
   return [...columns.filter((c) => !isDoneColumn(c)), done];
@@ -274,6 +286,7 @@ export function ensureBacklogColumn(columns: Column[]): { columns: Column[]; ren
   delete backlog.skill;
   delete backlog.instructions;
   delete backlog.model;
+  delete backlog.effort;
   delete backlog.lockModel;
   delete backlog.maxParallel;
   const rest = columns.filter((c) => c !== source && !isBacklogColumn(c));
@@ -298,6 +311,8 @@ export interface Settings {
   claudePath: string;
   permissionMode: PermissionMode;
   model: string;
+  /** "" = skill's economic default, "inherit" = pass no --effort, else a level. */
+  effort: "" | "inherit" | "low" | "medium" | "high" | "xhigh" | "max";
   extraArgs: string;
   recentProjects: string[];
   /** Play a sound when a card needs human attention. */
@@ -307,7 +322,38 @@ export interface Settings {
   carryMaxTokens: number;
   /** Auto fresh-session mode: the oldest last run (minutes) still worth continuing; the prompt cache lifetime. */
   carryMaxAgeMinutes: number;
+  /** Run the agents through the local teamclaude proxy (multi-account pool). */
+  teamclaudeEnabled: boolean;
+  /** Base URL of the teamclaude proxy, http(s), stored without a trailing slash. */
+  teamclaudeUrl: string;
 }
+
+/** Why an agent launch through teamclaude is blocked. */
+export type TeamclaudeFailure = { kind: "not-found" } | { kind: "env-failed"; detail: string } | { kind: "no-response"; url: string };
+
+/** One run blocked on the teamclaude proxy: a card run (feedback included) or a quick run. */
+export interface TeamclaudeWaitEntry {
+  /** Absolute project path. */
+  project: string;
+  cardId?: string;
+  /** "#12" for a card run. */
+  ref?: string;
+  quickRunId?: string;
+  /** Card title, or the skill name for a quick run. */
+  title: string;
+}
+
+/** The runs blocked on the teamclaude proxy, waiting for a human choice. */
+export interface TeamclaudeWait {
+  failure: TeamclaudeFailure;
+  /** In arrival order. */
+  entries: TeamclaudeWaitEntry[];
+  /** A retry is in progress: the choices are disabled. */
+  retrying: boolean;
+}
+
+export const TEAMCLAUDE_ACTIONS = ["retry", "direct", "cancel"] as const;
+export type TeamclaudeAction = (typeof TEAMCLAUDE_ACTIONS)[number];
 
 export interface SkillInfo {
   name: string;
@@ -408,6 +454,10 @@ export interface ProjectSnapshot {
   quickRuns: QuickRun[];
   /** Fast forward and pause, in memory per project. */
   flow: FlowState;
+  /** Live state of each issue source, by source id; present when the board has sources. */
+  issueSources?: Record<string, IssueSourceStatus>;
+  /** Cards of this project whose run waits for the teamclaude proxy. */
+  proxyWaiting: string[];
 }
 
 /** Why a card needs a human: it reached an inert column, asks questions, or its run failed. */
@@ -423,4 +473,5 @@ export type ServerEvent =
   | { type: "settings"; settings: Settings }
   | { type: "usage"; usage: QuotaSnapshot | null }
   | { type: "attention"; project: string; cardId: string; kind: AttentionKind }
-  | { type: "quickrun"; project: string; result: QuickRunResult };
+  | { type: "quickrun"; project: string; result: QuickRunResult }
+  | { type: "teamclaude"; wait: TeamclaudeWait | null };

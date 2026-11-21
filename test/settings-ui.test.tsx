@@ -7,12 +7,15 @@ const base: Settings = {
   claudePath: "claude",
   permissionMode: "auto",
   model: "",
+  effort: "",
   extraArgs: "",
   recentProjects: [],
   soundNotifications: false,
   language: "auto",
   carryMaxTokens: 80000,
   carryMaxAgeMinutes: 5,
+  teamclaudeEnabled: false,
+  teamclaudeUrl: "http://localhost:3456",
 };
 
 const render = (s: Settings, current?: string) =>
@@ -175,4 +178,16 @@ test("worktree-policy-ui: saving writes the policy only when it changed, after t
   expect(calls.map(([k]) => k)).toEqual(["settings"]);
   expect(settingsDirty(base, base, 3, 3, "required", "auto")).toBe(true);
   expect(settingsDirty(base, base, 3, 3, "auto", "auto")).toBe(false);
+});
+
+test("teamclaude-settings-ui: switch off by default, URL shown, both count as unsaved changes", async () => {
+  const html = render(base);
+  expect(html).toMatch(/aria-checked="false"[^>]*id="set-teamclaude"/);
+  expect(html).toMatch(/id="set-teamclaude-url"[^>]*value="http:\/\/localhost:3456"/);
+  expect(html).toContain("Faire passer les agents par teamclaude");
+  expect(html).toContain("URL du proxy teamclaude");
+  expect(settingsDirty(base, { ...base, teamclaudeEnabled: true })).toBe(true);
+  expect(settingsDirty(base, { ...base, teamclaudeUrl: "http://h:1" })).toBe(true);
+  const { en } = await import("../src/web/i18n/en/index.ts");
+  expect(en["settings.teamclaude.label"]).toBe("Run agents through teamclaude");
 });

@@ -3,6 +3,8 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import type { Server, ServerWebSocket } from "bun";
 import { dependencyCycle, describeCycle, releaseReason, resolveDependencyRefs, unmetDependencies } from "../shared/dependencies.ts";
+import { describeEffortChanges, diffEfforts, type EffortLevel, isValidEffort, validateEffortsStrict } from "../shared/effort.ts";
+import { effectiveBaseUrl, matchesLabels, parseGitRemote, providerInfo } from "../shared/issues.ts";
 import { describeModelChanges, diffModels, validateModelsStrict } from "../shared/models.ts";
 import { MAX_PENDING_IMAGES, pendingIds, resolvePending } from "../shared/pendingImages.ts";
 import { type CardImageStored, cardImageType } from "../shared/screenshots.ts";
@@ -21,18 +23,22 @@ import {
   normalizeColumnParallel,
   normalizeProjectParallel,
   type ServerEvent,
+  TEAMCLAUDE_ACTIONS,
+  type TeamclaudeAction,
   WORKTREE_POLICIES,
   type WorktreePolicy,
 } from "../shared/types.ts";
 import { safeHttpUrl } from "../shared/urls.ts";
 import index from "../web/index.html";
 import { checkRequest, HttpError } from "./guard.ts";
+import { checkSourceInput, replaceSources } from "./issues/input.ts";
+import { providerFor } from "./issues/registry.ts";
+import { getToken, setToken } from "./issues/tokens.ts";
 import { Orchestrator } from "./orchestrator.ts";
 import { removeScreenshots, resolveScreenshot, storeCardImage } from "./screenshots.ts";
 import { getSettings, updateSettings } from "./settings.ts";
 import { createSkill, listSkills, readSkill, saveSkill } from "./skills.ts";
 import { BOARD_FILE, COLUMN_KEYS, isRaw, newId, type Project, type Raw, remapColumnId, unknownFields } from "./store.ts";
-import { getUsage } from "./usage.ts";
 
 export function startServer({ port, development, agents = true }: { port: number; development?: boolean; agents?: boolean }) {
   // `bun --hot` re-runs this module on every change. Reuse the orchestrator from the previous run:
@@ -177,29 +183,25 @@ export function startServer({ port, development, agents = true }: { port: number
       historyText?: string;
     },
   ): Card => {
-    const now = new Date().toISOString();
     if (!columnId || !p.column(columnId)) throw new Error("Unknown column");
     const skipColumnIds = normalizeSkipColumnIds(p.board.columns, skipInput);
     const dependsOn = dependsOnInput === undefined ? [] : resolveDependencyRefs(p.board, dependsOnInput);
     if (dependsOn.length > 0 && columnId !== BACKLOG_COLUMN_ID) throw new Error("dependsOn requires the Backlog column");
     if (draft && columnId !== BACKLOG_COLUMN_ID) throw new Error("draft requires the Backlog column");
     return p.mutate((board) => {
-      const card: Card = {
-        id: newId("card"),
-        number: board.nextCardNumber,
-        title: (title || "Untitled").trim(),
-        description: description ?? "",
-        columnId,
-        ...(skipColumnIds ? { skipColumnIds } : {}),
-        ...(dependsOn.length > 0 ? { dependsOn } : {}),
-        ...(draft ? { draft: true as const } : {}),
-        createdAt: now,
-        updatedAt: now,
-        enteredColumnAt: now,
-        history: [],
-      };
-      board.nextCardNumber += 1;
-      // Images are written and their markers resolved before the card joins the board: no observer sees `pending:`.
+      const card = p.addCard(
+        board,
+        {
+          title: title ?? "",
+          description: description ?? "",
+          columnId,
+          ...(skipColumnIds ? { skipColumnIds } : {}),
+          ...(dependsOn.length > 0 ? { dependsOn } : {}),
+          ...(draft ? { draft: true as const } : {}),
+        },
+        historyText,
+      );
+      // Images are written and their markers resolved before the mutation ends: no observer sees `pending:`.
       if (images) {
         const paths = new Map<number, string | null>();
         for (const n of pendingIds(card.description)) {
@@ -214,12 +216,9 @@ export function startServer({ port, development, agents = true }: { port: number
         }
         card.description = resolvePending(card.description, paths);
       }
-      p.addHistory(card, "created", historyText ?? `Created in ${p.column(columnId)?.name}`, columnId);
-      board.cards.push(card);
       // Every dependency already in Done: the card leaves Backlog right away.
       if (!card.draft && card.dependsOn && unmetDependencies(board, card).length === 0)
         p.releaseDependencies(board, card, releaseReason(board, card));
-      else p.addQueued(card, board);
       return card;
     });
   };
@@ -237,7 +236,18 @@ export function startServer({ port, development, agents = true }: { port: number
       },
 
       "/api/usage": {
-        GET: h(() => ({ usage: getUsage() })),
+        GET: h(() => ({ usage: orch.usage() })),
+      },
+
+      "/api/teamclaude/wait": {
+        GET: h(() => ({ wait: orch.teamclaudeWait() })),
+      },
+
+      "/api/teamclaude/decision": {
+        POST: h(async (b) => {
+          if (!TEAMCLAUDE_ACTIONS.includes(b.action as TeamclaudeAction)) throw new Error(`Unknown action: ${String(b.action)}`);
+          return { wait: await orch.teamclaudeDecide(b.action as TeamclaudeAction) };
+        }),
       },
 
       "/api/projects/open": {
@@ -300,6 +310,8 @@ export function startServer({ port, development, agents = true }: { port: number
                 const skill = field("skill");
                 const instructions = field("instructions")?.trim();
                 const model = field("model")?.trim();
+                const effort = field("effort")?.trim();
+                if (effort && !isValidEffort(effort)) throw new Error(`Column ${i + 1}: invalid effort ${JSON.stringify(effort)}`);
                 const type: ColumnType = c.type === "skill" ? "skill" : "inert";
                 const maxParallel = normalizeColumnParallel(type, c.maxParallel);
                 const emoji = normalizeColumnEmoji(c.emoji);
@@ -312,6 +324,7 @@ export function startServer({ port, development, agents = true }: { port: number
                   ...(instructions ? { instructions } : {}),
                   ...(model ? { model } : {}),
                   ...(type === "skill" && c.lockModel === true ? { lockModel: true as const } : {}),
+                  ...(type === "skill" && effort ? { effort: effort as EffortLevel } : {}),
                   ...(type === "skill" && (c.freshSession === true || c.freshSession === "auto") ? { freshSession: c.freshSession } : {}),
                   ...(maxParallel !== undefined ? { maxParallel } : {}),
                   ...(emoji !== undefined ? { emoji } : {}),
@@ -396,10 +409,13 @@ export function startServer({ port, development, agents = true }: { port: number
           const description = optString(b, "description");
           const skipInput = optSkipIds(b);
           const hasModels = b.models !== undefined;
+          const hasEfforts = b.efforts !== undefined;
           const dependsOnInput = optDependsOn(b);
           const draftInput = optDraft(b);
           const modelsCheck = validateModelsStrict(b.models);
           if (!modelsCheck.ok) throw new Error(modelsCheck.error);
+          const effortsCheck = validateEffortsStrict(b.efforts);
+          if (!effortsCheck.ok) throw new Error(effortsCheck.error);
           p.mutate((board) => {
             const card = p.card(req.params.id);
             if (!card) throw new HttpError(404, "Unknown card");
@@ -414,7 +430,7 @@ export function startServer({ port, development, agents = true }: { port: number
             if (
               title !== undefined ||
               description !== undefined ||
-              (skipInput === undefined && !hasModels && dependsOnInput === undefined && draftInput === undefined)
+              (skipInput === undefined && !hasModels && !hasEfforts && dependsOnInput === undefined && draftInput === undefined)
             )
               p.addHistory(card, "edited", "Edited by user");
             if (hasModels) {
@@ -422,6 +438,12 @@ export function startServer({ port, development, agents = true }: { port: number
               if (modelsCheck.models) card.models = modelsCheck.models;
               else delete card.models;
               if (changes.length > 0) p.addHistory(card, "edited", describeModelChanges(changes, "user"));
+            }
+            if (hasEfforts) {
+              const changes = diffEfforts(card.efforts, effortsCheck.efforts);
+              if (effortsCheck.efforts) card.efforts = effortsCheck.efforts;
+              else delete card.efforts;
+              if (changes.length > 0) p.addHistory(card, "edited", describeEffortChanges(changes, "user"));
             }
             if (skipInput !== undefined) {
               const skip = normalizeSkipColumnIds(board.columns, skipInput);
@@ -455,21 +477,7 @@ export function startServer({ port, development, agents = true }: { port: number
         }),
         DELETE: h((b, url, req) => {
           const p = project(b, url);
-          p.mutate((board) => {
-            const gone = board.cards.find((c) => c.id === req.params.id);
-            board.cards = board.cards.filter((c) => c.id !== req.params.id);
-            if (!gone) return;
-            // A deleted dependency counts as met: drop it from every card waiting for it.
-            for (const card of board.cards) {
-              if (!card.dependsOn?.includes(gone.id)) continue;
-              const rest = card.dependsOn.filter((id) => id !== gone.id);
-              if (rest.length > 0) card.dependsOn = rest;
-              else delete card.dependsOn;
-              p.addHistory(card, "edited", `Dependency ${cardRef(gone)} deleted`);
-              if (card.columnId === BACKLOG_COLUMN_ID && !card.draft && unmetDependencies(board, card).length === 0)
-                p.releaseDependencies(board, card, releaseReason(board, card));
-            }
-          });
+          p.mutate((board) => p.deleteCard(board, req.params.id));
           removeScreenshots(req.params.id);
           orch.purgeCard(p, req.params.id);
         }),
@@ -599,6 +607,63 @@ export function startServer({ port, development, agents = true }: { port: number
           return orch.snapshot(p);
         }),
       },
+      "/api/issue-sources": {
+        PUT: h((b, url) => {
+          const p = project(b, url);
+          if (!Array.isArray(b.sources)) throw new Error("sources must be an array");
+          const inputs = b.sources.map(checkSourceInput);
+          const changed = p.mutate((board) => replaceSources(board, inputs));
+          if (orch.canRunAgents(p)) for (const id of changed) void orch.issues.syncSource(p, id);
+          return orch.snapshot(p);
+        }),
+      },
+      "/api/issue-sources/test": {
+        POST: h(async (b, url) => {
+          project(b, url);
+          const src = checkSourceInput(b.source);
+          const impl = providerFor(src.provider);
+          if (!impl) throw new Error(`Unknown issue provider: ${src.provider}`);
+          const token = (optString(b, "token") ?? "").trim() || getToken(src.provider, src.baseUrl);
+          const issues = await impl.listOpenIssues({ ...src, id: src.id ?? "test", importedIds: [] }, token);
+          return { count: issues.filter((i) => matchesLabels(i, src.labels)).length };
+        }),
+      },
+      "/api/issue-sources/sync": {
+        POST: h(async (b, url) => {
+          const p = project(b, url);
+          if (!orch.canRunAgents(p)) throw new HttpError(409, "This instance does not run this project's agents");
+          const sourceId = optString(b, "sourceId");
+          if (sourceId) {
+            if (!p.board.issueSources?.some((s) => s.id === sourceId)) throw new HttpError(404, "Unknown issue source");
+            await orch.issues.syncSource(p, sourceId);
+          } else await orch.issues.syncAll(p);
+          return orch.snapshot(p);
+        }),
+      },
+      "/api/issue-sources/detect": {
+        GET: h((b, url) => {
+          const p = project(b, url);
+          try {
+            const out = Bun.spawnSync(["git", "-C", p.path, "remote", "get-url", "origin"], { timeout: 5000 });
+            if (out.exitCode !== 0) return {};
+            return parseGitRemote(out.stdout.toString()) ?? {};
+          } catch {
+            return {};
+          }
+        }),
+      },
+      "/api/issue-tokens": {
+        PUT: h((b) => {
+          const provider = reqString(b, "provider");
+          const info = providerInfo(provider);
+          if (!info) throw new Error(`Unknown issue provider: ${provider}`);
+          const baseUrl = effectiveBaseUrl(info, optString(b, "baseUrl"));
+          if (!baseUrl) throw new Error("baseUrl must be an http(s) URL");
+          setToken(info.id, baseUrl, reqString(b, "token"));
+          orch.broadcastAll();
+          return { ok: true };
+        }),
+      },
       "/api/quick-runs": {
         POST: h((b, url) => {
           const p = project(b, url);
@@ -630,7 +695,8 @@ export function startServer({ port, development, agents = true }: { port: number
       open(ws) {
         sockets.add(ws);
         ws.send(JSON.stringify({ type: "settings", settings: getSettings() } satisfies ServerEvent));
-        ws.send(JSON.stringify({ type: "usage", usage: getUsage() } satisfies ServerEvent));
+        ws.send(JSON.stringify({ type: "usage", usage: orch.usage() } satisfies ServerEvent));
+        ws.send(JSON.stringify({ type: "teamclaude", wait: orch.teamclaudeWait() } satisfies ServerEvent));
       },
       close(ws) {
         sockets.delete(ws);

@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { isValidEffortSetting } from "../shared/effort.ts";
 import { DEFAULT_PROJECT_PARALLEL, LANGUAGE_SETTINGS, normalizeProjectParallel, PERMISSION_MODES, type Settings } from "../shared/types.ts";
 import { writeFileAtomic } from "./fsutil.ts";
 
@@ -16,13 +17,34 @@ export const DEFAULT_SETTINGS: Settings = {
   claudePath: "claude",
   permissionMode: "auto",
   model: "",
+  effort: "",
   extraArgs: "",
   recentProjects: [],
   soundNotifications: true,
   language: "auto",
   carryMaxTokens: 80000,
   carryMaxAgeMinutes: 5,
+  teamclaudeEnabled: false,
+  teamclaudeUrl: "http://localhost:3456",
 };
+
+/** A valid http(s) URL without its trailing slashes, or null. */
+export function normalizeTeamclaudeUrl(value: unknown): string | null {
+  if (typeof value !== "string" || value.trim() === "") return null;
+  let url: URL;
+  try {
+    url = new URL(value.trim());
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+  return value.trim().replace(/\/+$/, "");
+}
+
+/** The value stored for a key that passed checkField. */
+function normalizeField(key: keyof Settings, value: unknown): unknown {
+  return key === "teamclaudeUrl" ? normalizeTeamclaudeUrl(value) : value;
+}
 
 // Kept on globalThis so modules re-evaluated by `bun --hot` share the state seen by the long-lived orchestrator.
 const globals = globalThis as {
@@ -32,6 +54,8 @@ const globals = globalThis as {
     readOnly?: boolean;
     /** Raw `maxParallel` of the file (the former global cap): kept as is on every write, never edited. */
     legacyMaxParallel?: unknown;
+    /** Issue provider tokens by `tokenKey`: kept in the file, never part of `Settings` (which is sent to clients). */
+    issueTokens?: Record<string, string>;
   };
 };
 if (!globals.__nightshiftSettings) globals.__nightshiftSettings = { current: null, listeners: new Set() };
@@ -52,8 +76,13 @@ function checkField(key: keyof Settings, value: unknown): string | null {
     case "model":
     case "extraArgs":
       return typeof value === "string" ? null : `${key} must be a string`;
+    case "effort":
+      return isValidEffortSetting(value) ? null : `Unknown effort: ${String(value)}`;
     case "soundNotifications":
-      return typeof value === "boolean" ? null : "soundNotifications must be a boolean";
+    case "teamclaudeEnabled":
+      return typeof value === "boolean" ? null : `${key} must be a boolean`;
+    case "teamclaudeUrl":
+      return normalizeTeamclaudeUrl(value) !== null ? null : "teamclaudeUrl must be an http(s) URL";
     case "permissionMode":
       return PERMISSION_MODES.includes(value as Settings["permissionMode"]) ? null : `Unknown permission mode: ${String(value)}`;
     case "language":
@@ -71,6 +100,7 @@ export function getSettings(): Settings {
   if (shared.current) return shared.current;
   const loaded: Settings = { ...DEFAULT_SETTINGS, recentProjects: [] };
   shared.legacyMaxParallel = undefined;
+  shared.issueTokens = {};
   let text: string | null = null;
   try {
     text = readFileSync(SETTINGS_FILE, "utf8");
@@ -90,8 +120,11 @@ export function getSettings(): Settings {
     if (raw && typeof raw === "object" && !Array.isArray(raw)) {
       const obj = raw as Record<string, unknown>;
       if ("maxParallel" in obj) shared.legacyMaxParallel = obj.maxParallel;
+      shared.issueTokens = readTokens(obj.issueTokens);
       for (const key of KEYS) {
-        if (key in obj && checkField(key, obj[key]) === null) (loaded as unknown as Record<string, unknown>)[key] = obj[key];
+        if (key in obj && checkField(key, obj[key]) === null) {
+          (loaded as unknown as Record<string, unknown>)[key] = normalizeField(key, obj[key]);
+        }
       }
     }
   }
@@ -114,16 +147,54 @@ export function updateSettings(patch: Partial<Settings>): Settings {
     const err = checkField(key as keyof Settings, value);
     if (err) throw new Error(err);
   }
-  const next: Settings = { ...getSettings(), ...Object.fromEntries(entries) };
-  if (!shared.readOnly) {
-    mkdirSync(NIGHTSHIFT_HOME, { recursive: true });
-    const legacy = shared.legacyMaxParallel;
-    const file = legacy === undefined ? next : { maxParallel: legacy, ...next };
-    writeFileAtomic(SETTINGS_FILE, `${JSON.stringify(file, null, 2)}\n`);
-  }
+  const next: Settings = {
+    ...getSettings(),
+    ...Object.fromEntries(entries.map(([key, value]) => [key, normalizeField(key as keyof Settings, value)])),
+  };
+  writeSettingsFile(next);
   shared.current = next;
   for (const l of listeners) l(next);
   return next;
+}
+
+function readTokens(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  return Object.fromEntries(Object.entries(raw).filter((e): e is [string, string] => typeof e[1] === "string" && e[1] !== ""));
+}
+
+/** Writes the settings file: the legacy cap, the settings, then the issue tokens. Skipped in read-only mode. */
+function writeSettingsFile(settings: Settings) {
+  if (shared.readOnly) return;
+  mkdirSync(NIGHTSHIFT_HOME, { recursive: true });
+  const legacy = shared.legacyMaxParallel;
+  const tokens = shared.issueTokens ?? {};
+  const file = {
+    ...(legacy === undefined ? {} : { maxParallel: legacy }),
+    ...settings,
+    ...(Object.keys(tokens).length > 0 ? { issueTokens: tokens } : {}),
+  };
+  writeFileAtomic(SETTINGS_FILE, `${JSON.stringify(file, null, 2)}\n`);
+}
+
+/** Token saved for a `tokenKey`, or undefined. Never send it to a client. */
+export function getIssueToken(key: string): string | undefined {
+  getSettings();
+  return shared.issueTokens?.[key];
+}
+
+export function hasIssueToken(key: string): boolean {
+  return getIssueToken(key) !== undefined;
+}
+
+/** Saves (or, with an empty token, removes) the token of a `tokenKey`. Keeps every other field of the file. */
+export function setIssueToken(key: string, token: string) {
+  const current = getSettings();
+  const tokens = { ...(shared.issueTokens ?? {}) };
+  const t = token.trim();
+  if (t) tokens[key] = t;
+  else delete tokens[key];
+  shared.issueTokens = tokens;
+  writeSettingsFile(current);
 }
 
 /** Project cap used when a board has no `maxParallel`: the former global setting, else the default. */

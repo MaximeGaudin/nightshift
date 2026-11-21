@@ -49,6 +49,10 @@ export function quotaTooltipLines(usage: QuotaSnapshot, nowMs: number, locale: L
   const age = nowMs - Date.parse(usage.at);
   lines.push(age < 60000 ? t("board.quota.updatedNow") : t("board.quota.updated", { duration: formatDuration(age) }));
   if (usage.isUsingOverage) lines.push(t("board.quota.overage"));
+  if (usage.source === "teamclaude") {
+    lines.push(usage.accounts !== undefined ? t("board.quota.teamclaudeAccounts", { count: usage.accounts }) : t("board.quota.teamclaude"));
+  }
+  if (usage.unreachable) lines.push(t("board.quota.unreachable"));
   return lines;
 }
 
@@ -74,7 +78,7 @@ export function QuotaIndicatorView({ usage, now }: { usage: QuotaSnapshot | null
       <TooltipTrigger asChild>
         <button
           type="button"
-          className={`inline-flex items-center gap-2.5 rounded-md text-xs tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-ring ${usage && isStale(usage, now) ? "opacity-60" : ""}`}
+          className={`inline-flex items-center gap-2.5 rounded-md text-xs tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-ring ${usage && (isStale(usage, now) || usage.unreachable) ? "opacity-60" : ""}`}
           aria-label={lines.join(". ")}
         >
           {usage ? (
