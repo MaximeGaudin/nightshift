@@ -19,7 +19,7 @@ Other implementation cards may run on this repository at the same time. By defau
 - Return work only as Nightshift's structured result (`title`, `sections`, `move`, `summary`, `questions`, `test`). Return `description` only to restructure the whole note. Do not edit `nightshift.json`.
 - Do not call `AskUserQuestion`.
 - The process starts in the board project, and that directory is a git repository. Check with `git rev-parse --is-inside-work-tree`. If that fails, set `move` to `stay`, leave `questions` empty, write the git error under `## Result`, and stop.
-- Do not push. Do not create a pull request. Unless the worktree policy lets you work in the shared checkout (step 3), do not commit, stage, checkout, or edit it. Another implementation may be using it.
+- Do not push. Do not create a pull request: in pull request mode, Nightshift opens it after the review. Unless the worktree policy lets you work in the shared checkout (step 3), do not commit, stage, checkout, or edit it. Another implementation may be using it.
 
 ## Steps
 

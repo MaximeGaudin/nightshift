@@ -7,13 +7,15 @@ description: Merges a Nightshift implementation worktree back into the branch th
 
 Merge the worktree into the target branch.
 
-The worktree and the branch come from `nightshift-implement`: branch `nightshift/<card-id>`, path on the `Worktree` line under `## Result`. The target is the branch the card started from: the `Base` line under `## Result`, written by `nightshift-implement` (step 3), for example `WIP` or `main`. This skill merges the card branch into the target, pushes the target to its upstream, then removes the worktree. Push only the target, never a card branch, and never force. Do not implement.
+The worktree and the branch come from `nightshift-implement`: branch `nightshift/<card-id>`, path on the `Worktree` line under `## Result`. The target is the branch the card started from: the `Base` line under `## Result`, written by `nightshift-implement` (step 3), for example `WIP` or `main`. This skill merges the card branch into the target, pushes the target to its upstream, then removes the worktree. Push only the target, never a card branch (except in pull request mode, see pull-requests.md), and never force. Do not implement.
 
 A card implemented with no worktree (the project's worktree policy was `forbidden`, or `auto` chose the shared checkout) has `Worktree: none` under `## Result`. Its commits are already on the base branch, so there is nothing to merge: this skill only pushes the base. Decide from `## Result`, not from the current policy, since the policy may have changed after the card was implemented.
 
 ## Fast path
 
 Before starting this skill, Nightshift tries the merge itself, without an agent, when the merge column has "Merge without an agent when possible" checked (the default). It follows this skill: same lock, same test stop, same guards, base merged into the card branch then `--ff-only` of the base, push without force, worktree and branch removed, the same `## Merge` lines. When the base moved since the card started, the column decides: merge then run the column's test command (the default), merge without tests, or hand over to you.
+
+When `<environment>` has a `Pull requests:` line, the card merges through its pull request instead: read [pull-requests.md](pull-requests.md) before step 1.
 
 You run only when that fast path stopped. Your prompt then ends with a block:
 
