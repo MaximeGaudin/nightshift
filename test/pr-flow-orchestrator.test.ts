@@ -124,9 +124,12 @@ async function setup({ github = true, settings = {} as Record<string, unknown> }
     ) as Card;
   const logOf = (id: string): Promise<LogLine[]> =>
     fetch(`${base}/api/cards/${id}/log?project=${encodeURIComponent(dir)}`).then((r) => r.json());
-  /** A card with a worktree on nightshift/<id> and one commit, moved to Review. FAKE_KEEP_DESC keeps its note. */
-  const card = async (title: string) => {
-    const { id } = await post("/api/cards", { project: dir, columnId: backlog.id, title: `${title} FAKE_KEEP_DESC` });
+  /**
+   * A card with a worktree on nightshift/<id> and one commit, moved to Review. FAKE_KEEP_DESC keeps its note, unless
+   * `exact` keeps the title as is (fake claude titles such as "fail" or "ask").
+   */
+  const card = async (title: string, { exact = false } = {}) => {
+    const { id } = await post("/api/cards", { project: dir, columnId: backlog.id, title: exact ? title : `${title} FAKE_KEEP_DESC` });
     const wt = tempDir("ns-pr-wt-");
     g(dir, "worktree", "add", "-q", "-b", `nightshift/${id}`, wt, "main");
     const baseSha = g(dir, "rev-parse", "main");
@@ -154,7 +157,7 @@ async function setup({ github = true, settings = {} as Record<string, unknown> }
     await post(`/api/cards/${id}/move`, { project: dir, columnId: reviewCol.id });
     return { id, wt, sha };
   };
-  return { dir, remote, reviewCol, mergeCol, doneCol, get, logOf, card };
+  return { dir, remote, backlog: backlog as Column, reviewCol, mergeCol, doneCol, get, logOf, card };
 }
 
 const prOf = (head: string) => fake.state().prs.filter((p: { head: string }) => p.head === head);
@@ -378,4 +381,94 @@ test("merge: a required check that has not reported yet makes the card wait, not
   await waitFor(async () => (await b.get(id)).description.includes("checks en attente"), 30_000);
   expect((await b.get(id)).columnId).toBe(b.mergeCol.id);
   expect(agentRuns().filter((r) => r.title.includes("pr-not-reported")).length).toBe(1);
+}, 60_000);
+
+/** Index of the first fake gh call matching `pred` after index `from`; -1 when none. */
+const callIndex = (pred: (args: string[]) => boolean, from = -1) => fake.calls().findIndex((c, i) => i > from && pred(c.args));
+const isCreate = (head: string) => (a: string[]) => a[1] === "create" && a.includes(head);
+const isReady = (url: string) => (a: string[]) => a[1] === "ready" && a[2] === url && !a.includes("--undo");
+const isUndo = (url: string) => (a: string[]) => a[1] === "ready" && a[2] === url && a.includes("--undo");
+
+test("review: a draft PR opens when the card enters Review, then is updated and marked ready", async () => {
+  fake.setState({ prs: [], nextNumber: 100, defaultChecks: PENDING });
+  const b = await setup();
+  const { id } = await b.card("pr-draft");
+  await waitFor(async () => (await b.get(id)).description.includes("checks en attente"), 30_000);
+  const head = `nightshift/${id}`;
+  const [pr] = prOf(head);
+  expect(pr.isDraft).toBe(false);
+  const create = callIndex(isCreate(head));
+  expect(fake.calls()[create].args).toContain("--draft");
+  const edit = callIndex((a) => a[1] === "edit" && a[2] === pr.url, create);
+  const ready = callIndex(isReady(pr.url), edit);
+  expect(edit).toBeGreaterThan(create);
+  expect(ready).toBeGreaterThan(edit);
+  expect((await b.get(id)).description).toContain(`- PR: ${pr.url}`);
+
+  // Back to Review: the ready PR becomes a draft again, then ready after the review.
+  const before = fake.calls().length - 1;
+  await post(`/api/cards/${id}/move`, { project: b.dir, columnId: b.reviewCol.id });
+  await waitFor(async () => {
+    const undo = callIndex(isUndo(pr.url), before);
+    return undo >= 0 && callIndex(isReady(pr.url), undo) >= 0;
+  }, 30_000);
+  expect(prOf(head)[0].isDraft).toBe(false);
+  expect(prOf(head).length).toBe(1);
+}, 90_000);
+
+test("review: a failed review leaves the PR in draft", async () => {
+  fake.setState({ prs: [], nextNumber: 110, defaultChecks: PENDING });
+  const b = await setup();
+  const { id } = await b.card("fail", { exact: true });
+  await waitFor(async () => (await b.get(id)).lastRun?.status === "error", 30_000);
+  const head = `nightshift/${id}`;
+  await waitFor(async () => prOf(head).length === 1, 20_000);
+  const [pr] = prOf(head);
+  expect(pr.isDraft).toBe(true);
+  expect(callIndex(isReady(pr.url))).toBe(-1);
+  expect((await b.get(id)).columnId).toBe(b.reviewCol.id);
+}, 60_000);
+
+test("merge: a draft PR is marked ready before it is merged", async () => {
+  fake.setState({ prs: [], nextNumber: 120, defaultChecks: PENDING });
+  const b = await setup();
+  const { id } = await b.card("pr-draft-merge");
+  await waitFor(async () => (await b.get(id)).description.includes("checks en attente"), 30_000);
+  const head = `nightshift/${id}`;
+  const s = fake.state();
+  const pr = s.prs.find((p: { head: string }) => p.head === head);
+  Object.assign(pr, { isDraft: true, checks: [{ name: "ci", state: "SUCCESS", bucket: "pass", link: LINK }] });
+  fake.setState(s);
+  const before = fake.calls().length - 1;
+  await post(`/api/cards/${id}/move`, { project: b.dir, columnId: b.backlog.id });
+  await post(`/api/cards/${id}/move`, { project: b.dir, columnId: b.mergeCol.id });
+  await waitFor(async () => (await b.get(id)).columnId === b.doneCol.id, 30_000);
+  const ready = callIndex(isReady(pr.url), before);
+  const merge = callIndex((a) => a[1] === "merge" && a[2] === pr.url, before);
+  expect(ready).toBeGreaterThan(before);
+  expect(merge).toBeGreaterThan(ready);
+  expect(prOf(head)[0].state).toBe("MERGED");
+}, 60_000);
+
+test("review: a draft PR that cannot be created does not block the review; the PR opens ready after it", async () => {
+  fake.setState({
+    prs: [],
+    nextNumber: 130,
+    defaultChecks: PENDING,
+    draftError: "Draft pull requests are not supported in this repository.",
+  });
+  const b = await setup();
+  const { id } = await b.card("pr-draft-error");
+  await waitFor(async () => (await b.get(id)).description.includes("checks en attente"), 30_000);
+  const [pr] = prOf(`nightshift/${id}`);
+  expect(pr.isDraft).not.toBe(true);
+  expect((await b.get(id)).lastRun?.status).toBe("success");
+  // The draft attempt failed first; the ready PR came from the review.
+  const draftTry = callIndex((a) => isCreate(`nightshift/${id}`)(a) && a.includes("--draft"));
+  const created = callIndex((a) => isCreate(`nightshift/${id}`)(a) && !a.includes("--draft"), draftTry);
+  expect(draftTry).toBeGreaterThanOrEqual(0);
+  expect(created).toBeGreaterThan(draftTry);
+  const s = fake.state();
+  delete s.draftError;
+  fake.setState(s);
 }, 60_000);

@@ -1240,6 +1240,8 @@ export class Orchestrator {
     // Pull request mode: detected only where it matters (review and merge), announced to the agent in <environment>.
     const prMode = column.skill === REVIEW_SKILL || column.skill === FAST_MERGE_SKILL ? await detectPrMode(p.path, p.board) : undefined;
     const prLine = prModeLine(prMode);
+    // Pull request mode: a card entering Review gets a draft PR, in the background (the review never waits for it).
+    if (column.skill === REVIEW_SKILL && prMode?.active) void this.prFlow.beforeReview(p, card.id, prMode);
     // Merge column: try the deterministic merge first; the agent only runs when it stops (fallback).
     let fastMergeNote = "";
     let tryLocalMerge = !answer && column.skill === FAST_MERGE_SKILL && column.fastMerge !== false;

@@ -5,7 +5,7 @@ import type { ChecksSummary, CodeHost, MergeResult, PrInfo, PrMergeable, PrState
 import { CodeHostError } from "./codehost.ts";
 import { type GhResult, gh } from "./gh.ts";
 
-const PR_FIELDS = "url,number,state,body,mergeable,mergeCommit,baseRefName";
+const PR_FIELDS = "url,number,state,body,mergeable,mergeCommit,baseRefName,isDraft";
 
 function errorOf(r: GhResult, what: string): CodeHostError {
   const text = `${r.stderr}\n${r.stdout}`.trim() || `exit ${r.code}`;
@@ -29,6 +29,7 @@ function parsePr(stdout: string): PrInfo {
     mergeable: (["MERGEABLE", "CONFLICTING"].includes(mergeable) ? mergeable : "UNKNOWN") as PrMergeable,
     ...(mc?.oid ? { mergeCommit: mc.oid } : {}),
     baseRefName: String(j.baseRefName ?? ""),
+    isDraft: j.isDraft === true,
   };
 }
 
@@ -77,7 +78,20 @@ export const github: CodeHost = {
   },
 
   async createPr(cwd, pr) {
-    const r = await gh(cwd, ["pr", "create", "--base", pr.base, "--head", pr.head, "--title", pr.title, "--body-file", "-"], {
+    const args = [
+      "pr",
+      "create",
+      "--base",
+      pr.base,
+      "--head",
+      pr.head,
+      "--title",
+      pr.title,
+      "--body-file",
+      "-",
+      ...(pr.draft ? ["--draft"] : []),
+    ];
+    const r = await gh(cwd, args, {
       input: pr.body,
     });
     if (r.code !== 0) throw errorOf(r, "gh pr create");
@@ -94,6 +108,16 @@ export const github: CodeHost = {
   async updatePr(cwd, url, pr) {
     const r = await gh(cwd, ["pr", "edit", url, "--title", pr.title, "--body-file", "-"], { input: pr.body });
     if (r.code !== 0) throw errorOf(r, "gh pr edit");
+  },
+
+  async markReady(cwd, url) {
+    const r = await gh(cwd, ["pr", "ready", url]);
+    if (r.code !== 0) throw errorOf(r, "gh pr ready");
+  },
+
+  async markDraft(cwd, url) {
+    const r = await gh(cwd, ["pr", "ready", url, "--undo"]);
+    if (r.code !== 0) throw errorOf(r, "gh pr ready --undo");
   },
 
   async checks(cwd, url): Promise<ChecksSummary> {
