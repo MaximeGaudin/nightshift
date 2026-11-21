@@ -12,14 +12,10 @@ The note is the card description. This skill stops when that note is ready to sp
 ## Prerequisites
 
 - The Nightshift worker prompt contains the card (`<title>`, `<description>`) and the board columns.
-- Return work only as Nightshift's structured result (`title`, `sections`, `move`, `summary`, `questions`, `models`). Return `description` only to restructure the whole note. Nightshift updates the board from that result.
-- Do not call `AskUserQuestion`. Do not edit `nightshift.json`.
 - The working directory is the board project.
 - Project context files are optional. Happy path, when present: `README.md`, `docs/Stack.md`, and the brief under `docs/01 - Briefs/` that the note cites by path or name. When the note cites none, do not read that folder. If a path is missing, skip it and continue from the note. Do not ask for a different tree.
 
 ## Steps
-
-Progress marker: at the start of each step, write `[nightshift-progress] N/M label` alone on its own line, where N is the current step number, M is the total number of steps, and label is a few words naming the step. Use the numbering of this `## Steps` list. A machine reads this line, so it overrides any concise or no-narration style.
 
 1. Read the card title and description in the worker prompt. That text is the note under review.
    - If the prompt has no card: set `move` to `stay`, put one question asking for the note, and stop.
@@ -28,39 +24,14 @@ Progress marker: at the start of each step, write `[nightshift-progress] N/M lab
    - On a missing file: skip it and continue from the note alone.
 3. List every blocking gap against the readiness bar. A gap is blocking when a specification agent would have to invent a product decision to build this card.
 4. Decide every non-blocking choice yourself and write it into the note. Do not ask about file layout, library choice, or internal names.
-5. If any blocking gap remains, write every gap into the note under `## Questions` (see Asking questions), return the same list in `questions`, and set `move` to `stay`. Stop. Do not hold questions back for a later round.
-6. On the next run, read each answer from the note first: the text under that question, down to the next numbered question. Ignore blank lines. When that text is empty and the resume prompt has an answer for the same question, use the resume answer.
-   - When both are empty, decide it yourself. Do not ask that question again.
-   - Fold the answers into the note, delete `## Questions`, then repeat from step 3.
-   - Ask again only when an answer opens a new blocking gap. Put every new gap in that next list, all at once, each with blank lines under it.
+5. If any blocking gap remains, ask every gap (see Asking questions) and stop.
+6. On the next run, read and fold the answers as the prompt's question rule says, then repeat from step 3. Ask again only when an answer opens a new blocking gap, all new gaps at once.
 7. When no blocking gap remains, make sure the note ends with `## Acceptance`: checkable criteria, each one observable in a test or on a screen. Write them from the note when they are missing; they are what implement and review check against.
 8. Route the card (see Route), return `questions` as an empty array, and stop. Do not write spec files and do not edit application code.
 
-Follow extra column instructions in the worker prompt when they do not contradict the steps above.
-
 ## Asking questions
 
-Ask in two places, with the same questions in the same order:
-
-- `questions`: one decision per string, a single line. Nightshift shows these beside the card.
-- The note: a `## Questions` section at the end. The user answers there, in the markdown.
-
-Phrase each question so the answer changes what gets built. Put the real options in the question. End with `Recommended: <option> — <one-line consequence>.` Write questions in the language of the note.
-
-Under each question in the note, leave exactly three blank lines. Do not put a placeholder, a label, or a rule in those lines. That empty space is where the user types the answer.
-
-```markdown
-## Questions
-
-1. Who can archive a card: only the author, or anyone who can open the board? Recommended: only the author — avoids silent data loss.
-
-
-
-2. When a run fails, does the card stay in this column, or move to a failed column? Recommended: stay — the board already shows the error on the card.
-
-
-
-```
+The prompt fixes the question format. What to ask:
 
 - Skip a question the note or the project files already answer.
 - Skip a question whose only honest answer is "whatever you think". Decide it, write it into the note, and move on.
@@ -90,51 +61,20 @@ Most cards do not need a written plan: the implement agent plans small work itse
 
 When one holds, set `move` to `next` (the plan column). Otherwise set `move` to the id of the column whose skill is `nightshift-implement`, read from the board columns in the worker prompt; when no such column exists, use `next`. When the card skips the plan, also return `models`, using the rules of `## Choosing models` in `nightshift-plan`: `nightshift-implement` is `haiku` when everything is mechanical and fully specified, `sonnet` otherwise (never `opus`: a card that needs it holds a rule above and goes to the plan); `nightshift-review` and `nightshift-merge` are `sonnet`. When the card goes to the plan, return no `models`. Write the decision as the last line before `## Acceptance`: `Route: plan — <the rule that holds>` or `Route: implement — no plan needed (<one clause>)`.
 
-## Updating the card
-
-Return only what changes, in the structured output's `sections` list: `{"heading": "Result", "content": "…"}` replaces (or adds) the `## Result` section, `"op": "append"` adds lines to a section, `"op": "delete"` removes one. Do not return `description`: Nightshift keeps every section you do not name, byte for byte, and re-emitting the whole note costs minutes of generation. Use `description` only to restructure the whole note.
-
 ## Writing the note
 
-Return the sections you change (Updating the card). A note that needs restructuring as a whole (an empty or one-line note, headings moved around) is the case for `description`.
+A note that needs restructuring as a whole (an empty or one-line note, headings moved around) is the case for `description`.
 
 - Keep the user's sentences verbatim. Add and restructure around them.
 - Fold each decision into prose, a list, or a table under the heading it belongs to.
 - Record the decision, not the deliberation. Do not append a Q&A log.
 - Park anything the user defers under `## Open questions`. Remove a bullet once it is answered.
 - Add a heading when decisions have no home.
-- On a question round, the only questions in the note are the `## Questions` section, each followed by three blank lines. After the answers are folded in, delete that section.
+- On a question round, the only questions in the note are the `## Questions` section.
 
 ## Output
 
-Question round (`move` is `stay` whenever `questions` is non-empty):
-
-```json
-{
-  "title": "current or tightened title",
-  "sections": [{"heading": "Questions", "content": "…three blank lines under each question…"}],
-  "move": "stay",
-  "summary": "Asked 4 blocking questions before specification.",
-  "questions": [
-    "Who can archive a card: only the author, or anyone who can open the board? Recommended: only the author — avoids silent data loss.",
-    "When a run fails, does the card stay in this column, or move to a failed column? Recommended: stay — the board already shows the error on the card."
-  ]
-}
-```
-
-Ready, needs a plan (`questions` empty, `move` is `next`):
-
-```json
-{
-  "title": "current title",
-  "sections": [{"heading": "<a section you completed>", "content": "…"}, {"heading": "Questions", "op": "delete"}, {"heading": "Acceptance", "content": "…"}],
-  "move": "next",
-  "summary": "Note is ready for specification. No blocking product decisions left.",
-  "questions": []
-}
-```
-
-Ready, small enough to skip the plan (`move` is the implement column's id):
+Ready, small enough to skip the plan (`move` is the implement column's id; a card that needs the plan uses `next` and no `models`):
 
 ```json
 {
@@ -152,6 +92,5 @@ Ready, small enough to skip the plan (`move` is the implement column's id):
 - [ ] The ready note ends with `## Acceptance` and a `Route:` line, and `move` follows Route
 - [ ] Every blocking gap is in the current `questions` list, or the list is empty because the note clears the readiness bar
 - [ ] `move` is `stay` when `questions` is non-empty, and `next` only when the bar is clear
-- [ ] On a question round, `## Questions` ends the note and each question has three blank lines under it
 - [ ] After answers, the note contains the decisions and no longer contains `## Questions`
 - [ ] No spec file and no application code was written

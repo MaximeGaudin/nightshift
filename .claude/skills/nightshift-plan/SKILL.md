@@ -12,25 +12,19 @@ The specification is the card description. Do not create `docs/02 - Specs/`. Do 
 ## Prerequisites
 
 - The Nightshift worker prompt contains the card (`<title>`, `<description>`) and the board columns. The description is the grilled brief.
-- Return work only as Nightshift's structured result (`title`, `sections`, `move`, `summary`, `questions`, `models`). Return `description` only to restructure the whole note. Nightshift updates the board from that result.
-- Do not call `AskUserQuestion`. Do not edit `nightshift.json`.
 - The working directory is the board project.
-- Project context files are optional. Happy path, when present: `README.md`, `docs/Stack.md`, and the code the brief names. If a path is missing, skip it and continue from the brief. Do not ask for a different tree. Do not re-read a file this session has already read (for example when grill ran earlier in the same session). Do not re-read a file this session has already read (for example when grill ran earlier in the same session). Do not re-read a file this session has already read (for example when grill ran earlier in the same session).
+- Project context files are optional. Happy path, when present: `README.md`, `docs/Stack.md`, and the code the brief names. If a path is missing, skip it and continue from the brief. Do not ask for a different tree. What grill read earlier in this session is still known: do not read it again.
 
 ## Steps
-
-Progress marker: at the start of each step, write `[nightshift-progress] N/M label` alone on its own line, where N is the current step number, M is the total number of steps, and label is a few words naming the step. Use the numbering of this `## Steps` list. A machine reads this line, so it overrides any concise or no-narration style.
 
 1. Read the card title and description. That description is the grilled brief.
    - If the prompt has no card: set `move` to `stay`, put one question asking for the brief, and stop.
 2. Read the optional project context from Prerequisites so the plan matches the stack and the code that already exists.
    - On a missing file: skip it and continue from the brief.
-3. If the brief still needs a product decision (an undefined noun, a behavior with no unhappy path, a missing boundary, or an untestable claim), do not plan. Ask every gap at once, set `move` to `stay`, and stop. See Asking questions.
-4. On the next run, read answers the same way as in Asking questions. Fold them into the brief. Delete `## Questions`. Repeat from step 3.
-5. Write the specification into the description, using the template below, as `sections` (Updating the card): add `## Progress`, `## Architecture`, `## Tasks`, `## Tests`, `## Definition of done` and `## Models`. The grilled note stays as it is: do not return it. Sections are added at the end of the note, after the grilled note.
+3. If the brief still needs a product decision (an undefined noun, a behavior with no unhappy path, a missing boundary, or an untestable claim), do not plan. Ask every gap at once, in the prompt's question format, and stop. Ask questions only in this step, and phrase each so the answer changes the product.
+4. On the next run, fold the answers into the brief as the prompt's question rule says. Repeat from step 3.
+5. Write the specification into the description, using the template below, as `sections`: add `## Progress`, `## Architecture`, `## Tasks`, `## Tests`, `## Definition of done` and `## Models`. The grilled note stays as it is: do not return it. Sections are added at the end of the note, after the grilled note.
 6. Set `move` to `next` and return `questions` as an empty array. Stop.
-
-Follow extra column instructions in the worker prompt when they do not contradict the steps above.
 
 ## What the specification decides
 
@@ -121,26 +115,6 @@ Rules for Tests and Definition of done:
 - Definition of done is observable. Use the project's existing test command when one exists. When none exists, state the outcome without inventing a test runner.
 - Every task's "Done when" line is a subset of Definition of done, not a new goal.
 
-## Asking questions
-
-Use this only in step 3. Ask in two places, same questions, same order:
-
-- `questions`: one decision per string, a single line.
-- The note: a `## Questions` section at the end of the note. Under each question, leave exactly three blank lines. Do not put a placeholder in those lines.
-
-Phrase each question so the answer changes the product. End with `Recommended: <option> — <one-line consequence>.` Write questions in the language of the brief. Ask every gap in that one list. Do not hold any back.
-
-On the next run, the answer is the text under that question, down to the next numbered question. Ignore blank lines. When that text is empty and the resume prompt has an answer, use the resume answer. When both are empty, decide it yourself and do not ask again.
-
-```markdown
-## Questions
-
-1. Who can archive a card: only the author, or anyone who can open the board? Recommended: only the author — avoids silent data loss.
-
-
-
-```
-
 ## Choosing models
 
 One implement session runs every task on one model, so pick the card's models from its hardest task. A model that is too weak costs a repair loop; one that is too strong costs time and money on every line.
@@ -161,25 +135,7 @@ Add them at the end of the specification:
 
 Also return the same values in the structured output's `models` field, keyed by skill name: Nightshift runs the card's next columns on them, unless a column locks its own model.
 
-## Updating the card
-
-Return only what changes, in the structured output's `sections` list: `{"heading": "Result", "content": "…"}` replaces (or adds) the `## Result` section, `"op": "append"` adds lines to a section, `"op": "delete"` removes one. Do not return `description`: Nightshift keeps every section you do not name, byte for byte, and re-emitting the whole note costs minutes of generation. Use `description` only to restructure the whole note.
-
 ## Output
-
-Question round (`move` is `stay` whenever `questions` is non-empty):
-
-```json
-{
-  "title": "current title",
-  "sections": [{"heading": "Questions", "content": "…three blank lines under each question…"}],
-  "move": "stay",
-  "summary": "Asked 2 product questions before planning.",
-  "questions": [
-    "Who can archive a card: only the author, or anyone who can open the board? Recommended: only the author — avoids silent data loss."
-  ]
-}
-```
 
 Plan ready (`questions` empty, `move` is `next`):
 
