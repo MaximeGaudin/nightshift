@@ -5,9 +5,9 @@ description: Reviews a Nightshift implementation worktree, fixes every defect, a
 
 # Nightshift Review
 
-Review the code, fix every finding, and test the produced worktree.
+Review the code, fix every finding, test the worktree.
 
-The worktree is the one implementation left: the `Worktree` line under `## Result`, branch `nightshift/<card-id>`. Review and fix only there. The base is the branch on the `Base` line under `## Result`, the branch the card started from (for example `WIP` or `main`). Do not merge, push, call `gh`, or edit the shared checkout. In pull request mode (`<environment>` has a `Pull requests:` line), Nightshift pushes and opens or updates the PR after a successful review.
+The worktree is the one implementation left: the `Worktree` line under `## Result`, branch `nightshift/<card-id>`. Review and fix only there. The base is the branch on the `Base` line under `## Result`, the branch the card started from . Do not merge, push, call `gh`, or edit the shared checkout.
 
 ## Prerequisites
 
@@ -21,10 +21,10 @@ The worktree is the one implementation left: the `Worktree` line under `## Resul
    - When `## Result` has `Worktree: none`: read references/no-worktree.md; it replaces the next two bullets and sets the diff of step 2.
    - If the branch does not exist: set `move` to `stay`, leave `questions` empty, write that under `## Review`, and stop.
    - If the worktree directory is gone, recreate it with `git worktree add <dir> nightshift/<card-id>` (`mktemp -d`). On failure: write the error under `## Review`, set `move` to `stay`, and stop.
-2. From here, every command runs in that worktree. Read the grilled note (the top of the description), `## Architecture`, `## Tasks`, `## Tests`, and `## Definition of done`; a card that skipped `nightshift-plan` has `## Plan`, `## Acceptance` and the `## Definition of done` the implement agent wrote instead: review against those. Read the diff of this branch against `git merge-base HEAD <base>`. When `Base` says `detached`, use its SHA. When the line is missing, use the branch checked out in the board project. When none of these exists, read `git log` and the files this branch added.
+2. From here, every command runs in that worktree. Read the grilled note (the top of the description), `## Architecture`, `## Tasks`, `## Tests`, and `## Definition of done`; a card that skipped `nightshift-plan` has `## Plan`, `## Acceptance` and the `## Definition of done` the implement agent wrote instead: review against those. Read the diff of this branch against `git merge-base HEAD <base>`. When `Base` says `detached`, use its SHA; when the line is missing, use the branch checked out in the board project, else read `git log`.
 3. List every finding. A finding is a defect: behavior that contradicts the spec, a failing check, a stub (`TODO`, `FIXME`, skipped test, empty body that only throws), or a security hole. A rename or a formatting note is not a finding. Do not change those.
-   - When the note has `## CI` (failed required checks with log excerpts), each failed check is a finding. After the fix, replace the section with `- CI: corrigé dans <sha>`.
-4. Fix every finding in the worktree. One commit per fix, message `fix: <what>`, only the files that fix needs. Do not use `--no-verify` and do not amend. Do not stage `.env`, credential files, `nightshift.json`, or `nightshift-screenshots`. If a fix needs a product decision the spec does not answer, do not guess. Ask every such decision at once (see Asking questions). Set `move` to `stay` and stop.
+   - `## CI`: each failed check is a finding; then replace the section with `- CI: corrigé dans <sha>`.
+4. Fix every finding in the worktree. One commit per fix, message `fix: <what>`, only the files that fix needs. Do not use `--no-verify` and do not amend. Do not stage `.env`, credentials, `nightshift.json`, or `nightshift-screenshots`. If a fix needs a product decision the spec does not answer, do not guess. Ask every such decision at once (see Asking questions). Set `move` to `stay` and stop.
 5. Run the full test suite here, once, after the last fix of step 4: the only place in the Nightshift flow where it runs. Use the suite command of `## Definition of done` when it names one, else the project's whole check (lint, types and all tests: `check` if it exists, else `test`, or what the README names) for every part the card changed. Then the items of `## Definition of done` and `## Tests` the suite does not cover, including those marked "deferred to review". While fixing in step 4, run only the affected-tests command written under `## Result`.
    - Tests already failing on the base (the `Baseline` line of `## Result`) are not findings of this card; any other failure is.
    - When a later run of this skill finds no fix to make and `git rev-parse HEAD^{tree}` equals the tree of the latest `Suite` line under `## Review`, do not re-run the suite: write `Suite: reused, tree <sha>`.
