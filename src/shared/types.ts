@@ -314,10 +314,7 @@ export interface Settings {
 }
 
 /** Why an agent launch through teamclaude is blocked. */
-export type TeamclaudeFailure =
-  | { kind: "not-found" }
-  | { kind: "env-failed"; detail: string }
-  | { kind: "no-response"; url: string };
+export type TeamclaudeFailure = { kind: "not-found" } | { kind: "env-failed"; detail: string } | { kind: "no-response"; url: string };
 
 /** One run blocked on the teamclaude proxy: a card run (feedback included) or a quick run. */
 export interface TeamclaudeWaitEntry {
