@@ -348,3 +348,146 @@ test("sync-stale-plan-query", async () => {
   await first;
   expect(backlog(p).length).toBe(0);
 });
+
+// ---- resync (prune) ---------------------------------------------------------
+
+const setLabels = (p: Project, labels: string[]) =>
+  p.mutate((b) => {
+    const s = b.issueSources?.[0];
+    if (s) s.labels = labels;
+  });
+
+test("resync-prunes-non-matching", async () => {
+  const { p, sync, purged } = setup([{ labels: ["a"] }]);
+  fake.issues.set("o/r", [issue(1, { labels: ["a"] }), issue(2, { labels: ["a", "b"] }), issue(3, { labels: ["b"] })]);
+  await sync.syncAll(p);
+  expect(backlog(p).map((c) => c.external?.number)).toEqual([1, 2]);
+  const card1 = backlog(p)[0]?.id as string;
+
+  setLabels(p, ["b"]);
+  await sync.syncSource(p, "src_0", { prune: true });
+  expect(backlog(p).map((c) => c.external?.number)).toEqual([2, 3]);
+  expect(purged).toEqual([card1]);
+  expect(p.board.issueSources?.[0]?.importedIds).toEqual(["2", "3"]);
+
+  // resync-reimports-after-widening
+  setLabels(p, ["a"]);
+  await sync.syncSource(p, "src_0", { prune: true });
+  expect(backlog(p).map((c) => c.external?.number)).toEqual([2, 1]);
+  expect(p.board.issueSources?.[0]?.importedIds).toEqual(["2", "1"]);
+});
+
+test("resync-keeps-hand-deleted-out", async () => {
+  const { p, sync } = setup();
+  fake.issues.set("o/r", [issue(1), issue(2)]);
+  await sync.syncAll(p);
+  p.mutate((b) => p.deleteCard(b, backlog(p)[0]?.id as string));
+  await sync.syncSource(p, "src_0", { prune: true });
+  expect(backlog(p).map((c) => c.external?.number)).toEqual([2]);
+});
+
+test("resync-ignores-other-columns", async () => {
+  const { p, sync } = setup([{ labels: ["a"] }]);
+  fake.issues.set("o/r", [issue(1, { labels: ["a"] }), issue(2, { labels: ["a"] })]);
+  await sync.syncAll(p);
+  const moved = backlog(p)[0]?.id as string;
+  p.mutate((b) => p.moveCard(b, moved, DONE_COLUMN_ID));
+  setLabels(p, ["zzz"]);
+  await sync.syncSource(p, "src_0", { prune: true });
+  expect(backlog(p).length).toBe(0);
+  expect(p.card(moved)?.columnId).toBe(DONE_COLUMN_ID);
+  expect(p.card(moved)?.external?.number).toBe(1);
+});
+
+test("sync-never-prunes", async () => {
+  const { p, sync } = setup([{ labels: ["a"] }]);
+  fake.issues.set("o/r", [issue(1, { labels: ["a"] })]);
+  await sync.syncAll(p);
+  setLabels(p, ["b"]);
+  await sync.syncSource(p, "src_0");
+  await sync.syncAll(p);
+  expect(backlog(p).map((c) => c.external?.number)).toEqual([1]);
+});
+
+test("resync-provider-error", async () => {
+  const { p, sync } = setup([{ labels: ["a"] }]);
+  fake.issues.set("o/r", [issue(1, { labels: ["a"] })]);
+  await sync.syncAll(p);
+  const before = JSON.stringify(p.board.cards);
+  setLabels(p, ["b"]);
+  fake.fail = new ProviderError("auth", "invalid token", 401);
+  await sync.syncSource(p, "src_0", { prune: true });
+  expect(JSON.stringify(p.board.cards)).toBe(before);
+  expect(p.board.issueSources?.[0]?.importedIds).toEqual(["1"]);
+  expect(sync.status(p)?.src_0?.lastError).toBe("invalid token");
+});
+
+test("resync-during-sync-prunes-on-followup", async () => {
+  const { p, sync } = setup([{ labels: ["bug"] }]);
+  fake.issues.set("o/r", [issue(1, { labels: ["bug"] }), issue(2, { labels: ["bug"] })]);
+  await sync.syncAll(p);
+  // Upstream, #1 loses its label: only a resync removes its card.
+  fake.issues.set("o/r", [issue(1), issue(2, { labels: ["bug"] })]);
+  let release = () => {};
+  fake.gate = new Promise<void>((r) => {
+    release = r;
+  });
+  const first = sync.syncSource(p, "src_0");
+  await flush();
+  const second = sync.syncSource(p, "src_0", { prune: true });
+  let release2 = () => {};
+  fake.gate = new Promise<void>((r) => {
+    release2 = r;
+  });
+  release();
+  await first;
+  // The running sync prunes nothing; the follow-up is still waiting on the provider.
+  expect(backlog(p).map((c) => c.external?.number)).toEqual([1, 2]);
+  release2();
+  await second;
+  expect(backlog(p).map((c) => c.external?.number)).toEqual([2]);
+
+  // The request was consumed: a later normal sync does not prune.
+  fake.gate = undefined;
+  fake.issues.set("o/r", [issue(2)]);
+  await sync.syncSource(p, "src_0");
+  expect(backlog(p).map((c) => c.external?.number)).toEqual([2]);
+});
+
+test("resync-on-disabled-source-is-consumed", async () => {
+  const { p, sync } = setup([{ labels: ["a"] }]);
+  fake.issues.set("o/r", [issue(1, { labels: ["a"] })]);
+  await sync.syncAll(p);
+  p.mutate((b) => {
+    const s = b.issueSources?.[0];
+    if (s) {
+      s.enabled = false;
+      s.labels = ["b"];
+    }
+  });
+  await sync.syncSource(p, "src_0", { prune: true });
+  p.mutate((b) => {
+    const s = b.issueSources?.[0];
+    if (s) s.enabled = true;
+  });
+  await sync.syncSource(p, "src_0");
+  expect(backlog(p).map((c) => c.external?.number)).toEqual([1]);
+});
+
+test("resync-after-repo-change-skips-getIssue", async () => {
+  const { p, sync } = setup();
+  fake.issues.set("o/r", [issue(1), issue(2)]);
+  await sync.syncAll(p);
+  fake.issues.set("o/other", [issue(1, { externalId: "b1", url: "https://github.com/o/other/issues/1" })]);
+  p.mutate((b) => {
+    const s = b.issueSources?.[0];
+    if (s) {
+      s.repo = "o/other";
+      s.importedIds = [];
+    }
+  });
+  fake.calls = [];
+  await sync.syncSource(p, "src_0", { prune: true });
+  expect(fake.calls.filter((c) => c.startsWith("get"))).toEqual([]);
+  expect(backlog(p).map((c) => c.external?.externalId)).toEqual(["b1"]);
+});

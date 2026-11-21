@@ -64,6 +64,11 @@ export class IssueSync {
   private inflight = new Map<string, Promise<void>>();
   /** One follow-up sync per `path::sourceId`, queued when a trigger arrives during a sync (the source may have changed). */
   private queued = new Map<string, Promise<void>>();
+  /**
+   * `path::sourceId` of every pending resync request. Consumed at the start of the next run of that source: a request
+   * made during a sync lands on the queued follow-up, never on the running sync (which read its config before).
+   */
+  private pruneRequested = new Set<string>();
   /** Live state per project path, then per source id. */
   private states = new Map<string, Map<string, LiveState>>();
   private writeBackScheduled = new Set<string>();
@@ -139,9 +144,13 @@ export class IssueSync {
     await Promise.allSettled(ids.map((id) => this.syncSource(p, id)));
   }
 
-  /** Syncs one source. Resolves once done (errors are recorded in the live status, never thrown). */
-  syncSource(p: Project, sourceId: string): Promise<void> {
+  /**
+   * Syncs one source. Resolves once done (errors are recorded in the live status, never thrown).
+   * `prune` (resync): also deletes the source's Backlog cards whose issue no longer matches the source's filters.
+   */
+  syncSource(p: Project, sourceId: string, { prune = false }: { prune?: boolean } = {}): Promise<void> {
     const key = `${p.path}::${sourceId}`;
+    if (prune) this.pruneRequested.add(key);
     const running = this.inflight.get(key);
     if (running) {
       // The running sync read the source before this trigger: run once more after it, with the current source.
@@ -161,6 +170,9 @@ export class IssueSync {
   }
 
   private async runSync(p: Project, sourceId: string): Promise<void> {
+    // Consumed first, even when this run returns early: a resync of a disabled source must not prune later.
+    const key = `${p.path}::${sourceId}`;
+    const prune = this.pruneRequested.delete(key);
     if (!this.hooks.canRun(p)) return;
     const src = p.board.issueSources?.find((s) => s.id === sourceId);
     if (!src?.enabled) return;
@@ -172,7 +184,7 @@ export class IssueSync {
     this.hooks.onState(p);
     let deleted: string[] = [];
     try {
-      const plan = await this.fetchPlan(p, snapshot, impl);
+      const plan = await this.fetchPlan(p, snapshot, impl, prune);
       if (this.hooks.canRun(p)) deleted = this.apply(p, snapshot, plan);
       state.lastSyncAt = new Date().toISOString();
       delete state.lastError;
@@ -188,22 +200,29 @@ export class IssueSync {
   }
 
   /** Network phase: reads the provider, never the board's future state. Throws on the first provider error. */
-  private async fetchPlan(p: Project, src: IssueSource, impl: IssueProvider) {
+  private async fetchPlan(p: Project, src: IssueSource, impl: IssueProvider, prune = false) {
     const token = getToken(src.provider, src.baseUrl);
     const open = await impl.listOpenIssues(src, token);
     const openById = new Map(open.map((i) => [i.externalId, i]));
+    const toImport = open.filter((i) => matchesLabels(i, src.labels)).sort((a, b) => a.number - b.number);
+    const matching = new Set(toImport.map((i) => i.externalId));
     const updates = new Map<string, ExternalIssue>();
     const gone = new Set<string>();
+    const pruned = new Set<string>();
     const mine = p.board.cards.filter((c) => c.columnId === BACKLOG_COLUMN_ID && c.external?.sourceId === src.id);
     for (const card of mine) {
       const ext = card.external as CardExternal;
+      // Never looked up: after a repo change, its number would point at another repo's issue.
+      if (prune && !matching.has(ext.externalId)) {
+        pruned.add(card.id);
+        continue;
+      }
       let issue: ExternalIssue | null | undefined = openById.get(ext.externalId);
       if (!issue) issue = await impl.getIssue(src, token, ext.number);
       if (!issue || issue.state === "closed") gone.add(card.id);
       else if (newer(issue.updatedAt, ext.updatedAt)) updates.set(card.id, issue);
     }
-    const toImport = open.filter((i) => matchesLabels(i, src.labels)).sort((a, b) => a.number - b.number);
-    return { toImport, updates, gone };
+    return { toImport, updates, gone, pruned };
   }
 
   /**
@@ -213,7 +232,7 @@ export class IssueSync {
   private apply(
     p: Project,
     fetched: IssueSource,
-    plan: { toImport: ExternalIssue[]; updates: Map<string, ExternalIssue>; gone: Set<string> },
+    plan: { toImport: ExternalIssue[]; updates: Map<string, ExternalIssue>; gone: Set<string>; pruned: Set<string> },
   ): string[] {
     const current = () => p.board.issueSources?.find((s) => s.id === fetched.id && s.enabled && sameConfig(s, fetched));
     const src = current();
@@ -229,7 +248,8 @@ export class IssueSync {
       return c?.external && newer(issue.updatedAt, c.external.updatedAt);
     });
     const deletes = [...plan.gone].filter((id) => inBacklog(id));
-    if (creates.length === 0 && updates.length === 0 && deletes.length === 0) return [];
+    const prunes = [...plan.pruned].filter((id) => inBacklog(id));
+    if (creates.length === 0 && updates.length === 0 && deletes.length === 0 && prunes.length === 0) return [];
     p.mutate((board) => {
       const s = board.issueSources?.find((x) => x.id === src.id);
       if (!s) return;
@@ -265,8 +285,16 @@ export class IssueSync {
         p.addHistory(c, "edited", `Updated from ${refOf(s, issue.number)}`);
       }
       for (const id of deletes) p.deleteCard(board, id);
+      // A pruned issue leaves importedIds, so it comes back once the filters match it again.
+      const prunedIds = new Set<string>();
+      for (const id of prunes) {
+        const ext = board.cards.find((x) => x.id === id)?.external;
+        if (ext) prunedIds.add(ext.externalId);
+        p.deleteCard(board, id);
+      }
+      if (prunedIds.size > 0) s.importedIds = s.importedIds.filter((x) => !prunedIds.has(x));
     });
-    return deletes;
+    return [...deletes, ...prunes];
   }
 
   // ---- write-back ----------------------------------------------------------
