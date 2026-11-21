@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_PROJECT_PARALLEL, LANGUAGE_SETTINGS, normalizeProjectParallel, PERMISSION_MODES, type Settings } from "../shared/types.ts";
+import { isValidEffortSetting } from "../shared/effort.ts";
 import { writeFileAtomic } from "./fsutil.ts";
 
 export const NIGHTSHIFT_HOME = process.env.NIGHTSHIFT_HOME ?? join(homedir(), ".nightshift");
@@ -16,6 +17,7 @@ export const DEFAULT_SETTINGS: Settings = {
   claudePath: "claude",
   permissionMode: "auto",
   model: "",
+  effort: "",
   extraArgs: "",
   recentProjects: [],
   soundNotifications: true,
@@ -52,6 +54,8 @@ function checkField(key: keyof Settings, value: unknown): string | null {
     case "model":
     case "extraArgs":
       return typeof value === "string" ? null : `${key} must be a string`;
+    case "effort":
+      return isValidEffortSetting(value) ? null : `Unknown effort: ${String(value)}`;
     case "soundNotifications":
       return typeof value === "boolean" ? null : "soundNotifications must be a boolean";
     case "permissionMode":
