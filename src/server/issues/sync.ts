@@ -7,6 +7,8 @@ import {
   type ExternalIssue,
   type IssueSource,
   type IssueSourceStatus,
+  type IssueSyncPreview,
+  type IssueSyncResult,
   matchesLabels,
   providerLabel,
 } from "../../shared/issues.ts";
@@ -56,14 +58,19 @@ export function issueDescription(issue: Pick<ExternalIssue, "body" | "url">): st
 const issueTitle = (issue: ExternalIssue) => issue.title.trim() || "Untitled";
 const refOf = (src: Pick<IssueSource, "provider" | "repo">, n: number) => `${providerLabel(src.provider)} ${src.repo}#${n}`;
 
+type Plan = { toImport: ExternalIssue[]; updates: Map<string, ExternalIssue>; gone: Set<string>; pruned: Set<string> };
+type Counts = Pick<IssueSyncResult, "imported" | "updated" | "deleted" | "pruned">;
+const NO_COUNTS: Counts = { imported: 0, updated: 0, deleted: 0, pruned: 0 };
+const skipped = (sourceId: string): IssueSyncResult => ({ sourceId, ok: true, skipped: true, ...NO_COUNTS });
+
 export class IssueSync {
   private readonly hooks: IssueSyncHooks;
   private readonly intervalMs: number;
   private timers = new Map<string, ReturnType<typeof setInterval>>();
   /** In-flight sync per `path::sourceId`: a trigger during a sync gets the running one. */
-  private inflight = new Map<string, Promise<void>>();
+  private inflight = new Map<string, Promise<IssueSyncResult>>();
   /** One follow-up sync per `path::sourceId`, queued when a trigger arrives during a sync (the source may have changed). */
-  private queued = new Map<string, Promise<void>>();
+  private queued = new Map<string, Promise<IssueSyncResult>>();
   /**
    * `path::sourceId` of every pending resync request. Consumed at the start of the next run of that source: a request
    * made during a sync lands on the queued follow-up, never on the running sync (which read its config before).
@@ -138,17 +145,17 @@ export class IssueSync {
   }
 
   /** Syncs every enabled source; one failing source never stops the others. */
-  async syncAll(p: Project): Promise<void> {
-    if (!this.hooks.canRun(p)) return;
+  async syncAll(p: Project): Promise<IssueSyncResult[]> {
+    if (!this.hooks.canRun(p)) return [];
     const ids = (p.board.issueSources ?? []).filter((s) => s.enabled).map((s) => s.id);
-    await Promise.allSettled(ids.map((id) => this.syncSource(p, id)));
+    return Promise.all(ids.map((id) => this.syncSource(p, id)));
   }
 
   /**
-   * Syncs one source. Resolves once done (errors are recorded in the live status, never thrown).
+   * Syncs one source. Resolves its result once done (errors are recorded in the live status and the result, never thrown).
    * `prune` (resync): also deletes the source's Backlog cards whose issue no longer matches the source's filters.
    */
-  syncSource(p: Project, sourceId: string, { prune = false }: { prune?: boolean } = {}): Promise<void> {
+  syncSource(p: Project, sourceId: string, { prune = false }: { prune?: boolean } = {}): Promise<IssueSyncResult> {
     const key = `${p.path}::${sourceId}`;
     if (prune) this.pruneRequested.add(key);
     const running = this.inflight.get(key);
@@ -169,34 +176,63 @@ export class IssueSync {
     return run;
   }
 
-  private async runSync(p: Project, sourceId: string): Promise<void> {
+  private async runSync(p: Project, sourceId: string): Promise<IssueSyncResult> {
     // Consumed first, even when this run returns early: a resync of a disabled source must not prune later.
     const key = `${p.path}::${sourceId}`;
     const prune = this.pruneRequested.delete(key);
-    if (!this.hooks.canRun(p)) return;
+    if (!this.hooks.canRun(p)) return skipped(sourceId);
     const src = p.board.issueSources?.find((s) => s.id === sourceId);
-    if (!src?.enabled) return;
+    if (!src?.enabled) return skipped(sourceId);
     const impl = providerFor(src.provider);
-    if (!impl) return;
+    if (!impl) return skipped(sourceId);
     const snapshot = structuredClone(src);
     const state = this.state(p, sourceId);
     state.syncing = true;
     this.hooks.onState(p);
-    let deleted: string[] = [];
+    let removed: string[] = [];
+    let result: IssueSyncResult;
     try {
       const plan = await this.fetchPlan(p, snapshot, impl, prune);
-      if (this.hooks.canRun(p)) deleted = this.apply(p, snapshot, plan);
+      let counts: Counts = NO_COUNTS;
+      if (this.hooks.canRun(p)) ({ removed, counts } = this.apply(p, snapshot, plan));
       state.lastSyncAt = new Date().toISOString();
       delete state.lastError;
       delete state.lastErrorAt;
+      result = { sourceId, ok: true, ...counts };
     } catch (e) {
       state.lastError = errorMessage(e);
       state.lastErrorAt = new Date().toISOString();
+      result = { sourceId, ok: false, ...NO_COUNTS, error: state.lastError };
     } finally {
       state.syncing = false;
     }
-    for (const id of deleted) this.hooks.purge(p, id);
+    for (const id of removed) this.hooks.purge(p, id);
     this.hooks.onState(p);
+    return result;
+  }
+
+  /**
+   * Dry run of a resync: fetches the source and counts what a resync would change, without touching the board,
+   * the live status or the in-flight syncs. Throws the provider's error, or when the source cannot sync.
+   */
+  async preview(p: Project, sourceId: string): Promise<IssueSyncPreview> {
+    const src = p.board.issueSources?.find((s) => s.id === sourceId);
+    if (!src?.enabled) throw new Error("Issue source is not enabled");
+    const impl = providerFor(src.provider);
+    if (!impl) throw new Error(`Unknown issue provider: ${src.provider}`);
+    const snapshot = structuredClone(src);
+    const plan = await this.fetchPlan(p, snapshot, impl, true);
+    const diff = this.diffPlan(p, snapshot, plan);
+    if (!diff) throw new Error("The issue source changed during the preview");
+    return {
+      sourceId,
+      matching: plan.toImport.length,
+      toImport: diff.creates.length,
+      toUpdate: diff.updates.length,
+      toClose: diff.deletes.length,
+      toPrune: diff.prunes.length,
+      backlogNow: p.board.cards.filter((c) => c.columnId === BACKLOG_COLUMN_ID && c.external?.sourceId === sourceId).length,
+    };
   }
 
   /** Network phase: reads the provider, never the board's future state. Throws on the first provider error. */
@@ -226,17 +262,12 @@ export class IssueSync {
   }
 
   /**
-   * Board phase: re-checks everything against the current board (it may have changed during the network phase),
-   * then applies the changes in one mutation, or none when there is nothing to do. Returns the deleted card ids.
+   * Re-checks a fetched plan against the current board (it may have changed during the network phase) without
+   * touching it. Undefined when the source was removed, disabled or reconfigured since the fetch.
    */
-  private apply(
-    p: Project,
-    fetched: IssueSource,
-    plan: { toImport: ExternalIssue[]; updates: Map<string, ExternalIssue>; gone: Set<string>; pruned: Set<string> },
-  ): string[] {
-    const current = () => p.board.issueSources?.find((s) => s.id === fetched.id && s.enabled && sameConfig(s, fetched));
-    const src = current();
-    if (!src) return [];
+  private diffPlan(p: Project, fetched: IssueSource, plan: Plan) {
+    const src = p.board.issueSources?.find((s) => s.id === fetched.id && s.enabled && sameConfig(s, fetched));
+    if (!src) return undefined;
     const inBacklog = (id: string) => {
       const c = p.card(id);
       return c && c.columnId === BACKLOG_COLUMN_ID && c.external?.sourceId === src.id ? c : undefined;
@@ -249,7 +280,19 @@ export class IssueSync {
     });
     const deletes = [...plan.gone].filter((id) => inBacklog(id));
     const prunes = [...plan.pruned].filter((id) => inBacklog(id));
-    if (creates.length === 0 && updates.length === 0 && deletes.length === 0 && prunes.length === 0) return [];
+    return { src, creates, updates, deletes, prunes };
+  }
+
+  /**
+   * Board phase: applies the changes of a plan in one mutation, or none when there is nothing to do.
+   * Returns the deleted card ids and the counts.
+   */
+  private apply(p: Project, fetched: IssueSource, plan: Plan): { removed: string[]; counts: Counts } {
+    const diff = this.diffPlan(p, fetched, plan);
+    if (!diff) return { removed: [], counts: { imported: 0, updated: 0, deleted: 0, pruned: 0 } };
+    const { src, creates, updates, deletes, prunes } = diff;
+    const counts = { imported: creates.length, updated: updates.length, deleted: deletes.length, pruned: prunes.length };
+    if (creates.length === 0 && updates.length === 0 && deletes.length === 0 && prunes.length === 0) return { removed: [], counts };
     p.mutate((board) => {
       const s = board.issueSources?.find((x) => x.id === src.id);
       if (!s) return;
@@ -294,7 +337,7 @@ export class IssueSync {
       }
       if (prunedIds.size > 0) s.importedIds = s.importedIds.filter((x) => !prunedIds.has(x));
     });
-    return [...deletes, ...prunes];
+    return { removed: [...deletes, ...prunes], counts };
   }
 
   // ---- write-back ----------------------------------------------------------
