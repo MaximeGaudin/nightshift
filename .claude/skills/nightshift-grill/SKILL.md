@@ -5,7 +5,7 @@ description: Grills a Nightshift kanban card before specification. Reads the not
 
 # Nightshift Grill
 
-This skill is used in Nightshift to review a kanban note and ask all the questions that need to be asked before the specification phase. Make sure to ask all your questions at once.
+This skill is used in Nightshift to review a kanban note and ask all the questions that need to be asked before the specification phase.
 
 The note is the card description. This skill stops when that note is ready to specify. Writing specs is a different skill. Do not write them here.
 
@@ -91,6 +91,5 @@ Ready, small enough to skip the plan (`move` is the implement column's id; a car
 
 - [ ] The ready note ends with `## Acceptance` and a `Route:` line, and `move` follows Route
 - [ ] Every blocking gap is in the current `questions` list, or the list is empty because the note clears the readiness bar
-- [ ] `move` is `stay` when `questions` is non-empty, and `next` only when the bar is clear
 - [ ] After answers, the note contains the decisions and no longer contains `## Questions`
 - [ ] No spec file and no application code was written

@@ -24,23 +24,17 @@ The worktree is the one implementation left: the `Worktree` line under `## Resul
 2. From here, every command runs in that worktree. Read the grilled note (the top of the description), `## Architecture`, `## Tasks`, `## Tests`, and `## Definition of done`; a card that skipped `nightshift-plan` has `## Plan`, `## Acceptance` and the `## Definition of done` the implement agent wrote instead: review against those. Read the diff of this branch against `git merge-base HEAD <base>`. When `Base` says `detached`, use its SHA. When the line is missing, use the branch checked out in the board project. When none of these exists, read `git log` and the files this branch added.
 3. List every finding. A finding is a defect: behavior that contradicts the spec, a failing check, a stub (`TODO`, `FIXME`, skipped test, empty body that only throws), or a security hole. A rename or a formatting note is not a finding. Do not change those.
 4. Fix every finding in the worktree. One commit per fix, message `fix: <what>`, only the files that fix needs. Do not use `--no-verify` and do not amend. Do not stage `.env`, credential files, `nightshift.json`, or `nightshift-screenshots`. If a fix needs a product decision the spec does not answer, do not guess. Ask every such decision at once (see Asking questions). Set `move` to `stay` and stop.
-5. Run the full test suite here, once, after the last fix of step 4: this is the only place in the Nightshift flow where it runs (`nightshift-implement` runs only the affected tests). Use the suite command of `## Definition of done` when it names one, else the project's whole check: lint, types and all tests (a `check` or `test` script, or what the README names), for every part of the project the card changed. Then run the items of `## Definition of done` and the tests of `## Tests` the suite does not cover, including those `## Result` marks "deferred to review". While fixing in step 4, run only the affected tests (the affected-tests command written under `## Result`, see `nightshift-implement`'s Tests), never the full suite after each fix.
+5. Run the full test suite here, once, after the last fix of step 4: the only place in the Nightshift flow where it runs. Use the suite command of `## Definition of done` when it names one, else the project's whole check (lint, types and all tests: a `check` or `test` script, or what the README names) for every part the card changed. Then the items of `## Definition of done` and `## Tests` the suite does not cover, including those marked "deferred to review". While fixing in step 4, run only the affected-tests command written under `## Result`.
    - Tests already failing on the base (the `Baseline` line of `## Result`) are not findings of this card; any other failure is.
    - When a later run of this skill finds no fix to make and `git rev-parse HEAD^{tree}` equals the tree of the latest `Suite` line under `## Review`, do not re-run the suite: write `Suite: reused, tree <sha>`.
-   - A failure is a finding: fix it and run the suite again. A second failure of the same check: set `move` to `stay`, leave `questions` empty, write the command and the output under `## Review`, and stop. Do not commit a red tree.
+   - A failure is a finding: fix it and run the suite again. A second failure of the same check: set `move` to `stay`, write the command and the output under `## Review`, and stop. Do not commit a red tree.
    - Write the `Suite` line under `## Review` in the same format as `## Result` (`Suite: <command> → exit <code>, failing: <…>, tree <sha>`), so `nightshift-merge` can reuse it.
-6. Check `test`, every run, even when there is no finding and nothing to fix. Nightshift's "Tester" button runs `test.command` as written, and it keeps the old one when the output has no `test`. A card that changes no screen (`git diff --name-only <base>` lists no UI code and the brief names no page) starts no server here: its `test.command` is the affected-tests command in the worktree, with no `url`; skip the stack bullets below and step 7. When the card has a `test`:
+6. Check `test` on every run, even with nothing to fix: the "Tester" button runs `test.command` as written, and an output without `test` keeps the old one. A card that changes no screen (`git diff --name-only <base>` lists no UI code and the brief names no page) starts no server here: its `test.command` is the affected-tests command in the worktree, with no `url`; skip the stack bullets below and step 7. When the card has a `test`:
    - It must `cd` into this run's worktree. Rewrite the path when the worktree changed in step 1.
-   - When the card changes a screen, it must start everything that screen needs (see Run the app). A command that only starts a front-end dev server without its backend is wrong, whatever an earlier run wrote: every page then fails. Replace it, with free ports, and set `test.url` to the page.
+   - When the card changes a screen, it must start everything that screen needs (see Run the app). A front-end dev server without its backend is wrong, whatever an earlier run wrote: replace it, with free ports, and set `test.url` to the page.
    - Start the command and check that it works: the url answers (`curl -sf -o /dev/null`, 10 tries, one second apart), and so does each backend it started. Keep the stack running for step 7, or stop it now when there is no `test.url`.
    - Return the checked `test` in the output, changed or not. Omit `test` only when the card had none.
-7. When `test.url` is set, refresh screenshots so the human can check the fixed result. With the stack from step 6 running, capture each screen already listed under `## Screenshots`:
-
-```bash
-npx --yes playwright screenshot --browser chromium --full-page --viewport-size=1280,800 "<url>" "<png>"
-```
-
-   Retry a file once on failure. Stop the stack after (see Run the app). Leave the ports free. Do not stage the PNGs. Keep the same absolute paths in `## Screenshots`. When there is no `test.url`, leave screenshots unchanged.
+7. When `test.url` is set, refresh screenshots so the human can check the fixed result. With the stack from step 6 running, capture each screen already listed under `## Screenshots` with `npx --yes playwright screenshot --browser chromium --full-page --viewport-size=1280,800 "<url>" "<png>"`. Retry a file once on failure. Stop the stack after (see Run the app). Leave the ports free. Do not stage the PNGs. Keep the same absolute paths in `## Screenshots`. When there is no `test.url`, leave screenshots unchanged.
 8. Append `## Review`, with the line `- Test: <test.command>` when the card has a `test`. Set `move` to `next` and `questions` to an empty array. Keep the worktree.
 
 ## Use the context you were given
@@ -101,9 +95,7 @@ Omit `test` only when the card has no test command. A `test` that only starts a 
 
 ## Done when
 
-- [ ] Every finding is fixed and committed on `nightshift/<card-id>`, or there were none
-- [ ] The suite and `## Definition of done` passed in that worktree, or were reused because the tree did not change (step 5)
-- [ ] `## Review` has the `Suite` line with the tree it is valid for
-- [ ] The shared checkout was not edited
-- [ ] `test` was returned, and for a card that changes a screen it starts everything that screen needs and was seen answering (step 6)
+- [ ] Every finding is fixed and committed, and the shared checkout was not edited (except with `Worktree: none`)
+- [ ] `## Review` has a `Suite` line that passed or was reused, with its tree
+- [ ] `test` was returned and, for a screen, seen answering with everything it needs
 - [ ] `move` is `next` only when those checks passed

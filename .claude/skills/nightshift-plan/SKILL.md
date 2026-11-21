@@ -56,7 +56,6 @@ Section headings stay in English. Prose matches the language of the brief.
 
 - [ ] 1. Shared contract
 - [ ] 2. <task name>
-- [ ] 3. <task name>
 
 ## Architecture
 
@@ -72,12 +71,6 @@ Hard part: the invariant or transition that is easy to get wrong.
 Done when: the contract is in the tree and the tests below that cover it pass.
 
 ### Task 2 — <name>
-Files: <modules or paths>.
-Context: <`file:line` references and facts this task needs>.
-Hard part: <the non-obvious behavior>.
-Done when: <observable outcome>.
-
-### Task 3 — <name>
 Files: <modules or paths>.
 Context: <`file:line` references and facts this task needs>.
 Hard part: <the non-obvious behavior>.
@@ -102,12 +95,7 @@ Rules for Tasks:
 
 ## Progress list
 
-`## Progress` is the list a person reads to see how far implementation got. Write it at the end of the note, with the other sections of the plan.
-
-- One checkbox per task. Number from 1 with no gaps, in task order.
-- Line shape: `- [ ] N. <task name>`. Leave every box unchecked.
-- Do not renumber a step after it is written. Do not add a progress line that is not a task.
-- The implement agent changes `- [ ]` to `- [x]` only after that task is committed and its tests pass. A stopped run leaves later boxes unchecked.
+`## Progress` shows a person how far implementation got: one unchecked line per task, `- [ ] N. <task name>`, numbered from 1 with no gaps, in task order, and no line that is not a task. Never renumber a written step. The implement agent checks a line once its task is committed and tested.
 
 Rules for Tests and Definition of done:
 
@@ -152,10 +140,7 @@ Plan ready (`questions` empty, `move` is `next`):
 
 ## Done when
 
-- [ ] The description gains `## Progress`, `## Architecture`, `## Tasks`, `## Tests`, and `## Definition of done`
-- [ ] `## Progress` has one unchecked numbered line per task, from 1, in task order
+- [ ] The note gains every section of the template plus `## Models`, and the `models` output matches it
 - [ ] Every task has `Files`, `Context` with `file:line` references, `Hard part` and `Done when`
-- [ ] Tests cover the hard behavior, and Definition of done is observable
-- [ ] `## Models` names the card's models, chosen from the hardest task (see Choosing models)
-- [ ] The specification does not contain function bodies or routine implementation steps
-- [ ] `move` is `next` and `questions` is empty, or `move` is `stay` because product questions are still open
+- [ ] No function bodies or routine implementation steps
+- [ ] `move` is `next` with empty `questions`, or `stay` because product questions are open
