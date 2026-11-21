@@ -1,6 +1,7 @@
-import { copyFileSync, existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { copyFileSync, mkdtempSync, realpathSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, sep } from "node:path";
+import { MAX_CARD_IMAGE_BYTES } from "../shared/screenshots.ts";
 import { screenshotImages, screenshotsDir } from "./screenshots.ts";
 
 export const SCREENSHOTS_START = "<!-- nightshift-screenshots:start -->";
@@ -111,16 +112,26 @@ export async function syncPrScreenshots(opts: {
   try {
     let dir: string;
     try {
-      dir = screenshotsDir(cardId) + sep;
+      dir = realpathSync(screenshotsDir(cardId)) + sep;
     } catch {
-      return;
+      return; // Bad card id, or no stored captures.
     }
+    // The real file must sit in the card's stored captures: `..` or a symlink must not publish another file.
     const seen = new Set<string>();
-    const images = screenshotImages(description).filter((i) => {
-      if (!i.path.startsWith(dir) || seen.has(i.path) || !existsSync(i.path)) return false;
-      seen.add(i.path);
-      return true;
-    });
+    const images: { alt: string; path: string }[] = [];
+    for (const i of screenshotImages(description)) {
+      let real: string;
+      try {
+        real = realpathSync(i.path);
+        const st = statSync(real);
+        if (!real.startsWith(dir) || !st.isFile() || st.size > MAX_CARD_IMAGE_BYTES) continue;
+      } catch {
+        continue;
+      }
+      if (seen.has(real)) continue;
+      seen.add(real);
+      images.push({ alt: i.alt, path: real });
+    }
     if (images.length === 0) return;
 
     const view = await gh(["pr", "view", `nightshift/${cardId}`, "--json", "url,body,state"], { cwd });

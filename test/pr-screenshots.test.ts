@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, expect, test } from "bun:test";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { mergeScreenshotsSection, SCREENSHOTS_END, SCREENSHOTS_START, syncPrScreenshots } from "../src/server/prScreenshots.ts";
 import { screenshotsDir } from "../src/server/screenshots.ts";
@@ -125,3 +125,16 @@ test("sync-upload-fails", async () => {
   expect(fake.state().pr?.body).toBe("x");
   expect(logs).toEqual(["Screenshots non ajoutés à la PR : HTTP 422: upload refused"]);
 });
+
+test("sync-only-stored-captures", async () => {
+  // A path that starts with the card's folder but leaves it (`..`), or a symlink inside it, is never published.
+  const secret = join(dir, "..", "..", "secret.png");
+  writeFileSync(secret, PNG);
+  const link = join(dir, "03-link.png");
+  symlinkSync(secret, link);
+  fake.setState({ pr: { url: PR_URL, body: "x", state: "OPEN" }, release: { assets: [] } });
+  await syncPrScreenshots({ projectPath: tmp, cardId: CARD, description: `![Up](${dir}/../../secret.png)\n![Link](${link})`, log });
+  expect(fake.calls()).toEqual([]);
+  expect(logs).toEqual([]);
+});
+
