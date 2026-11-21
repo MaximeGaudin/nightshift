@@ -37,6 +37,11 @@ export const settings: Record<keyof typeof enSettings, string> = {
   "settings.model.label": "Modèle par défaut",
   "settings.model.help": "S'applique aux colonnes sans modèle propre. Vide = défaut du CLI claude.",
   "settings.model.placeholder": "ex. sonnet, opus",
+  "settings.effort.label": "Effort",
+  "settings.effort.help":
+    "S'applique aux colonnes et cartes sans effort propre. Défaut économique : grill, implement, review medium ; plan high ; merge low ; autres skills medium. « Hériter de Claude » ne passe pas --effort.",
+  "settings.effort.economic": "Économique (défaut)",
+  "settings.effort.inherit": "Hériter de Claude",
   "settings.claudePath.label": "Commande claude",
   "settings.extraArgs.label": "Arguments supplémentaires",
   "settings.extraArgs.placeholder": 'ex. --allowedTools "Bash(git *)" --max-budget-usd 2',
