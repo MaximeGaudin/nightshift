@@ -5,7 +5,7 @@ import type { Card, Settings } from "../src/shared/types.ts";
 import { AgentFeaturesFields, agentFeaturesPatch, inheritedFeatures } from "../src/web/AgentFeaturesFields.tsx";
 import { CardAgentFeaturesEditor } from "../src/web/CardAgentFeaturesEditor.tsx";
 import { getLocale, setLocale } from "../src/web/i18n/index.ts";
-import { SettingsContent, settingsDirty } from "../src/web/SettingsModal.tsx";
+import { SettingsContent, saveSettingsAndProject, settingsDirty } from "../src/web/SettingsModal.tsx";
 
 const startLocale = getLocale();
 afterAll(() => setLocale(startLocale));
@@ -79,4 +79,17 @@ test("card editor: shows the column's value as inherited and the number of card 
   expect(html).toContain("Agent features (1)");
   expect(html).toContain("Inherit (on)");
   expect(html).toContain("Inherit (off)");
+});
+
+test("saving the settings sends the agent features", async () => {
+  const sent: Partial<Settings>[] = [];
+  const client = {
+    saveSettings: async (s: Partial<Settings>) => {
+      sent.push(s);
+      return base;
+    },
+    saveBoard: async () => ({}) as never,
+  };
+  await saveSettingsAndProject(client, { ...base, agentFeatures: { hooks: true } });
+  expect(sent[0]?.agentFeatures).toEqual({ hooks: true });
 });

@@ -278,7 +278,10 @@ export async function saveSettingsAndProject(
   draft: Settings,
   project?: { path: string; saved: number; draft: number; policy?: { saved: WorktreePolicy; draft: WorktreePolicy } },
 ): Promise<void> {
-  await client.saveSettings(Object.fromEntries(EDITABLE.map((k) => [k, draft[k]])) as Partial<Settings>);
+  await client.saveSettings({
+    ...(Object.fromEntries(EDITABLE.map((k) => [k, draft[k]])) as Partial<Settings>),
+    agentFeatures: draft.agentFeatures ?? {},
+  });
   if (!project) return;
   if (project.draft !== project.saved) await client.saveBoard(project.path, { maxParallel: project.draft });
   if (project.policy && project.policy.draft !== project.policy.saved) await client.setWorktreePolicy?.(project.path, project.policy.draft);
