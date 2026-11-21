@@ -38,6 +38,7 @@ import type {
 import { canSendFeedback, cardRef, columnMaxParallel, isDoneColumn } from "../shared/types.ts";
 import { safeHttpUrl } from "../shared/urls.ts";
 import type { QuotaSnapshot } from "../shared/usage.ts";
+import { CI_POLL_MS, CiWatcher } from "./ciWatcher.ts";
 import { buildEnvironment } from "./environment.ts";
 import { fallbackBlock, tryFastMerge } from "./fastMerge.ts";
 import { FlowController } from "./flow.ts";
@@ -494,6 +495,19 @@ export class Orchestrator {
   /** Pull request flow (push and PR after review, merge through the PR), one operation at a time per card. */
   readonly prFlow = new PrFlow({ log: (p, cardId, kind, text) => this.log(p, cardId, kind, text) });
 
+  /** Follows the cards waiting in Merge on their pull request's checks. */
+  readonly ci = new CiWatcher(
+    {
+      canRun: (p) => this.canRunAgents(p),
+      isBusy: (p, cardId) => this.jobs.has(this.key(p, cardId)),
+      detect: (p) => detectPrMode(p.path, p.board),
+      prFlow: this.prFlow,
+      stopTest: (p, cardId) => this.stopTest(p, cardId),
+      log: (p, cardId, kind, text) => this.log(p, cardId, kind, text),
+    },
+    Number(process.env.NIGHTSHIFT_CI_POLL_MS) || CI_POLL_MS,
+  );
+
   /** True when this process runs the project's agents: started with agents and holding the project's lock. */
   canRunAgents(p: Project): boolean {
     return this.agents && !this.lockedBy.has(p.path);
@@ -570,7 +584,10 @@ export class Orchestrator {
       // Just took the lock over: release the cards whose dependencies finished meanwhile, and sync the issues.
       if (!this.lockedBy.has(p.path)) {
         this.scheduleDependencies(p);
-        if (this.projects.get(p.path) === p) this.issues.start(p);
+        if (this.projects.get(p.path) === p) {
+          this.issues.start(p);
+          this.ci.start(p);
+        }
       }
     }
   }
@@ -614,7 +631,10 @@ export class Orchestrator {
     rememberProject(path);
     this.scheduleTick();
     this.scheduleDependencies(p);
-    if (this.agents) this.issues.start(p);
+    if (this.agents) {
+      this.issues.start(p);
+      this.ci.start(p);
+    }
     return p;
   }
 
@@ -1760,6 +1780,7 @@ export class Orchestrator {
   async shutdown(graceMs = SHUTDOWN_GRACE_MS) {
     clearInterval(this.lockTimer);
     this.issues.shutdown();
+    this.ci.shutdown();
     this.quotaPoller.stop();
     const groups = [...this.tests.values()].map((t) => t.proc.pid).filter((pid): pid is number => !!pid);
     // Queued quick runs are dropped; the running ones are stopped like jobs.
