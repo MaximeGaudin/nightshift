@@ -3,6 +3,7 @@
 // as one JSON line { args, stdin }. Installed on the PATH as `gh` by `installFakeGh` (helpers.ts).
 //
 // State: { auth?: boolean, remote?: string, nextNumber?: number, mergeError?: string, runLogs?: { [id]: string },
+//          defaultChecks?, defaultMergeable? (given to created PRs),
 //          prs: [{ number, url, head, base, title, body, state, mergeable, checks?, autoMerge?, mergeCommit? }] }
 // `pr merge` on a mergeable PR simulates GitHub on the bare `remote`: the base ref moves to the head sha and,
 // with --delete-branch, the head ref is deleted.
@@ -28,6 +29,9 @@ interface State {
   nextNumber?: number;
   mergeError?: string;
   runLogs?: Record<string, string>;
+  /** Given to each PR `pr create` opens. */
+  defaultChecks?: FakePr["checks"];
+  defaultMergeable?: string;
   prs: FakePr[];
 }
 
@@ -94,7 +98,17 @@ if (cmd === "pr" && sub === "create") {
   const number = state.nextNumber ?? state.prs.length + 1;
   state.nextNumber = number + 1;
   const url = `https://github.com/o/r/pull/${number}`;
-  state.prs.push({ number, url, head, base: opt("--base") ?? "", title: opt("--title") ?? "", body: stdin ?? "", state: "OPEN" });
+  state.prs.push({
+    number,
+    url,
+    head,
+    base: opt("--base") ?? "",
+    title: opt("--title") ?? "",
+    body: stdin ?? "",
+    state: "OPEN",
+    ...(state.defaultChecks ? { checks: state.defaultChecks } : {}),
+    ...(state.defaultMergeable ? { mergeable: state.defaultMergeable } : {}),
+  });
   save();
   out(`Creating pull request\n${url}`);
   process.exit(0);

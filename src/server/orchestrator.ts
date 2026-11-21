@@ -43,6 +43,7 @@ import { fallbackBlock, tryFastMerge } from "./fastMerge.ts";
 import { FlowController } from "./flow.ts";
 import { HttpError } from "./guard.ts";
 import { IssueSync } from "./issues/sync.ts";
+import { PrFlow } from "./prFlow.ts";
 import { detectPrMode, prModeLine } from "./prMode.ts";
 import { parseProgressMarker, progressFromTodos } from "./progress.ts";
 import { buildQuickRunPrompt, parseQuickOutput, QUICK_INSTRUCTION_MAX, QUICK_RESULT_SCHEMA } from "./quickrun.ts";
@@ -489,6 +490,9 @@ export class Orchestrator {
       this.purgeCard(p, cardId);
     },
   });
+
+  /** Pull request flow (push and PR after review, merge through the PR), one operation at a time per card. */
+  readonly prFlow = new PrFlow({ log: (p, cardId, kind, text) => this.log(p, cardId, kind, text) });
 
   /** True when this process runs the project's agents: started with agents and holding the project's lock. */
   canRunAgents(p: Project): boolean {
@@ -1183,7 +1187,40 @@ export class Orchestrator {
     const prLine = prModeLine(prMode);
     // Merge column: try the deterministic merge first; the agent only runs when it stops (fallback).
     let fastMergeNote = "";
-    if (!answer && column.skill === FAST_MERGE_SKILL && column.fastMerge !== false) {
+    let tryLocalMerge = !answer && column.skill === FAST_MERGE_SKILL && column.fastMerge !== false;
+    if (tryLocalMerge && prMode?.active) {
+      const o = await this.prFlow.tryPrMerge({
+        p,
+        cardId: card.id,
+        mode: prMode,
+        stopTest: () => this.stopTest(p, card.id),
+        isCancelled: () => job.cancelled,
+      });
+      if (o.kind === "cancelled") return this.finish(job, "cancelled", {});
+      if (o.kind === "ineligible") this.log(p, card.id, "info", `mode PR ignoré : ${o.reason}`);
+      else if (o.kind === "fallback") {
+        tryLocalMerge = false;
+        this.log(p, card.id, "info", `merge de la PR abandonné : ${o.step} — ${o.error.replace(/\s+/g, " ").slice(0, 300)}`);
+        fastMergeNote = `\n\n${fallbackBlock(o)}`;
+      } else if (o.kind === "toReview") {
+        const review = p.board.columns.find((c) => c.skill === REVIEW_SKILL);
+        this.log(p, card.id, "info", o.summary);
+        return this.finish(job, "success", {
+          output: { summary: o.summary, move: review?.id ?? "stay", questions: [], sections: [{ heading: "CI", content: o.ci }] },
+        });
+      } else {
+        this.log(p, card.id, "info", o.summary);
+        return this.finish(job, "success", {
+          output: {
+            summary: o.summary,
+            move: o.kind === "merged" ? "next" : "stay",
+            questions: [],
+            sections: [{ heading: "Merge", content: o.merge }],
+          },
+        });
+      }
+    }
+    if (tryLocalMerge) {
       const o = await tryFastMerge({
         projectPath: p.path,
         cardId: card.id,
@@ -1272,11 +1309,18 @@ export class Orchestrator {
               .filter(Boolean)
           : [];
         const output: AgentOutput = { ...out, questions };
-        return this.finish(job, questions.length > 0 ? "question" : "success", {
+        const status = questions.length > 0 ? "question" : "success";
+        this.finish(job, status, {
           output,
           costUsd,
           ...(sessionId ? { sessionId } : {}),
         });
+        // Pull request mode: a successful review pushes the branch and opens or updates the PR, in the background.
+        if (status === "success" && column.skill === REVIEW_SKILL && prMode?.active) {
+          const last = p.card(card.id)?.lastRun;
+          if (last?.status === "success" && last.columnId === job.columnId) void this.prFlow.afterReview(p, card.id, prMode);
+        }
+        return;
       }
       const reason = !result
         ? `Agent exited without a result (${r.exit}).${r.stderr.trim() ? ` ${r.stderr.trim()}` : ""}`

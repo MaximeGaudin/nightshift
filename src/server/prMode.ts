@@ -25,7 +25,8 @@ export function clearPrModeCache(path?: string) {
 }
 
 async function probe(projectPath: string): Promise<Probe> {
-  const r = await git(projectPath, ["remote", "get-url", "origin"], { timeoutMs: 5000 });
+  // The configured URL, before any `url.<base>.insteadOf` rewrite: that is the host the user names.
+  const r = await git(projectPath, ["config", "--get", "remote.origin.url"], { timeoutMs: 5000 });
   if (r.code !== 0) return { ok: false, reason: "no origin remote" };
   const parsed = parseGitRemote(r.stdout.trim());
   const host = parsed ? codeHostFor(parsed.provider) : undefined;
