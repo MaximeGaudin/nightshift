@@ -1,6 +1,6 @@
 # Cards that change a screen
 
-Read this only when the card changes a screen. Capture (`## Screenshots`) only when `Card path` has no `nightshift-review` column left; otherwise review captures: `git diff --name-only <base sha>` lists UI code, or the brief names a page.
+Read this only when the card changes a screen: `git diff --name-only <base sha>` lists UI code, or the brief names a page. Capture (`## Screenshots`) only when `Card path` has no `nightshift-review` column left; otherwise review captures.
 
 ## Start the app
 
