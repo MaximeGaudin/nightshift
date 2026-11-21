@@ -122,8 +122,7 @@ npx --yes playwright screenshot --browser chromium --full-page --viewport-size=1
 
    On failure, retry that file once. If it still fails, write the error under `## Screenshots` and continue with the files that succeeded.
 4. Stop the server you started. Leave the port free for the Tester button.
-5. Do not stage or commit `nightshift-screenshots`.
-6. Append `## Screenshots` to the description. One markdown image per PNG. The path is absolute. Alt text is the screen name.
+5. Append `## Screenshots` to the description. One markdown image per PNG. The path is absolute. Alt text is the screen name.
 
 ```markdown
 ## Screenshots
