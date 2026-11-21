@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { parseProgressMarker, progressFromTodos } from "../src/server/progress.ts";
+import { parseEstimateMarker, parseProgressMarker, progressFromTodos } from "../src/server/progress.ts";
 
 describe("parseProgressMarker", () => {
   test("marker-basic", () => {
@@ -109,5 +109,23 @@ describe("progress-marker-tolerant", () => {
 describe("progress-marker-rejects-prose", () => {
   test("mid-sentence", () => {
     expect(parseProgressMarker("Write a line [nightshift-progress] 2/4 x in your reply")).toBeUndefined();
+  });
+});
+
+describe("parseEstimateMarker", () => {
+  test("last valid wins, invalid lines do not erase it", () => {
+    expect(parseEstimateMarker("[nightshift-estimate] 8\ntext\n[nightshift-estimate] 12\n[nightshift-estimate] 2.5")).toBe(12);
+  });
+
+  test("rejects invalid values", () => {
+    for (const bad of ["0", "-3", "abc", "8 min", "2000", "", "2.5"]) {
+      expect(parseEstimateMarker(`[nightshift-estimate] ${bad}`)).toBeUndefined();
+    }
+    expect(parseEstimateMarker("no marker here")).toBeUndefined();
+  });
+
+  test("accepts list prefix, emphasis and backticks", () => {
+    expect(parseEstimateMarker("- **[nightshift-estimate] 5**")).toBe(5);
+    expect(parseEstimateMarker("`[nightshift-estimate] 7`")).toBe(7);
   });
 });

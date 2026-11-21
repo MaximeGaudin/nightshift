@@ -39,6 +39,22 @@ export function parseProgressMarker(text: string): ParsedProgress | undefined {
   return found;
 }
 
+const ESTIMATE_MARKER = /^\[nightshift-estimate\] +(\d+)$/;
+const MAX_ESTIMATE_MINUTES = 1440;
+
+/** Last valid `[nightshift-estimate] <minutes>` line of the text (integer, 1..1440), if any. Invalid lines are ignored. */
+export function parseEstimateMarker(text: string): number | undefined {
+  let found: number | undefined;
+  for (const line of text.split(/\r\n|\r|\n/)) {
+    const m = ESTIMATE_MARKER.exec(normalizeLine(line));
+    if (!m) continue;
+    const minutes = Number(m[1]);
+    if (minutes < 1 || minutes > MAX_ESTIMATE_MINUTES) continue;
+    found = minutes;
+  }
+  return found;
+}
+
 interface TodoItem {
   content?: unknown;
   activeForm?: unknown;
