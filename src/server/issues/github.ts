@@ -59,12 +59,8 @@ export const github: IssueProvider = {
       const q = encodeURIComponent(`repo:${src.repo} ${src.query}`);
       let next: string | undefined = `${src.baseUrl}/search/issues?q=${q}&per_page=100`;
       for (let page = 0; next && page < MAX_PAGES; page++) {
-        const res: { data: { items?: GhIssue[] } | null; headers: Headers } = await requestJson<{ items?: GhIssue[] }>(
-          next,
-          opts(token),
-        );
-        for (const i of res.data?.items ?? [])
-          if (!i.pull_request && i.state === "open" && inRepo(i, src.repo)) out.push(toIssue(i));
+        const res: { data: { items?: GhIssue[] } | null; headers: Headers } = await requestJson<{ items?: GhIssue[] }>(next, opts(token));
+        for (const i of res.data?.items ?? []) if (!i.pull_request && i.state === "open" && inRepo(i, src.repo)) out.push(toIssue(i));
         next = nextLink(res.headers.get("link"));
       }
       return out;

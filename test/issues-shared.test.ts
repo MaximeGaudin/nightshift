@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { normalizeBoard } from "../src/server/store.ts";
-import { matchesLabels, normalizeIssueSources, parseGitRemote, tokenKey } from "../src/shared/issues.ts";
+import { matchesLabels, normalizeIssueSource, normalizeIssueSources, parseGitRemote, tokenKey } from "../src/shared/issues.ts";
 
 const validSource = {
   id: "src_a",
@@ -72,4 +72,11 @@ test("matches-labels", () => {
 test("token-key", () => {
   expect(tokenKey("github", "https://API.github.com/")).toBe("github:api.github.com");
   expect(tokenKey("gitea", "https://g.example.com:3000")).toBe("gitea:g.example.com:3000");
+});
+
+test("shared-normalize-query", () => {
+  const base = { id: "s", provider: "github", baseUrl: "https://api.github.com", repo: "o/r" };
+  expect(normalizeIssueSource({ ...base, query: "  is:open  " })?.query).toBe("is:open");
+  for (const q of ["", "   ", 42]) expect(normalizeIssueSource({ ...base, query: q })).not.toHaveProperty("query");
+  expect(normalizeIssueSource(base)).not.toHaveProperty("query");
 });

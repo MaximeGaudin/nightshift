@@ -109,6 +109,11 @@ export const settings: Record<keyof typeof enSettings, string> = {
   "settings.issues.labels": "Étiquettes",
   "settings.issues.labelsPlaceholder": "bug, nightshift (vide : tous les tickets ouverts)",
   "settings.issues.labelsShort": "Étiquettes : {labels}",
+  "settings.issues.query": "Requête",
+  "settings.issues.queryPlaceholder": "is:issue state:open assignee:@me",
+  "settings.issues.queryHelp":
+    "Syntaxe de recherche GitHub. Le dépôt est ajouté automatiquement. Seules les issues ouvertes sont importées.",
+  "settings.issues.queryShort": "Requête : {query}",
   "settings.issues.token": "Jeton d'accès",
   "settings.issues.tokenPlaceholder": "Jeton d'accès personnel",
   "settings.issues.tokenSaved": "Jeton enregistré (saisissez-en un autre pour le remplacer)",

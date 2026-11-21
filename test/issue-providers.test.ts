@@ -125,3 +125,51 @@ test("gitea-requests", async () => {
   fake(() => Response.json(issue(7, { state: "closed" })));
   expect((await gitea.getIssue(gt, undefined, 7))?.state).toBe("closed");
 });
+
+const ghq: IssueSource = { ...gh, query: "is:issue assignee:@me" };
+const hit = (n: number, extra: Record<string, unknown> = {}) => ({
+  ...issue(n),
+  repository_url: "https://api.github.com/repos/O/R",
+  ...extra,
+});
+
+test("gh-search-url", async () => {
+  fake((c) => {
+    if (c.url.includes("page=2")) return Response.json({ items: [hit(3)] });
+    return Response.json(
+      { items: [hit(1)] },
+      { headers: { link: '<https://api.github.com/search/issues?q=x&per_page=100&page=2>; rel="next"' } },
+    );
+  });
+  const list = await github.listOpenIssues(ghq, "tok");
+  expect(list.map((i) => i.number)).toEqual([1, 3]);
+  const u = new URL(calls[0]?.url as string);
+  expect(u.pathname).toBe("/search/issues");
+  expect(u.searchParams.get("q")).toBe("repo:o/r is:issue assignee:@me");
+  expect(calls.length).toBe(2);
+});
+
+test("gh-search-filters", async () => {
+  fake(() =>
+    Response.json({
+      items: [
+        hit(1),
+        hit(2, { pull_request: { url: "x" } }),
+        hit(3, { state: "closed" }),
+        hit(4, { repository_url: "https://api.github.com/repos/other/x" }),
+      ],
+    }),
+  );
+  expect((await github.listOpenIssues(ghq, "tok")).map((i) => i.number)).toEqual([1]);
+});
+
+test("gh-no-query-regression", async () => {
+  fake(() => Response.json([issue(1)]));
+  await github.listOpenIssues(gh, "tok");
+  expect(calls[0]?.url).toBe("https://api.github.com/repos/o/r/issues?state=open&per_page=100");
+});
+
+test("gh-search-422", async () => {
+  fake(() => Response.json({ message: "Validation Failed" }, { status: 422 }));
+  await expect(github.listOpenIssues(ghq, "tok")).rejects.toThrow("Validation Failed");
+});

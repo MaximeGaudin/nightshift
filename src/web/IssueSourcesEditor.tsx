@@ -9,6 +9,7 @@ import {
   PROVIDERS,
   providerInfo,
   providerLabel,
+  QUERY_MAX_LENGTH,
 } from "../shared/issues.ts";
 import { api } from "./api.ts";
 import { Button } from "./components/ui/button.tsx";
@@ -28,12 +29,13 @@ export interface SourceDraft {
   baseUrl: string;
   repo: string;
   labels: string;
+  query: string;
   enabled: boolean;
   token: string;
 }
 
 export function emptyDraft(): SourceDraft {
-  return { provider: PROVIDERS[0]?.id ?? "", baseUrl: "", repo: "", labels: "", enabled: true, token: "" };
+  return { provider: PROVIDERS[0]?.id ?? "", baseUrl: "", repo: "", labels: "", query: "", enabled: true, token: "" };
 }
 
 /** New source form pre-filled from the project's git remote (whatever the detect route found). */
@@ -54,6 +56,7 @@ export function draftFromSource(s: IssueSource): SourceDraft {
     baseUrl: info?.defaultBaseUrl === s.baseUrl ? "" : s.baseUrl,
     repo: s.repo,
     labels: (s.labels ?? []).join(", "),
+    query: s.query ?? "",
     enabled: s.enabled,
     token: "",
   };
@@ -65,6 +68,7 @@ export const toInput = (s: IssueSource): IssueSourceInput => ({
   baseUrl: s.baseUrl,
   repo: s.repo,
   ...(s.labels ? { labels: s.labels } : {}),
+  ...(s.query ? { query: s.query } : {}),
   enabled: s.enabled,
 });
 
@@ -79,6 +83,7 @@ export function draftToInput(d: SourceDraft): IssueSourceInput {
     ...(d.baseUrl.trim() ? { baseUrl: d.baseUrl.trim() } : {}),
     repo: d.repo.trim(),
     ...(labels.length > 0 ? { labels } : {}),
+    ...(d.query.trim() && providerInfo(d.provider)?.supportsQuery ? { query: d.query.trim() } : {}),
     enabled: d.enabled,
   };
 }
@@ -252,6 +257,11 @@ export function IssueSourcesEditor({
               </div>
               <div className="flex flex-wrap gap-x-3 text-[11px] text-muted-foreground">
                 {s.labels && <span>{t("settings.issues.labelsShort", { labels: s.labels.join(", ") })}</span>}
+                {s.query && (
+                  <span className="issue-source-query" title={s.query}>
+                    {t("settings.issues.queryShort", { query: s.query.length > 60 ? `${s.query.slice(0, 60)}…` : s.query })}
+                  </span>
+                )}
                 {st?.lastSyncAt && (
                   <span className="issue-source-synced">{t("settings.issues.lastSync", { when: timeAgo(st.lastSyncAt) })}</span>
                 )}
@@ -320,6 +330,19 @@ export function IssueSourcesEditor({
                 onChange={(e) => setDraft({ ...draft, labels: e.target.value })}
               />
             </div>
+            {editing.supportsQuery && (
+              <div className="flex flex-col gap-1 sm:col-span-2">
+                <Label htmlFor="issue-query">{t("settings.issues.query")}</Label>
+                <Input
+                  id="issue-query"
+                  value={draft.query}
+                  maxLength={QUERY_MAX_LENGTH}
+                  placeholder={t("settings.issues.queryPlaceholder")}
+                  onChange={(e) => setDraft({ ...draft, query: e.target.value })}
+                />
+                <p className="text-[11px] text-muted-foreground">{t("settings.issues.queryHelp")}</p>
+              </div>
+            )}
             <div className="flex flex-col gap-1 sm:col-span-2">
               <Label htmlFor="issue-token">{t("settings.issues.token")}</Label>
               <div className="flex gap-1.5">

@@ -322,3 +322,29 @@ test("sync-trigger-during-sync-reruns-with-new-config", async () => {
   expect(backlog(p).map((c) => c.external?.number)).toEqual([2]);
   expect(fake.calls.filter((c) => c.startsWith("list")).length).toBe(2);
 });
+
+test("sync-query-and-labels", async () => {
+  const { p, sync } = setup([{ query: "is:issue", labels: ["bug"] }]);
+  fake.issues.set("o/r", [issue(1, { labels: ["bug"] }), issue(2, { labels: ["feature"] })]);
+  await sync.syncAll(p);
+  expect(backlog(p).map((c) => c.external?.number)).toEqual([1]);
+});
+
+test("sync-stale-plan-query", async () => {
+  const { p, sync } = setup([{ query: "is:issue" }]);
+  fake.issues.set("o/r", [issue(1), issue(2)]);
+  let release = () => {};
+  fake.gate = new Promise<void>((r) => {
+    release = r;
+  });
+  const first = sync.syncSource(p, "src_0");
+  await flush();
+  p.mutate((b) => {
+    const s = b.issueSources?.[0];
+    if (s) s.query = "is:issue label:x";
+  });
+  fake.gate = undefined;
+  release();
+  await first;
+  expect(backlog(p).length).toBe(0);
+});

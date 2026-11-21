@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { IssueSource } from "../src/shared/issues.ts";
 import type { Settings } from "../src/shared/types.ts";
-import { draftFromDetect, draftFromSource, IssueSourcesEditor, saveDraft } from "../src/web/IssueSourcesEditor.tsx";
+import { draftFromDetect, draftFromSource, draftToInput, IssueSourcesEditor, saveDraft, toInput } from "../src/web/IssueSourcesEditor.tsx";
 import { SettingsContent } from "../src/web/SettingsModal.tsx";
 
 const src: IssueSource = {
@@ -116,4 +116,13 @@ test("ui-sources-editor: saving with an empty token field sends no token", async
   expect(sent[0]).toBe("token github https://api.github.com t0k");
   expect(sent[1]).toContain('"repo":"x/y"');
   expect(sent[1]).toContain('"id":"src_a"');
+});
+
+test("ui-query-field", () => {
+  const q = { ...src, query: "is:issue assignee:@me" };
+  expect(draftToInput(draftFromSource(q)).query).toBe("is:issue assignee:@me");
+  expect(toInput(q).query).toBe("is:issue assignee:@me");
+  expect(draftToInput({ ...draftFromSource(q), provider: "gitea", baseUrl: "https://g.example.com" })).not.toHaveProperty("query");
+  const html = renderToStaticMarkup(<IssueSourcesEditor project="/p" sources={[q]} status={{}} canSync />);
+  expect(html).toContain("issue-source-query");
 });

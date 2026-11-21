@@ -157,3 +157,23 @@ test("api-agents-imports-on-open-and-sync-now", async () => {
   expect(r.board.cards[1]?.description).toBe(`Source: https://github.com/o/r/issues/2`);
   expect(r.issueSources?.src_a?.lastSyncAt).toBeString();
 });
+
+test("api-query-validation-and-change", async () => {
+  const seeded = {
+    columns: [],
+    cards: [],
+    issueSources: [{ id: "src_q", provider: "github", baseUrl: base, repo: "o/r", enabled: true, importedIds: ["1"], query: "is:issue" }],
+  };
+  const d = await openProject(idle, seeded);
+  const put = (sources: unknown[]) => idle.call("/api/issue-sources", { method: "PUT", body: { project: d, sources } });
+  expect((await put([{ ...source, query: 5 }])).status).toBe(400);
+  expect((await put([{ ...source, query: "x".repeat(257) }])).status).toBe(400);
+  const kept = (await (await put([{ ...source, id: "src_q", query: "  is:issue label:x  " }])).json()) as ProjectSnapshot;
+  expect(kept.board.issueSources?.[0]?.importedIds).toEqual(["1"]);
+  expect(kept.board.issueSources?.[0]?.query).toBe("is:issue label:x");
+  const gt = (await (
+    await put([{ provider: "gitea", baseUrl: "https://g.example.com", repo: "a/b", query: "x" }])
+  ).json()) as ProjectSnapshot;
+  expect(gt.board.issueSources?.[0]).not.toHaveProperty("query");
+  await put([]);
+});
