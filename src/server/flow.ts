@@ -2,6 +2,7 @@
 // Fast forward moves every ready Backlog card out at once; the orchestrator gates automatic runs on pause.
 
 import { DEFAULT_FLOW, type FlowState, fastForwardCandidates, fastForwardSkipIds, fastForwardTarget } from "../shared/flow.ts";
+import type { Board } from "../shared/types.ts";
 import { HttpError } from "./guard.ts";
 import type { Project } from "./store.ts";
 
@@ -48,7 +49,31 @@ export class FlowController {
     if (prev.fastForward === next.fastForward && prev.paused === next.paused) return;
     this.states.set(p.path, next);
     this.deps.onState(p);
+    if (!prev.fastForward && next.fastForward) this.retryCancelled(p);
     this.reconcile(p);
+  }
+
+  /** Turning fast forward on requeues every card whose last run in its own skill column was cancelled (like Retry). */
+  private retryCancelled(p: Project) {
+    const cancelled = (board: Board) =>
+      board.cards.filter((c) => {
+        const col = board.columns.find((x) => x.id === c.columnId);
+        return col?.type === "skill" && !!col.skill && c.lastRun?.status === "cancelled" && c.lastRun.columnId === c.columnId;
+      });
+    if (cancelled(p.board).length === 0) return;
+    try {
+      p.mutate((board) => {
+        for (const card of cancelled(board)) {
+          card.enteredColumnAt = new Date().toISOString();
+          delete card.lastRun;
+          delete card.pendingAnswer;
+          p.addHistory(card, "edited", "Fast forward: retry of cancelled run");
+          p.addQueued(card, board);
+        }
+      });
+    } catch (e) {
+      console.error(`Could not retry the cancelled runs of ${p.path}: ${e instanceof Error ? e.message : String(e)}`);
+    }
   }
 
   /** Coalesced like Orchestrator.scheduleTick: one reconcile per project per microtask, never inside an emit. */

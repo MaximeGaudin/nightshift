@@ -109,7 +109,7 @@ export const board: Record<keyof typeof enboard, string> = {
   "board.quota.duration.dh": "{d} j {h} h",
   "board.app.queued": "{count} en attente",
   "board.flow.fastForwardOn": "Avance rapide : active (cliquer pour couper)",
-  "board.flow.fastForwardOff": "Avance rapide : inactive (cliquer pour sortir toutes les cartes prêtes du Backlog)",
+  "board.flow.fastForwardOff": "Avance rapide : inactive (cliquer pour sortir toutes les cartes prêtes du Backlog et relancer les runs annulés)",
   "board.flow.playing": "Lecture : cliquer pour mettre en pause",
   "board.flow.paused_one": "En pause : {count} carte en attente (cliquer pour reprendre)",
   "board.flow.paused_other": "En pause : {count} cartes en attente (cliquer pour reprendre)",
