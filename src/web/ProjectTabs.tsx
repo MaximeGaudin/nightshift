@@ -10,6 +10,7 @@ export function ProjectTabs({
   state,
   active,
   leading,
+  trailing,
   onSelect,
   onClose,
   onAdd,
@@ -18,6 +19,8 @@ export function ProjectTabs({
   active: string | null;
   /** Shown before the tabs (the app logo). */
   leading?: ReactNode;
+  /** Shown after the tabs, pushed to the right (the counters and actions of the open board). */
+  trailing?: ReactNode;
   onSelect: (path: string) => void;
   onClose: (path: string) => void;
   /** Opens the project picker; absent when the picker is already on screen. */
@@ -25,7 +28,7 @@ export function ProjectTabs({
 }) {
   const { t } = useT();
   return (
-    <div className="project-tabs flex h-10 shrink-0 items-center gap-1 px-2.5">
+    <div className="project-tabs flex min-h-11 shrink-0 items-center gap-1 px-2.5">
       {leading}
       <div role="tablist" aria-label={t("board.tabs.label")} className="flex min-w-0 items-center gap-1 overflow-x-auto">
         {state.tabs.map((path) => {
@@ -40,7 +43,9 @@ export function ProjectTabs({
               key={path}
               className={cn(
                 "project-tab group/tab flex h-7 max-w-56 min-w-0 shrink-0 items-center rounded-md border border-transparent pr-1 transition-colors duration-150",
-                selected ? "border-border bg-panel text-foreground" : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+                selected
+                  ? "is-active border-border bg-panel text-foreground"
+                  : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
               )}
             >
               <button
@@ -96,6 +101,7 @@ export function ProjectTabs({
           <Plus size={14} strokeWidth={1.75} aria-hidden="true" focusable="false" />
         </IconButton>
       )}
+      {trailing && <div className="project-tabs-trailing ml-auto flex shrink-0 items-center gap-3 pl-3">{trailing}</div>}
     </div>
   );
 }
