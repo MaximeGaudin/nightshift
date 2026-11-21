@@ -7,7 +7,7 @@ description: Merges a Nightshift implementation worktree back into the branch th
 
 The worktree and the branch come from `nightshift-implement`: branch `nightshift/<card-id>`, path on the `Worktree` line under `## Result`. The target is the branch the card started from: the `Base` line under `## Result`, written by `nightshift-implement` (step 3), for example `WIP` or `main`. This skill merges the card branch into the target, pushes the target to its upstream, then removes the worktree. Push only the target, never a card branch, and never force. Do not implement.
 
-A card implemented with no worktree (the project's worktree policy was `forbidden`, or `auto` chose the shared checkout) has `Worktree: none` under `## Result`. Its commits are already on the base branch, so there is nothing to merge: this skill only pushes the base. Decide from `## Result`, not from the current policy, since the policy may have changed after the card was implemented.
+A card with `Worktree: none` under `## Result` has no branch to merge: read references/no-worktree.md and follow it instead of the branch steps.
 
 ## Fast path
 
@@ -37,11 +37,7 @@ The lock is released and no merge is in progress. Start from step 1 and take the
 
 1. Read the card. Branch is `nightshift/<card-id>`. Worktree path is the `Worktree` line under `## Result`. If that line is missing, find the path with `git worktree list`.
    - If the prompt has no card: set `move` to `stay`, ask one question for the card id, and stop.
-   - When `## Result` has `Worktree: none` (no branch, no worktree): take the lock (step 2), stop the test environment (step 3), then, instead of the next bullet and steps 4 to 9:
-     1. The base is the `Base` line under `## Result` (a retried run keeps the `Into:` of an earlier `## Merge`). Without a usable branch name, ask once.
-     2. Each sha of the `Commits` line under `## Result` must satisfy `git merge-base --is-ancestor <sha> <base>`. A missing one: set `move` to `stay`, write which under `## Merge`, and stop. Do not cherry-pick.
-     3. Push the base as in step 8, never `--force`. On a rejection: fetch, fast-forward the base to the remote when the checkout is clean, and push once more; then step 8's second-rejection rule.
-     4. Append `## Merge` with `Into: <base>`, `Merge commit: none (committed on <base>)`, the `Test environment` and `Pushed` lines, `Worktree removed: none` and `Card branch deleted: none`. Set `move` to `next` and remove the lock.
+   - When `## Result` has `Worktree: none`: read references/no-worktree.md and follow it instead of the next bullet and steps 4 to 9.
    - If the branch does not exist: when the note has a `## Merge` section naming `Into: <target>` and a merge commit, this run only retries the push (step 8) to that target. Otherwise set `move` to `stay`, leave `questions` empty, write that under `## Merge`, and stop.
 2. Take the lock, the directory `.git/nightshift-merge.lock` with an `owner` file inside. Run these from the board project, where the process starts.
    - Run `mkdir .git/nightshift-merge.lock`. On success, write `<card-id> <UTC ISO time>` to `.git/nightshift-merge.lock/owner` and continue.
