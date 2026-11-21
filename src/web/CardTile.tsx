@@ -1,5 +1,6 @@
 import { ArrowRight, ChevronsRight } from "lucide-react";
 import type { HTMLAttributes, KeyboardEvent, Ref } from "react";
+import { providerLabel } from "../shared/issues.ts";
 import { resolveModel } from "../shared/models.ts";
 import { type Card, type Column, cardRef, type LiveStatus, type RunProgress as RunProgressData, type Settings } from "../shared/types.ts";
 import { CardThumbnail } from "./CardThumbnail.tsx";
@@ -7,7 +8,7 @@ import { CardTimers } from "./CardTimers.tsx";
 import { IconButton } from "./components/icon-button.tsx";
 import { Badge } from "./components/ui/badge.tsx";
 import { useT } from "./i18n/index.ts";
-import { StatusIcon } from "./icons.tsx";
+import { ProviderIcon, StatusIcon } from "./icons.tsx";
 import { cn } from "./lib/utils.ts";
 import { toPlainText } from "./markdown.tsx";
 import { RunProgress } from "./RunProgress.tsx";
@@ -35,6 +36,7 @@ export function CardTile({
   card,
   live,
   progress,
+  proxyWaiting,
   dragging,
   dndProps,
   tileRef,
@@ -52,6 +54,8 @@ export function CardTile({
   card: Card;
   live?: LiveStatus;
   progress?: RunProgressData;
+  /** Its run waits for the teamclaude proxy: shown instead of the progress. */
+  proxyWaiting?: boolean;
   /** The tile is the one being dragged (its slot is dimmed while the overlay follows the pointer). */
   dragging?: boolean;
   /** Attributes and listeners of the drag and drop wrapper; the tile itself stays free of dnd-kit. */
@@ -115,6 +119,14 @@ export function CardTile({
       <CardThumbnail project={project} card={card} />
       <div className="card-ref mb-1 flex min-h-5 items-center gap-1 pr-6 text-[11px] text-muted-foreground tabular-nums">
         <span>{cardRef(card)}</span>
+        {card.external && (
+          <span
+            className="card-source inline-flex items-center"
+            title={`${providerLabel(card.external.provider)} ${card.external.repo}#${card.external.number}`}
+          >
+            <ProviderIcon provider={card.external.provider} size={11} />
+          </span>
+        )}
         {override && (
           <Badge
             variant="secondary"
@@ -173,8 +185,10 @@ export function CardTile({
       )}
       {status && (
         <div className={cn("status mt-2 flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-muted-foreground", `st-${status}`)}>
-          <StatusIcon status={status} />
-          <span className={cn("status-label shrink-0", statusColor)}>{label[status]}</span>
+          <span className={cn("status-chip", `st-${status}`)}>
+            <StatusIcon status={status} />
+            <span className={cn("status-label shrink-0", statusColor)}>{label[status]}</span>
+          </span>
           {columns && <CardTimers card={card} columns={columns} column={column} inline />}
           {status === "success" && lr?.summary && (
             <span className="muted min-w-0 truncate font-normal"> · {toPlainText(lr.summary).slice(0, 80)}</span>
@@ -185,7 +199,11 @@ export function CardTile({
         </div>
       )}
       {columns && !status && <CardTimers card={card} columns={columns} column={column} />}
-      <RunProgress progress={progress} live={live} />
+      {proxyWaiting ? (
+        <div className="run-progress teamclaude-waiting mt-2 text-[11px] text-warn">{t("board.teamclaude.cardWaiting")}</div>
+      ) : (
+        <RunProgress progress={progress} live={live} />
+      )}
     </article>
   );
 }

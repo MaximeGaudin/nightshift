@@ -12,6 +12,7 @@ export type CommandAction =
   | { type: "openProject"; path: string }
   | { type: "fastForward"; on: boolean }
   | { type: "pause"; paused: boolean }
+  | { type: "issuesSync" }
   | { type: "quickRun"; skill: string };
 
 export interface PaletteCommand {
@@ -108,6 +109,19 @@ export function buildCommands({ snap, recentProjects, skills }: CommandContext):
     disabled: flowDisabled,
     action: { type: "pause", paused: !paused },
   });
+
+  if ((snap.board.issueSources ?? []).length > 0) {
+    const label = t("palette.issuesSync");
+    out.push({
+      id: "issuesSync",
+      group: "actions",
+      label,
+      value: label,
+      keywords: words("palette.keywords.issuesSync"),
+      disabled: flowDisabled,
+      action: { type: "issuesSync" },
+    });
+  }
 
   const favorites = new Set(snap.board.favoriteSkills ?? []);
   const favoriteSkills = skills.filter((s) => favorites.has(s.name)).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));

@@ -1,5 +1,7 @@
 import { TriangleAlert } from "lucide-react";
 import { type ReactNode, useState } from "react";
+import { EFFORT_LEVELS } from "../shared/effort.ts";
+import type { IssueSource, IssueSourceStatus } from "../shared/issues.ts";
 import { type LanguageSetting, MAX_PARALLEL, type Settings, WORKTREE_POLICIES, type WorktreePolicy } from "../shared/types.ts";
 import { AgentFeaturesFields, inheritedFeatures } from "./AgentFeaturesFields.tsx";
 import { api } from "./api.ts";
@@ -11,6 +13,7 @@ import { Input } from "./components/ui/input.tsx";
 import { Label } from "./components/ui/label.tsx";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select.tsx";
 import { Switch } from "./components/ui/switch.tsx";
+import { IssueSourcesEditor } from "./IssueSourcesEditor.tsx";
 import { type MessageKey, t, useT } from "./i18n/index.ts";
 import { notifyError } from "./notify.ts";
 
@@ -60,6 +63,13 @@ function Row({ id, label, help, children }: { id?: string; label: string; help?:
   );
 }
 
+/** Live issue sources of the open project, passed from its snapshot. */
+export interface IssuesProps {
+  sources: IssueSource[];
+  status?: Record<string, IssueSourceStatus>;
+  canSync: boolean;
+}
+
 /** Settings form; rendered separately from the dialog so it can be tested without a browser. */
 export function SettingsContent({
   value,
@@ -70,6 +80,7 @@ export function SettingsContent({
   onProjectMaxParallelChange,
   worktreePolicy,
   onWorktreePolicyChange,
+  issues,
 }: {
   value: Settings;
   onChange: (s: Settings) => void;
@@ -81,6 +92,8 @@ export function SettingsContent({
   /** Worktree policy of the open project (draft value); its row shows in the "This project" section when given. */
   worktreePolicy?: WorktreePolicy;
   onWorktreePolicyChange?: (policy: WorktreePolicy) => void;
+  /** Issue sources of the open project, live from its snapshot; the editor saves on its own. */
+  issues?: IssuesProps;
 }) {
   const s = value;
   const { t } = useT();
@@ -137,6 +150,9 @@ export function SettingsContent({
                 </SelectContent>
               </Select>
             </Row>
+          )}
+          {issues && (
+            <IssueSourcesEditor project={currentProject} sources={issues.sources} status={issues.status} canSync={issues.canSync} />
           )}
         </Section>
       )}
@@ -199,6 +215,22 @@ export function SettingsContent({
             onChange={(next) => onChange({ ...s, agentFeatures: next ?? {} })}
           />
         </Row>
+        <Row id="set-effort" label={t("settings.effort.label")} help={t("settings.effort.help")}>
+          <select
+            id="set-effort"
+            className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+            value={s.effort}
+            onChange={(e) => onChange({ ...s, effort: e.target.value as Settings["effort"] })}
+          >
+            <option value="">{t("settings.effort.economic")}</option>
+            <option value="inherit">{t("settings.effort.inherit")}</option>
+            {EFFORT_LEVELS.map((l) => (
+              <option key={l} value={l}>
+                {l}
+              </option>
+            ))}
+          </select>
+        </Row>
         <Row id="set-claude-path" label={t("settings.claudePath.label")}>
           <Input id="set-claude-path" value={s.claudePath} onChange={(e) => onChange({ ...s, claudePath: e.target.value })} />
         </Row>
@@ -208,6 +240,17 @@ export function SettingsContent({
             value={s.extraArgs}
             placeholder={t("settings.extraArgs.placeholder")}
             onChange={(e) => onChange({ ...s, extraArgs: e.target.value })}
+          />
+        </Row>
+        <Row id="set-teamclaude" label={t("settings.teamclaude.label")} help={t("settings.teamclaude.help")}>
+          <Switch id="set-teamclaude" checked={s.teamclaudeEnabled} onCheckedChange={(v) => onChange({ ...s, teamclaudeEnabled: v })} />
+        </Row>
+        <Row id="set-teamclaude-url" label={t("settings.teamclaudeUrl.label")} help={t("settings.teamclaudeUrl.help")}>
+          <Input
+            id="set-teamclaude-url"
+            value={s.teamclaudeUrl}
+            placeholder="http://localhost:3456"
+            onChange={(e) => onChange({ ...s, teamclaudeUrl: e.target.value })}
           />
         </Row>
       </Section>
@@ -245,11 +288,14 @@ const EDITABLE = [
   "claudePath",
   "permissionMode",
   "model",
+  "effort",
   "extraArgs",
   "soundNotifications",
   "language",
   "carryMaxTokens",
   "carryMaxAgeMinutes",
+  "teamclaudeEnabled",
+  "teamclaudeUrl",
 ] as const;
 
 /** True when the form differs from the saved settings on any editable field, or the project cap changed. */
@@ -294,6 +340,7 @@ export function SettingsModal({
   onOpenProject,
   projectMaxParallel,
   worktreePolicy,
+  issues,
 }: {
   settings: Settings;
   onClose: () => void;
@@ -304,6 +351,7 @@ export function SettingsModal({
   projectMaxParallel?: number;
   /** Saved worktree policy of the open project. */
   worktreePolicy?: WorktreePolicy;
+  issues?: IssuesProps;
 }) {
   const { t } = useT();
   const [s, setS] = useState(settings);
@@ -349,6 +397,7 @@ export function SettingsModal({
         onProjectMaxParallelChange={setCap}
         worktreePolicy={policy}
         onWorktreePolicyChange={setPolicy}
+        issues={issues}
         onOpenProject={
           onOpenProject &&
           ((path) => {

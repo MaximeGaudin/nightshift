@@ -134,7 +134,8 @@ test("start log line says default when no model applies", async () => {
   const { id } = await post("/api/cards", { project: dir, columnId: enrich.id, title: "ask" });
   await waitFor(async () => (await get()).find((c) => c.id === id)?.lastRun?.status === "question");
   const start = (await logOf(id)).find((l) => l.text.startsWith("Starting"));
-  expect(start?.text).toContain("model: default, features:");
+  expect(start?.text).toContain("model: default, effort:");
+  expect(start?.text).toContain(", features:");
 });
 
 const SECTION_NOTE =

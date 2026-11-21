@@ -3,6 +3,7 @@ import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalList
 import { CSS } from "@dnd-kit/utilities";
 import { ChevronDown, GripVertical, Lock, Plus, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { EFFORT_LEVELS, type EffortLevel, economicEffort } from "../shared/effort.ts";
 import { MODEL_ALIASES } from "../shared/models.ts";
 import {
   type Column,
@@ -217,6 +218,23 @@ function SortableColumnRow({ col, skills, skillsLoading, cardCount, reducedMotio
                   onChange={(e) => onPatch({ model: e.target.value })}
                 />
                 <p className="text-xs text-muted-foreground">{t("columns.modelHint")}</p>
+                <div className="column-effort grid gap-1.5">
+                  <Label htmlFor={`effort-${col.key}`}>{t("columns.effort")}</Label>
+                  <select
+                    id={`effort-${col.key}`}
+                    className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                    value={col.effort ?? ""}
+                    onChange={(e) => onPatch({ effort: e.target.value ? (e.target.value as EffortLevel) : undefined })}
+                  >
+                    <option value="">{t("columns.effortInherit")}</option>
+                    {EFFORT_LEVELS.map((l) => (
+                      <option key={l} value={l}>
+                        {l}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-muted-foreground">{t("columns.effortHint", { level: economicEffort(col.skill) })}</p>
+                </div>
                 <label className="lock-model flex items-center gap-2 text-xs" title={t("columns.lockModelHint")}>
                   <input type="checkbox" checked={col.lockModel === true} onChange={(e) => onPatch(lockModelPatch(e.target.checked))} />
                   {t("columns.lockModel")}
