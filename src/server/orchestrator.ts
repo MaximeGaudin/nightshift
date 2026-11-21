@@ -29,7 +29,7 @@ import { HttpError } from "./guard.ts";
 import { parseProgressMarker, progressFromTodos } from "./progress.ts";
 import { buildQuickRunPrompt, parseQuickOutput, QUICK_INSTRUCTION_MAX, QUICK_RESULT_SCHEMA } from "./quickrun.ts";
 import { persistScreenshots } from "./screenshots.ts";
-import { applySections, parseSections } from "./sections.ts";
+import { applySections, diffSections, parseSections } from "./sections.ts";
 import { contextTokensOf, decideCarry } from "./sessionCarry.ts";
 import { getSettings, legacyMaxParallel, NIGHTSHIFT_HOME, onSettingsChange, rememberProject } from "./settings.ts";
 import { findSkill } from "./skills.ts";
@@ -222,12 +222,40 @@ function formatColumns(board: Board): string {
     .join("\n");
 }
 
+/** Said instead of the description when a resumed session already saw it as it is. */
+export const DESCRIPTION_UNCHANGED = "The card description has not changed since your last run in this session.";
+/** First line of the changes block sent instead of the description when a resumed session saw an older version. */
+export const DESCRIPTION_CHANGED =
+  "The card description changed since your last run in this session. Only the changed parts are below; every other section is unchanged.";
+
+/**
+ * The card description in a prompt. `seen` is the description as the resumed session last saw it (absent for a new
+ * session): then only what changed since is sent, unless the diff cannot be trusted (duplicate headings) or is no shorter.
+ */
+export function descriptionBlock(description: string, seen?: string): string {
+  const full = `<description>\n${description}\n</description>`;
+  if (seen === undefined) return full;
+  const diff = diffSections(seen, description);
+  if (!diff) return full;
+  if (diff.unchanged) return `<description unchanged="true">\n${DESCRIPTION_UNCHANGED}\n</description>`;
+  const parts = [
+    DESCRIPTION_CHANGED,
+    ...(diff.preamble !== undefined ? [`Text before the first section:\n${diff.preamble}`] : []),
+    ...diff.changed,
+    ...(diff.deleted.length > 0 ? [`Deleted sections: ${diff.deleted.join(", ")}`] : []),
+  ];
+  const changes = parts.join("\n\n");
+  if (changes.length > description.length) return full;
+  return `<description-changes>\n${changes}\n</description-changes>`;
+}
+
 export function buildPrompt(
   board: Board,
   card: Card,
   column: Column,
   skillPath: string | undefined,
   live: Record<string, LiveStatus> = {},
+  seen?: string,
 ): string {
   const next = resolveNextColumn(board.columns, { columnId: column.id, skipColumnIds: card.skipColumnIds });
   const columns = formatColumns(board);
@@ -238,9 +266,7 @@ Invoke the skill with the Skill tool (skill name: "${column.skill}")${skillPath 
 ${column.instructions ? `\nAdditional instructions for this column:\n${column.instructions}\n` : ""}
 <card id="${card.id}" ref="${cardRef(card)}">
 <title>${card.title}</title>
-<description>
-${card.description}
-</description>
+${descriptionBlock(card.description, seen)}
 </card>
 
 ${buildEnvironment(board, card, live)}
@@ -275,6 +301,7 @@ export function buildFeedbackPrompt(
   skill: string | undefined,
   skillPath: string | undefined,
   live: Record<string, LiveStatus> = {},
+  seen?: string,
 ): string {
   const next = resolveNextColumn(board.columns, { columnId: column.id, skipColumnIds: card.skipColumnIds });
   const skillName = skill ? `the skill "${skill}"` : "the skill you applied earlier in this session";
@@ -289,9 +316,7 @@ Address this feedback on the card below. Follow ${skillName}${skill && skillPath
 
 <card id="${card.id}" ref="${cardRef(card)}">
 <title>${card.title}</title>
-<description>
-${card.description}
-</description>
+${descriptionBlock(card.description, seen)}
 </card>
 
 ${buildEnvironment(board, card, live)}
