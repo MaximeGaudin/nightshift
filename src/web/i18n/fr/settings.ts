@@ -99,6 +99,11 @@ export const settings: Record<keyof typeof enSettings, string> = {
   "settings.issues.syncAll": "Synchroniser",
   "settings.issues.sync": "Synchroniser",
   "settings.issues.syncing": "Synchronisation…",
+  "settings.issues.resync": "Resynchroniser",
+  "settings.issues.resyncConfirm":
+    "Resynchroniser {repo} ? Les cartes du Backlog de cette source qui ne correspondent plus à ses filtres seront supprimées.",
+  "settings.issues.resyncAfterSave":
+    "Filtres modifiés. Resynchroniser {repo} maintenant ? Les cartes du Backlog qui ne correspondent plus seront supprimées.",
   "settings.issues.edit": "Modifier",
   "settings.issues.remove": "Supprimer",
   "settings.issues.removeConfirm": "Supprimer la source de tickets {repo} ? Ses cartes restent sur le tableau.",
