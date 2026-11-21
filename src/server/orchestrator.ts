@@ -43,6 +43,7 @@ import { fallbackBlock, tryFastMerge } from "./fastMerge.ts";
 import { FlowController } from "./flow.ts";
 import { HttpError } from "./guard.ts";
 import { IssueSync } from "./issues/sync.ts";
+import { detectPrMode, prModeLine } from "./prMode.ts";
 import { parseProgressMarker, progressFromTodos } from "./progress.ts";
 import { buildQuickRunPrompt, parseQuickOutput, QUICK_INSTRUCTION_MAX, QUICK_RESULT_SCHEMA } from "./quickrun.ts";
 import { persistScreenshots, removeScreenshots } from "./screenshots.ts";
@@ -57,6 +58,7 @@ import { getUsage, recordRateLimit } from "./usage.ts";
 
 /** Skill whose columns try the deterministic merge before starting the agent. */
 const FAST_MERGE_SKILL = "nightshift-merge";
+const REVIEW_SKILL = "nightshift-review";
 
 /** One block of an assistant message in `claude -p --output-format stream-json` (only what Nightshift reads). */
 interface StreamBlock {
@@ -304,6 +306,7 @@ export function buildPrompt(
   skillPath: string | undefined,
   live: Record<string, LiveStatus> = {},
   seen?: string,
+  prLine?: string,
 ): string {
   const next = resolveNextColumn(board.columns, { columnId: column.id, skipColumnIds: card.skipColumnIds });
   const columns = formatColumns(board);
@@ -317,7 +320,7 @@ ${column.instructions ? `\nAdditional instructions for this column:\n${column.in
 ${descriptionBlock(card.description, seen)}
 </card>
 
-${buildEnvironment(board, card, live)}
+${buildEnvironment(board, card, live, prLine)}
 
 Board columns, in order:
 ${columns}
@@ -351,6 +354,7 @@ export function buildFeedbackPrompt(
   skillPath: string | undefined,
   live: Record<string, LiveStatus> = {},
   seen?: string,
+  prLine?: string,
 ): string {
   const next = resolveNextColumn(board.columns, { columnId: column.id, skipColumnIds: card.skipColumnIds });
   const skillName = skill ? `the skill "${skill}"` : "the skill you applied earlier in this session";
@@ -368,7 +372,7 @@ Address this feedback on the card below. Follow ${skillName}${skill && skillPath
 ${descriptionBlock(card.description, seen)}
 </card>
 
-${buildEnvironment(board, card, live)}
+${buildEnvironment(board, card, live, prLine)}
 
 The card may have moved since your session ran; it is now in column "${column.name}" (id: ${column.id}, ${column.type === "skill" ? `skill: ${column.skill}` : "inert"}).
 ${column.instructions ? `\nAdditional instructions for this column:\n${column.instructions}\n` : ""}
@@ -1174,6 +1178,9 @@ export class Orchestrator {
       });
     }
     const answer = card.pendingAnswer;
+    // Pull request mode: detected only where it matters (review and merge), announced to the agent in <environment>.
+    const prMode = column.skill === REVIEW_SKILL || column.skill === FAST_MERGE_SKILL ? await detectPrMode(p.path, p.board) : undefined;
+    const prLine = prModeLine(prMode);
     // Merge column: try the deterministic merge first; the agent only runs when it stops (fallback).
     let fastMergeNote = "";
     if (!answer && column.skill === FAST_MERGE_SKILL && column.fastMerge !== false) {
@@ -1223,11 +1230,11 @@ export class Orchestrator {
     job.resumedFrom = resumeId;
     job.seenAtLaunch = !answer || answer.kind === "feedback" ? card.description : undefined;
     let prompt = !answer
-      ? buildPrompt(p.board, card, column, skill?.path, this.liveStatuses(p), seen) + fastMergeNote
+      ? buildPrompt(p.board, card, column, skill?.path, this.liveStatuses(p), seen, prLine) + fastMergeNote
       : answer.kind === "resume"
         ? RECOVER_PROMPT
         : answer.kind === "feedback"
-          ? buildFeedbackPrompt(p.board, card, column, job.skill, skill?.path, this.liveStatuses(p), seen)
+          ? buildFeedbackPrompt(p.board, card, column, job.skill, skill?.path, this.liveStatuses(p), seen, prLine)
           : buildAnswerPrompt(card.title, skillRef, answer.text);
     if (carried) prompt = `${CONTINUE_PREFIX}\n\n${prompt}`;
     let costUsd = 0;
@@ -1250,7 +1257,7 @@ export class Orchestrator {
         // A new session has seen nothing: the whole description again.
         job.resumedFrom = undefined;
         job.seenAtLaunch = card.description;
-        prompt = buildPrompt(p.board, card, column, skill?.path, this.liveStatuses(p)) + fastMergeNote;
+        prompt = buildPrompt(p.board, card, column, skill?.path, this.liveStatuses(p), undefined, prLine) + fastMergeNote;
         attempt--;
         continue;
       }
