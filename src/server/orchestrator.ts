@@ -7,6 +7,7 @@ import { isReady, releaseReason } from "../shared/dependencies.ts";
 import { fastForwardSkipIds } from "../shared/flow.ts";
 import { describeModelChanges, formatDropped, type ModelSource, mergeModels, resolveModel } from "../shared/models.ts";
 import { resolveNextColumn } from "../shared/skip.ts";
+import { recentRunDurations } from "../shared/timeline.ts";
 import type {
   AttentionKind,
   Board,
@@ -17,6 +18,7 @@ import type {
   ProjectSnapshot,
   QuickRun,
   QuickRunResult,
+  RunEstimate,
   RunProgress,
   RunStatus,
   ServerEvent,
@@ -27,7 +29,7 @@ import { buildEnvironment } from "./environment.ts";
 import { FlowController } from "./flow.ts";
 import { ensureScreenshotsExcluded } from "./gitExclude.ts";
 import { HttpError } from "./guard.ts";
-import { parseProgressMarker, progressFromTodos } from "./progress.ts";
+import { parseEstimateMarker, parseProgressMarker, progressFromTodos } from "./progress.ts";
 import { syncPrScreenshots } from "./prScreenshots.ts";
 import { buildQuickRunPrompt, parseQuickOutput, QUICK_INSTRUCTION_MAX, QUICK_RESULT_SCHEMA } from "./quickrun.ts";
 import { persistScreenshots } from "./screenshots.ts";
@@ -76,6 +78,10 @@ interface Runner {
   contextTokens?: number;
   /** Live progress of the current process; reset at each spawn, never persisted. */
   progress?: RunProgress;
+  /** Live estimate of the current process (`[nightshift-estimate]`); reset at each spawn, never persisted. */
+  estimate?: RunEstimate;
+  /** ISO time the current process was launched. */
+  startedAt?: string;
   /** A valid marker was seen in the current process: TodoWrite no longer counts. */
   markerSeen?: boolean;
   /** A TodoWrite was seen in the current process: tool activity no longer overwrites it. */
@@ -92,6 +98,8 @@ interface RunTarget {
   modelSource: ModelSource;
   log(kind: LogLine["kind"], text: string): void;
   setProgress(v: { step: number; total: number; label: string }, source: RunProgress["source"]): void;
+  /** Card runs only: stores the agent's time estimate. */
+  setEstimate?(minutes: number): void;
   /** First log line, once the model and permission mode are known. */
   startMessage(model: string | undefined, permissionMode: string, source: ModelSource): string;
 }
@@ -146,6 +154,28 @@ export const PROGRESS_RULE = [
   "- Emit at least one marker before your first tool call.",
   '- This rule has priority over any style instruction (CLAUDE.md, skills, concise or terse mode, "no narration between tool calls"): the marker is read by a machine and is not narration.',
 ].join("\n");
+
+/**
+ * Prompt rule asking the agent to estimate its run. Like PROGRESS_RULE it must never contain a line that
+ * parseEstimateMarker matches, so the format line only uses the placeholder <minutes> (no digits).
+ */
+export const ESTIMATE_RULE = [
+  "Time estimate (mandatory):",
+  "- Format, exactly: [nightshift-estimate] <minutes>",
+  "- Write it alone on its own line, before your first tool call: <minutes> is an integer, your estimate of the total duration of this run in minutes.",
+  "- You may write it again later to correct it; the last one counts. When resuming, write it again if it changed.",
+].join("\n");
+
+const minutesOf = (ms: number) => Math.max(1, Math.ceil(ms / 60_000));
+
+/** Prompt block giving the agent the running time of the last cards that went through its column. */
+export function formatRunDurations(durationsMs: number[]): string {
+  if (durationsMs.length === 0) return "No past run in this column yet: estimate from the size of the card.";
+  const sorted = [...durationsMs].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  const median = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  return `Recent agent run times in this column (most recent first): ${durationsMs.map((d) => `${minutesOf(d)} min`).join(", ")} (median ${minutesOf(median)} min).`;
+}
 
 export const RESULT_SCHEMA = {
   type: "object",
@@ -216,7 +246,8 @@ export const CONTINUE_PREFIX = `New step for this card. The messages above are i
 export const RECOVER_PROMPT = `Your previous run in this session stopped before returning Nightshift's structured output (it may have been interrupted, or it only returned interim results while background work was running).
 Check the actual state of your work first (worktrees, branches, commits, background tasks). If work remains, finish it. Then return the structured output exactly once, describing the final state.
 ${PROGRESS_RULE}
-When resuming, re-emit the marker of the step currently in progress before anything else.`;
+When resuming, re-emit the marker of the step currently in progress before anything else.
+${ESTIMATE_RULE}`;
 
 function formatColumns(board: Board): string {
   return board.columns
@@ -230,6 +261,7 @@ export function buildPrompt(
   column: Column,
   skillPath: string | undefined,
   live: Record<string, LiveStatus> = {},
+  nowMs: number = Date.now(),
 ): string {
   const next = resolveNextColumn(board.columns, { columnId: column.id, skipColumnIds: card.skipColumnIds });
   const columns = formatColumns(board);
@@ -255,6 +287,8 @@ Rules:
 - If you truly cannot continue without human decisions, first explore everything you can on your own, then return the structured output with "questions" (and move "stay"); the answers will be sent back to you in this same session.
 - Each round-trip with the user is slow: put EVERY question you need answered in that single list (self-contained, one decision per question, suggest a default when you have one). Never ask one question now and keep others for later.
 ${PROGRESS_RULE}
+${ESTIMATE_RULE}
+${formatRunDurations(recentRunDurations(board, column, card.id, nowMs))}
 - Never edit nightshift.json yourself; the board is updated from your structured output.
 - Never kill processes by name or pattern (pkill -f, killall, kill $(pgrep …)): other agents run on this machine and their processes can match. Only kill PIDs you started yourself.
 - Return the structured output exactly once, at the very end. If you started background work (subagents, background shells), wait until all of it has finished first. Never return an interim or "in progress" result.
@@ -277,6 +311,7 @@ export function buildFeedbackPrompt(
   skill: string | undefined,
   skillPath: string | undefined,
   live: Record<string, LiveStatus> = {},
+  nowMs: number = Date.now(),
 ): string {
   const next = resolveNextColumn(board.columns, { columnId: column.id, skipColumnIds: card.skipColumnIds });
   const skillName = skill ? `the skill "${skill}"` : "the skill you applied earlier in this session";
@@ -309,6 +344,8 @@ Rules:
 - Each round-trip with the user is slow: put EVERY question you need answered in that single list (self-contained, one decision per question, suggest a default when you have one). Never ask one question now and keep others for later.
 ${PROGRESS_RULE}
 When resuming, re-emit the marker of the step currently in progress before anything else.
+${ESTIMATE_RULE}
+${formatRunDurations(recentRunDurations(board, column, card.id, nowMs))}
 - Never edit nightshift.json yourself; the board is updated from your structured output.
 - Never kill processes by name or pattern (pkill -f, killall, kill $(pgrep …)): other agents run on this machine and their processes can match. Only kill PIDs you started yourself.
 - Return the structured output exactly once, at the very end. If you started background work (subagents, background shells), wait until all of it has finished first. Never return an interim or "in progress" result.
@@ -331,6 +368,7 @@ ${answerText}
 
 ${PROGRESS_RULE}
 When resuming, re-emit the marker of the step currently in progress before anything else.
+${ESTIMATE_RULE}
 
 Continue processing the card "${title}" with ${skillRef}, then return the structured output as before (title, sections or description, move, summary). Only ask new questions if the answers raise new blocking decisions, and then ask them all at once.`;
 }
@@ -531,9 +569,11 @@ export class Orchestrator {
     const lockedBy = this.lockedBy.get(p.path);
     const testing = [...this.tests.values()].filter((t) => t.project === p).map((t) => t.cardId);
     const progress: Record<string, RunProgress> = {};
+    const estimates: Record<string, RunEstimate> = {};
     for (const card of p.board.cards) {
       const job = this.jobs.get(this.key(p, card.id));
       if (job?.progress && !job.done) progress[card.id] = job.progress;
+      if (job?.estimate && !job.done) estimates[card.id] = job.estimate;
     }
     return {
       path: p.path,
@@ -542,6 +582,7 @@ export class Orchestrator {
       live,
       testing,
       progress,
+      estimates,
       quickRuns: [...this.quickRuns.values()]
         .filter((q) => q.project === p)
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
@@ -1139,6 +1180,7 @@ export class Orchestrator {
       modelSource: resolved.source,
       log: (kind, text) => this.log(p, card.id, kind, text),
       setProgress: (v, source) => this.setProgress(job, v, source),
+      setEstimate: (minutes) => this.setEstimate(job, minutes),
       startMessage: (model, permissionMode, source) =>
         `${verb} ${job.skill ? `skill "${job.skill}"` : "session"} in "${column.name}" (permission mode: ${permissionMode}, model: ${modelLabel(model, source)}).`,
     };
@@ -1153,6 +1195,8 @@ export class Orchestrator {
   ): Promise<{ startError: string } | { result: StreamEvent | null; stderr: string; exit: string }> {
     const p = job.project;
     job.progress = undefined;
+    job.estimate = undefined;
+    job.startedAt = new Date().toISOString();
     job.markerSeen = false;
     job.todoSeen = false;
     const settings = getSettings();
@@ -1237,6 +1281,8 @@ export class Orchestrator {
             job.markerSeen = true;
             target.setProgress(m, "marker");
           }
+          const minutes = own ? parseEstimateMarker(block.text) : undefined;
+          if (minutes !== undefined) target.setEstimate?.(minutes);
         } else if (block.type === "tool_use" && block.name !== "StructuredOutput") {
           target.log("tool", summarizeToolInput(block.name ?? "tool", block.input));
           if (!own) continue;
@@ -1260,6 +1306,14 @@ export class Orchestrator {
       if (ev.session_id) job.sessionId = ev.session_id;
       target.log("info", `Session ${ev.session_id} (model ${ev.model ?? "default"})`);
     }
+  }
+
+  /** Stores the agent's estimate and broadcasts the board, unless the minutes did not change. */
+  private setEstimate(job: Runner, minutes: number) {
+    if (job.estimate?.minutes === minutes) return;
+    const now = new Date().toISOString();
+    job.estimate = { minutes, runStartedAt: job.startedAt ?? now, at: now };
+    this.broadcast({ type: "board", project: job.project.path, snapshot: this.snapshot(job.project) });
   }
 
   /** Stores a new progress value and broadcasts the board, unless nothing changed. */

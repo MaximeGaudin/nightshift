@@ -122,6 +122,15 @@ if (quick && instruction.includes("FAKE_QUICK_PROGRESS")) {
   emit(todos("in_progress", "pending"));
   emit({ type: "assistant", message: { content: [{ type: "text", text: "[nightshift-progress] 2/3 Deuxième" }] } });
   emit(todos("completed", "in_progress")); // ignored: the marker has priority
+} else if (title === "estimate") {
+  // An invalid line is ignored, a later valid one replaces the first, a subagent's is ignored.
+  emit({ type: "assistant", message: { content: [{ type: "text", text: "[nightshift-estimate] 8" }] } });
+  emit({ type: "assistant", message: { content: [{ type: "text", text: "[nightshift-estimate] 2.5" }] } });
+  emit({
+    type: "assistant",
+    parent_tool_use_id: "toolu_1",
+    message: { content: [{ type: "text", text: "[nightshift-estimate] 99" }] },
+  });
 } else if (title === "progress-subagent") {
   emit({ type: "assistant", message: { content: [{ type: "text", text: "[nightshift-progress] 1/2 Principal" }] } });
   // Subagent events (parent_tool_use_id set) must not drive the card's progress.

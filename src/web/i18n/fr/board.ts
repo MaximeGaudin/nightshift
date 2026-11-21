@@ -119,6 +119,8 @@ export const board: Record<keyof typeof enboard, string> = {
   "board.tabs.waiting": "Fiches en attente dans une colonne inerte",
   "board.card.timerTotalTitle": "Temps total depuis la sortie du Backlog",
   "board.card.timerStepTitle": "Temps dans {column}",
+  "board.card.timerEstimateTitle": "Temps restant estimé par l'agent pour {column}",
+  "board.card.timerOverrun": "dépassé",
   "time.unit.second": "s",
   "time.unit.minute": "min",
   "time.unit.hour": "h",

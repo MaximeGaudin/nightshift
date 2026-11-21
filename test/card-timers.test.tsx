@@ -98,3 +98,38 @@ test("tile puts the chronos in parentheses on the status line when it has a stat
 test("ticker is idle without subscribers", () => {
   expect(nowSubscribers()).toBe(0);
 });
+
+// Estimate: 10 min total, the run started `ago` seconds before `now`.
+function estimateTile(ago: number, extra: Record<string, unknown> = {}) {
+  const now = Date.now();
+  const estimate = { minutes: 10, runStartedAt: new Date(now - ago * 1000).toISOString(), at: new Date(now).toISOString() };
+  const c = { ...card(plan, 0), enteredColumnAt: new Date(now - ago * 1000).toISOString() } as Card;
+  return renderToStaticMarkup(
+    <CardTile project="/p" onOpen={() => {}} card={c} column={plan} columns={columns} live="running" estimate={estimate} {...extra} />,
+  );
+}
+
+test("cardTimersUi: no slash between the timers, one icon per value, remaining estimate", () => {
+  const html = estimateTile(240);
+  const timers = html.slice(html.indexOf("card-timers"));
+  expect(timers).not.toContain(">/<");
+  expect(timers.match(/<svg/g)?.length).toBe(3);
+  expect(timers).toContain("card-timer-estimate");
+  expect(timers).toMatch(/~(5|6) min/);
+  expect(timers).toContain("Temps restant estimé par l&#x27;agent pour Plan");
+  expect(timers).toContain("Temps total depuis la sortie du Backlog");
+  expect(timers).toContain("Temps dans Plan");
+});
+
+test("cardTimersUi: over the estimate shows 'dépassé'", () => {
+  const html = estimateTile(12 * 60);
+  expect(html).toContain("dépassé");
+  expect(html).not.toContain("~");
+});
+
+test("cardTimersUi: no estimate segment without estimate or outside a running agent", () => {
+  const props = { project: "/p", onOpen: () => {}, card: card(plan, 0), column: plan, columns };
+  expect(renderToStaticMarkup(<CardTile {...props} live="running" />)).not.toContain("card-timer-estimate");
+  expect(estimateTile(60, { live: "queued" })).not.toContain("card-timer-estimate");
+  expect(estimateTile(60, { live: undefined })).not.toContain("card-timer-estimate");
+});

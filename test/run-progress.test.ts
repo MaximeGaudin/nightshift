@@ -28,6 +28,7 @@ if (!CHILD) {
       "run-progress-activity-fallback",
       "run-progress-marker-beats-activity",
       "run-progress-activity-ignores-subagents",
+      "snapshotEstimate",
     ]) {
       expect(out + err).toContain(`(pass) ${name}`);
     }
@@ -153,6 +154,20 @@ if (!CHILD) {
     const s = await getProject(dir);
     expect(stripAt(s.progress[id])).toEqual({ source: "activity", step: 0, total: 0, label: "Main tool" });
     await waitFor(async () => (await getProject(dir)).live[id] === undefined);
+  });
+
+  test("snapshotEstimate: live while running, ignores subagents and invalid values, gone after the run", async () => {
+    const { dir, id } = await setup("estimate");
+    await waitFor(async () => !!(await getProject(dir)).estimates?.[id]);
+    await quiet(300); // the invalid line and the subagent line have been emitted by now
+    const s = await getProject(dir);
+    expect(s.estimates[id].minutes).toBe(8);
+    expect(typeof s.estimates[id].runStartedAt).toBe("string");
+    await waitFor(async () => (await getProject(dir)).live[id] === undefined);
+    expect((await getProject(dir)).estimates[id]).toBeUndefined();
+    const raw = readFileSync(join(dir, "nightshift.json"), "utf8");
+    expect(raw).not.toContain("runStartedAt");
+    expect(raw).not.toContain("nightshift-estimate");
   });
 
   test("prompt-mentions-marker", () => {

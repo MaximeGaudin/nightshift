@@ -1,7 +1,15 @@
 import { ArrowRight, ChevronsRight } from "lucide-react";
 import type { HTMLAttributes, KeyboardEvent, Ref } from "react";
 import { resolveModel } from "../shared/models.ts";
-import { type Card, type Column, cardRef, type LiveStatus, type RunProgress as RunProgressData, type Settings } from "../shared/types.ts";
+import {
+  type Card,
+  type Column,
+  cardRef,
+  type LiveStatus,
+  type RunEstimate,
+  type RunProgress as RunProgressData,
+  type Settings,
+} from "../shared/types.ts";
 import { CardThumbnail } from "./CardThumbnail.tsx";
 import { CardTimers } from "./CardTimers.tsx";
 import { IconButton } from "./components/icon-button.tsx";
@@ -35,6 +43,7 @@ export function CardTile({
   card,
   live,
   progress,
+  estimate,
   dragging,
   dndProps,
   tileRef,
@@ -52,6 +61,8 @@ export function CardTile({
   card: Card;
   live?: LiveStatus;
   progress?: RunProgressData;
+  /** The agent's estimate of its current run, while it runs. */
+  estimate?: RunEstimate;
   /** The tile is the one being dragged (its slot is dimmed while the overlay follows the pointer). */
   dragging?: boolean;
   /** Attributes and listeners of the drag and drop wrapper; the tile itself stays free of dnd-kit. */
@@ -177,7 +188,7 @@ export function CardTile({
             <StatusIcon status={status} />
             <span className={cn("status-label shrink-0", statusColor)}>{label[status]}</span>
           </span>
-          {columns && <CardTimers card={card} columns={columns} column={column} inline />}
+          {columns && <CardTimers card={card} columns={columns} column={column} inline live={live} estimate={estimate} />}
           {status === "success" && lr?.summary && (
             <span className="muted min-w-0 truncate font-normal"> · {toPlainText(lr.summary).slice(0, 80)}</span>
           )}
@@ -186,7 +197,7 @@ export function CardTile({
           )}
         </div>
       )}
-      {columns && !status && <CardTimers card={card} columns={columns} column={column} />}
+      {columns && !status && <CardTimers card={card} columns={columns} column={column} live={live} estimate={estimate} />}
       <RunProgress progress={progress} live={live} />
     </article>
   );

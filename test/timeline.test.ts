@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { cardTimeSlices, formatDuration, formatPercent, replayHistory } from "../src/shared/timeline.ts";
-import { type Card, type Column, doneColumn, type HistoryEntry } from "../src/shared/types.ts";
+import { cardTimeSlices, formatDuration, formatPercent, recentRunDurations, replayHistory } from "../src/shared/timeline.ts";
+import { type Board, type Card, type Column, doneColumn, type HistoryEntry } from "../src/shared/types.ts";
 
 const T0 = Date.parse("2026-01-01T00:00:00.000Z");
 const at = (s: number) => new Date(T0 + s * 1000).toISOString();
@@ -222,4 +222,28 @@ test("formatPercent", () => {
   expect(formatPercent(1, 3)).toBe("33 %");
   expect(formatPercent(1, 1000)).toBe("< 1 %");
   expect(formatPercent(0, 10)).toBe("0 %");
+});
+
+// A card that went through Grill: agent ran `runS` seconds, then it moved on to Plan; `base` is when it entered Grill.
+function pastCard(id: string, base: number, runS: number): Card {
+  const h = [created(base, grill), queued(base, grill), started(base + 1, grill), moved(base + 1 + runS, grill, plan)];
+  return card(h, { id, columnId: plan.id, updatedAt: at(base + 1 + runS) });
+}
+const boardOf = (cards: Card[]): Board => ({ version: 1, name: "b", columns, cards, nextCardNumber: 99 });
+
+test("recentRunDurations keeps cards that left the column, newest first", () => {
+  const past = Array.from({ length: 12 }, (_, i) => pastCard(`p${i}`, i * 1000, 60 * (i + 1)));
+  const inGrill = card([created(0, grill), queued(0, grill), started(1, grill)], { id: "still", columnId: grill.id });
+  const current = card([created(0, grill), queued(0, grill), started(1, grill)], { id: "cur", columnId: grill.id });
+  const out = recentRunDurations(boardOf([...past, inGrill, current]), grill, "cur", T0 + s(100_000), 10);
+  expect(out).toHaveLength(10);
+  // Most recent visit first: p11 (720 s) down to p2 (180 s).
+  expect(out[0]).toBe(s(720));
+  expect(out[9]).toBe(s(180));
+});
+
+test("recentRunDurations is empty without a card that left the column", () => {
+  const inGrill = card([created(0, grill), queued(0, grill), started(1, grill)], { id: "still", columnId: grill.id });
+  expect(recentRunDurations(boardOf([inGrill]), grill, "cur", T0 + s(1000))).toEqual([]);
+  expect(recentRunDurations(boardOf([]), grill, "cur", T0 + s(1000))).toEqual([]);
 });
