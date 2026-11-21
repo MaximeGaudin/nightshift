@@ -244,7 +244,9 @@ export function descriptionBlock(description: string, seen?: string): string {
   if (diff.unchanged) return `<description unchanged="true">\n${DESCRIPTION_UNCHANGED}\n</description>`;
   const parts = [
     DESCRIPTION_CHANGED,
-    ...(diff.preamble !== undefined ? [`Text before the first section:\n${diff.preamble}`] : []),
+    ...(diff.preamble !== undefined
+      ? [diff.preamble ? `Text before the first section:\n${diff.preamble}` : "Text before the first section: removed."]
+      : []),
     ...diff.changed,
     ...(diff.deleted.length > 0 ? [`Deleted sections: ${diff.deleted.join(", ")}`] : []),
   ];

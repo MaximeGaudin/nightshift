@@ -49,6 +49,9 @@ test("prompt-one-section-changed: only the changed section is sent, with the del
   const preamble = desc.replace("Intro line", "Intro edited");
   for (const p of prompts(preamble, desc))
     expect(p).toContain(`${DESCRIPTION_CHANGED}\n\nText before the first section:\nIntro edited\n</description-changes>`);
+  const noPreamble = desc.replace("Intro line\n\n", "");
+  for (const p of prompts(noPreamble, desc))
+    expect(p).toContain(`${DESCRIPTION_CHANGED}\n\nText before the first section: removed.\n</description-changes>`);
 });
 
 test("prompt-fallback-duplicate: duplicate headings or a diff no shorter than the note send the whole description", () => {
