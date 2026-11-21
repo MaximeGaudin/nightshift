@@ -12,9 +12,11 @@ import {
   isSystemColumn,
   MAX_PARALLEL,
   type ProjectSnapshot,
+  type Settings,
   type SkillInfo,
 } from "../shared/types.ts";
-import { api } from "./api.ts";
+import { AgentFeaturesFields, inheritedFeatures } from "./AgentFeaturesFields.tsx";
+import { api, useSettings } from "./api.ts";
 import { type KeyedColumn, reorderColumns } from "./columnOrder.ts";
 import { AppDialog } from "./components/app-dialog.tsx";
 import { IconButton } from "./components/icon-button.tsx";
@@ -89,11 +91,13 @@ type RowProps = {
   skillsLoading: boolean;
   cardCount: number;
   reducedMotion: boolean;
+  /** Global settings, for the value an agent feature inherits. Null while loading. */
+  settings: Settings | null;
   onPatch: (p: Partial<Column>) => void;
   onRemove: () => void;
 };
 
-function SortableColumnRow({ col, skills, skillsLoading, cardCount, reducedMotion, onPatch, onRemove }: RowProps) {
+function SortableColumnRow({ col, skills, skillsLoading, cardCount, reducedMotion, settings, onPatch, onRemove }: RowProps) {
   const { t } = useT();
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: col.key });
   const [open, setOpen] = useState(false);
@@ -234,6 +238,16 @@ function SortableColumnRow({ col, skills, skillsLoading, cardCount, reducedMotio
                 </div>
               </div>
               <div className="grid gap-1.5 sm:col-span-2">
+                <Label>{t("agentFeatures.title")}</Label>
+                <AgentFeaturesFields
+                  idPrefix={`features-${col.key}`}
+                  value={col.agentFeatures}
+                  inherited={inheritedFeatures({ settings })}
+                  onChange={(next) => onPatch({ agentFeatures: next })}
+                />
+                <p className="text-xs text-muted-foreground">{t("agentFeatures.help")}</p>
+              </div>
+              <div className="grid gap-1.5 sm:col-span-2">
                 <Label htmlFor={`instructions-${col.key}`}>{t("columns.instructions")}</Label>
                 <Textarea
                   id={`instructions-${col.key}`}
@@ -274,6 +288,7 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
   const [skills, setSkills] = useState<SkillInfo[]>([]);
   const [skillsLoading, setSkillsLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const settings = useSettings();
   const reducedMotion = usePrefersReducedMotion();
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -400,6 +415,7 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
                   skillsLoading={skillsLoading}
                   cardCount={count(c.id)}
                   reducedMotion={reducedMotion}
+                  settings={settings}
                   onPatch={(p) => patch(c.key, p)}
                   onRemove={() => setCols((cs) => cs.filter((x) => x.key !== c.key))}
                 />

@@ -53,4 +53,15 @@ export const settings: Record<keyof typeof enSettings, string> = {
   "settings.recent.open": "Ouvrir",
   "settings.footnote": "Réglages globaux, stockés dans ~/.nightshift/settings.json.",
   "settings.discardChanges": "Abandonner les modifications non enregistrées ?",
+  "agentFeatures.title": "Fonctionnalités d'agent",
+  "agentFeatures.help":
+    "Coupé réduit le contexte de départ de chaque agent. Couper les skills utilisateur casse un board dont les skills sont au scope user.",
+  "agentFeatures.mcp": "Serveurs MCP (utilisateur et projet)",
+  "agentFeatures.chrome": "Chrome",
+  "agentFeatures.hooks": "Hooks (utilisateur, plugins et projet)",
+  "agentFeatures.userSettings": "Skills et CLAUDE.md utilisateur",
+  "agentFeatures.on": "Activé",
+  "agentFeatures.off": "Coupé",
+  "agentFeatures.inheritOn": "Hériter (activé)",
+  "agentFeatures.inheritOff": "Hériter (coupé)",
 };
