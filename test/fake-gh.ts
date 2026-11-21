@@ -134,7 +134,9 @@ if (cmd === "pr" && sub === "ready") {
   if (pr.state !== "OPEN") fail(`Pull request ${pr.url} is closed`);
   pr.isDraft = args.includes("--undo");
   save();
-  out(pr.isDraft ? `Pull request o/r#${pr.number} is converted to "draft"` : `Pull request o/r#${pr.number} is marked as "ready for review"`);
+  out(
+    pr.isDraft ? `Pull request o/r#${pr.number} is converted to "draft"` : `Pull request o/r#${pr.number} is marked as "ready for review"`,
+  );
   process.exit(0);
 }
 if (cmd === "pr" && sub === "checks") {

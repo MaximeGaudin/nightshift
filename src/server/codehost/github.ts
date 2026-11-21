@@ -78,7 +78,19 @@ export const github: CodeHost = {
   },
 
   async createPr(cwd, pr) {
-    const args = ["pr", "create", "--base", pr.base, "--head", pr.head, "--title", pr.title, "--body-file", "-", ...(pr.draft ? ["--draft"] : [])];
+    const args = [
+      "pr",
+      "create",
+      "--base",
+      pr.base,
+      "--head",
+      pr.head,
+      "--title",
+      pr.title,
+      "--body-file",
+      "-",
+      ...(pr.draft ? ["--draft"] : []),
+    ];
     const r = await gh(cwd, args, {
       input: pr.body,
     });
