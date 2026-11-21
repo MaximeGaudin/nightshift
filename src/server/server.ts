@@ -21,6 +21,8 @@ import {
   normalizeColumnParallel,
   normalizeProjectParallel,
   type ServerEvent,
+  TEAMCLAUDE_ACTIONS,
+  type TeamclaudeAction,
   WORKTREE_POLICIES,
   type WorktreePolicy,
 } from "../shared/types.ts";
@@ -238,6 +240,17 @@ export function startServer({ port, development, agents = true }: { port: number
 
       "/api/usage": {
         GET: h(() => ({ usage: getUsage() })),
+      },
+
+      "/api/teamclaude/wait": {
+        GET: h(() => ({ wait: orch.teamclaudeWait() })),
+      },
+
+      "/api/teamclaude/decision": {
+        POST: h(async (b) => {
+          if (!TEAMCLAUDE_ACTIONS.includes(b.action as TeamclaudeAction)) throw new Error(`Unknown action: ${String(b.action)}`);
+          return { wait: await orch.teamclaudeDecide(b.action as TeamclaudeAction) };
+        }),
       },
 
       "/api/projects/open": {
@@ -631,6 +644,7 @@ export function startServer({ port, development, agents = true }: { port: number
         sockets.add(ws);
         ws.send(JSON.stringify({ type: "settings", settings: getSettings() } satisfies ServerEvent));
         ws.send(JSON.stringify({ type: "usage", usage: getUsage() } satisfies ServerEvent));
+        ws.send(JSON.stringify({ type: "teamclaude", wait: orch.teamclaudeWait() } satisfies ServerEvent));
       },
       close(ws) {
         sockets.delete(ws);
