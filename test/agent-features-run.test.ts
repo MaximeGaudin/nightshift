@@ -20,7 +20,13 @@ let srv: ReturnType<typeof startServer>;
 let base = "";
 
 beforeAll(() => {
-  updateSettings({ claudePath: join(import.meta.dir, "fake-claude.ts"), model: "", extraArgs: "--foo bar", agentFeatures: {} });
+  updateSettings({
+    claudePath: join(import.meta.dir, "fake-claude.ts"),
+    model: "",
+    extraArgs: "--foo bar",
+    agentFeatures: {},
+    smartMode: false,
+  });
   srv = startServer({ port: 0 });
   base = `http://localhost:${srv.server.port}`;
   mkdirSync(join(userSkills, "enrich"), { recursive: true });
