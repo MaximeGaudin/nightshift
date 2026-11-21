@@ -31,7 +31,7 @@ export function economicEffort(skill?: string): EffortLevel {
 }
 
 function settingsLayer(settings: Pick<Settings, "effort">): Layer<EffortLevel, EffortSource> {
-  const e = settings.effort;
+  const e = typeof settings.effort === "string" ? settings.effort.trim() : "";
   return { source: "settings", value: e === "inherit" ? null : e ? (e as EffortLevel) : undefined };
 }
 

@@ -37,6 +37,9 @@ describe("resolveEffort", () => {
     expect(resolveEffort(col(), s("inherit"))).toEqual({ effort: undefined, source: "settings" });
     expect(resolveEffort(col({ effort: "high" }), s("inherit"))).toEqual({ effort: "high", source: "column" });
   });
+  test("settings value is trimmed before it reaches --effort", () => {
+    expect(resolveEffort(col(), { effort: " high " as "high" })).toEqual({ effort: "high", source: "settings" });
+  });
   test("card entry ignored in a non-skill column", () => {
     const c: Column = { id: "x", name: "x", type: "inert", skill: "nightshift-merge" };
     expect(resolveEffort(c, s(), { efforts: { "nightshift-merge": "max" } }).source).toBe("default");
