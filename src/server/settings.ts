@@ -32,6 +32,8 @@ const globals = globalThis as {
     readOnly?: boolean;
     /** Raw `maxParallel` of the file (the former global cap): kept as is on every write, never edited. */
     legacyMaxParallel?: unknown;
+    /** Issue provider tokens by `tokenKey`: kept in the file, never part of `Settings` (which is sent to clients). */
+    issueTokens?: Record<string, string>;
   };
 };
 if (!globals.__nightshiftSettings) globals.__nightshiftSettings = { current: null, listeners: new Set() };
@@ -71,6 +73,7 @@ export function getSettings(): Settings {
   if (shared.current) return shared.current;
   const loaded: Settings = { ...DEFAULT_SETTINGS, recentProjects: [] };
   shared.legacyMaxParallel = undefined;
+  shared.issueTokens = {};
   let text: string | null = null;
   try {
     text = readFileSync(SETTINGS_FILE, "utf8");
@@ -90,6 +93,7 @@ export function getSettings(): Settings {
     if (raw && typeof raw === "object" && !Array.isArray(raw)) {
       const obj = raw as Record<string, unknown>;
       if ("maxParallel" in obj) shared.legacyMaxParallel = obj.maxParallel;
+      shared.issueTokens = readTokens(obj.issueTokens);
       for (const key of KEYS) {
         if (key in obj && checkField(key, obj[key]) === null) (loaded as unknown as Record<string, unknown>)[key] = obj[key];
       }
@@ -115,15 +119,50 @@ export function updateSettings(patch: Partial<Settings>): Settings {
     if (err) throw new Error(err);
   }
   const next: Settings = { ...getSettings(), ...Object.fromEntries(entries) };
-  if (!shared.readOnly) {
-    mkdirSync(NIGHTSHIFT_HOME, { recursive: true });
-    const legacy = shared.legacyMaxParallel;
-    const file = legacy === undefined ? next : { maxParallel: legacy, ...next };
-    writeFileAtomic(SETTINGS_FILE, `${JSON.stringify(file, null, 2)}\n`);
-  }
+  writeSettingsFile(next);
   shared.current = next;
   for (const l of listeners) l(next);
   return next;
+}
+
+function readTokens(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+  return Object.fromEntries(Object.entries(raw).filter((e): e is [string, string] => typeof e[1] === "string" && e[1] !== ""));
+}
+
+/** Writes the settings file: the legacy cap, the settings, then the issue tokens. Skipped in read-only mode. */
+function writeSettingsFile(settings: Settings) {
+  if (shared.readOnly) return;
+  mkdirSync(NIGHTSHIFT_HOME, { recursive: true });
+  const legacy = shared.legacyMaxParallel;
+  const tokens = shared.issueTokens ?? {};
+  const file = {
+    ...(legacy === undefined ? {} : { maxParallel: legacy }),
+    ...settings,
+    ...(Object.keys(tokens).length > 0 ? { issueTokens: tokens } : {}),
+  };
+  writeFileAtomic(SETTINGS_FILE, `${JSON.stringify(file, null, 2)}\n`);
+}
+
+/** Token saved for a `tokenKey`, or undefined. Never send it to a client. */
+export function getIssueToken(key: string): string | undefined {
+  getSettings();
+  return shared.issueTokens?.[key];
+}
+
+export function hasIssueToken(key: string): boolean {
+  return getIssueToken(key) !== undefined;
+}
+
+/** Saves (or, with an empty token, removes) the token of a `tokenKey`. Keeps every other field of the file. */
+export function setIssueToken(key: string, token: string) {
+  const current = getSettings();
+  const tokens = { ...(shared.issueTokens ?? {}) };
+  const t = token.trim();
+  if (t) tokens[key] = t;
+  else delete tokens[key];
+  shared.issueTokens = tokens;
+  writeSettingsFile(current);
 }
 
 /** Project cap used when a board has no `maxParallel`: the former global setting, else the default. */
