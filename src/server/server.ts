@@ -339,6 +339,7 @@ export function startServer({ port, development, agents = true }: { port: number
                   ...(type === "skill" && c.lockModel === true ? { lockModel: true as const } : {}),
                   ...(type === "skill" && features.value ? { agentFeatures: features.value } : {}),
                   ...(type === "skill" && effort ? { effort: effort as EffortLevel } : {}),
+                  ...(type === "skill" && typeof c.smartMode === "boolean" ? { smartMode: c.smartMode } : {}),
                   ...(type === "skill" && (c.freshSession === true || c.freshSession === "auto") ? { freshSession: c.freshSession } : {}),
                   ...(maxParallel !== undefined ? { maxParallel } : {}),
                   ...(emoji !== undefined ? { emoji } : {}),
