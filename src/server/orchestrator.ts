@@ -18,6 +18,7 @@ import {
 import { fastForwardSkipIds } from "../shared/flow.ts";
 import { describeModelChanges, formatDropped, type ModelSource, mergeModels, resolveModel } from "../shared/models.ts";
 import { resolveNextColumn } from "../shared/skip.ts";
+import { formatSmartChoice, formatSmartCost, type SmartChoice, type SmartEntry, smartEnabled, smartNeeded } from "../shared/smart.ts";
 import type {
   AttentionKind,
   Board,
@@ -50,6 +51,7 @@ import { applySections, diffSections, parseSections } from "./sections.ts";
 import { contextTokensOf, decideCarry } from "./sessionCarry.ts";
 import { getSettings, legacyMaxParallel, NIGHTSHIFT_HOME, onSettingsChange, rememberProject } from "./settings.ts";
 import { findSkill } from "./skills.ts";
+import { buildSmartPrompt, readMcpServerNames, runSmart, smartFingerprint } from "./smart.ts";
 import { isRaw, needsRun, newId, Project, type Raw } from "./store.ts";
 import { applyProxyEnv, ProxyGate, prepareProxyEnv, QUOTA_POLL_MS, TeamclaudeQuotaPoller } from "./teamclaude.ts";
 import { copyTemplateSkills } from "./templates.ts";
@@ -496,8 +498,11 @@ export class Orchestrator {
     onState: (p) => this.broadcast({ type: "board", project: p.path, snapshot: this.snapshot(p) }),
     onResume: () => this.scheduleTick(),
   });
-  /** Cards retried by the user while paused may start anyway: job key -> the enteredColumnAt the retry wrote. */
-  private explicitRetries = new Map<string, string>();
+  /**
+   * Cards retried by the user while paused may start anyway: job key -> the column and the enteredColumnAt the retry
+   * wrote. The column is part of the match because a move in the same millisecond keeps the same timestamp.
+   */
+  private explicitRetries = new Map<string, { columnId: string; enteredColumnAt: string }>();
   private tests = new Map<string, { project: Project; cardId: string; proc: ChildProcess; lines: LogLine[] }>();
   private lastTestLines = new Map<string, LogLine[]>();
 
@@ -670,7 +675,7 @@ export class Orchestrator {
     const key = this.key(p, card.id);
     const retried = this.explicitRetries.get(key);
     if (retried === undefined) return true;
-    if (retried === card.enteredColumnAt) return false;
+    if (retried.columnId === card.columnId && retried.enteredColumnAt === card.enteredColumnAt) return false;
     this.explicitRetries.delete(key);
     return true;
   }
@@ -1072,7 +1077,7 @@ export class Orchestrator {
       if (!card) throw new HttpError(404, "Unknown card");
       card.enteredColumnAt = new Date().toISOString();
       // Explicit action: starts even while the project is paused (set before the change schedules a tick).
-      this.explicitRetries.set(this.key(p, card.id), card.enteredColumnAt);
+      this.explicitRetries.set(this.key(p, card.id), { columnId: card.columnId, enteredColumnAt: card.enteredColumnAt });
       delete card.lastRun;
       delete card.pendingAnswer;
       p.addHistory(card, "edited", "Retry requested by user");
@@ -1260,7 +1265,10 @@ export class Orchestrator {
           ? buildFeedbackPrompt(p.board, card, column, job.skill, skill?.path, this.liveStatuses(p), seen)
           : buildAnswerPrompt(card.title, skillRef, answer.text);
     if (carried) prompt = `${CONTINUE_PREFIX}\n\n${prompt}`;
-    let costUsd = 0;
+    // Smart mode: resolved once per run, before the first spawn. A recovery or a fresh restart below reuses it.
+    const smart = await this.resolveSmart(job, card, column, !!answer);
+    let costUsd = smart.costUsd;
+    if (job.cancelled) return this.finish(job, "cancelled", costUsd ? { costUsd } : {});
 
     // One automatic recovery: an agent that stops without its structured result (interrupted, or it
     // returned only interim results while background work was running) is resumed once to collect it.
@@ -1268,9 +1276,9 @@ export class Orchestrator {
       const verb = attempt > 0 ? "Recovering" : carried ? "Continuing the card's session with" : !answer ? "Starting" : "Resuming";
       job.sessionId = undefined;
       job.contextTokens = undefined;
-      const r = await this.spawnAgent(job, this.cardTarget(job, card, column, verb), prompt, resumeId);
-      if ("startError" in r) return this.finish(job, "error", { error: r.startError });
-      if (job.cancelled) return this.finish(job, "cancelled", {});
+      const r = await this.spawnAgent(job, this.cardTarget(job, card, column, verb, smart.choice), prompt, resumeId);
+      if ("startError" in r) return this.finish(job, "error", { error: r.startError, ...(costUsd ? { costUsd } : {}) });
+      if (job.cancelled) return this.finish(job, "cancelled", costUsd ? { costUsd } : {});
       const result = r.result;
       // The card's session could not be resumed (deleted, or from another machine): start this step fresh, once.
       if (carried && !job.sessionId && (!result || result.is_error)) {
@@ -1320,18 +1328,105 @@ export class Orchestrator {
     }
   }
 
-  private cardTarget(job: Job, card: Card, column: Column, verb: string): RunTarget {
+  /**
+   * The smart choice of this run. A new run calls haiku (or reads the card's cache for this column); a resumed session
+   * (answer, feedback, resume) never calls: it reuses the choice cached for the column its session ran in.
+   * Never fails the run: any failure resolves without smart.
+   */
+  private async resolveSmart(job: Job, card: Card, column: Column, resumed: boolean): Promise<{ choice?: SmartChoice; costUsd: number }> {
+    const p = job.project;
+    const settings = getSettings();
+    const fresh = p.card(job.cardId) ?? card;
+    if (resumed) {
+      const sessionColumnId = fresh.lastRun?.columnId ?? column.id;
+      const sessionColumn = p.column(sessionColumnId) ?? column;
+      if (!smartEnabled(sessionColumn, settings)) return { costUsd: 0 };
+      const entry = fresh.smartChoices?.[sessionColumnId];
+      return entry ? { choice: entry, costUsd: 0 } : { costUsd: 0 };
+    }
+    if (!smartEnabled(column, settings)) {
+      if (column.type === "skill") this.log(p, card.id, "info", "Smart off for this column.");
+      return { costUsd: 0 };
+    }
+    if (!smartNeeded(fresh, column)) {
+      this.log(p, card.id, "info", "Smart skipped: the card and column set every feature and the effort.");
+      return { costUsd: 0 };
+    }
+    const fingerprint = smartFingerprint(fresh.title, fresh.description, column.skill);
+    const cached = fresh.smartChoices?.[column.id];
+    if (cached && cached.fingerprint === fingerprint) {
+      this.log(p, card.id, "info", `Smart (cached): ${formatSmartChoice(cached)} — ${cached.reason}`);
+      return { choice: cached, costUsd: 0 };
+    }
+    const unavailable = (reason: string, costUsd: number) => {
+      this.log(p, card.id, "info", `Smart unavailable (${reason}): resolving without smart.`);
+      // A stale entry would hand an answer or feedback on this session a configuration it never ran with.
+      if (cached) {
+        p.mutate(() => {
+          const c = p.card(job.cardId);
+          if (!c?.smartChoices?.[column.id]) return;
+          const { [column.id]: _stale, ...rest } = c.smartChoices;
+          if (Object.keys(rest).length > 0) c.smartChoices = rest;
+          else delete c.smartChoices;
+        });
+      }
+      return { costUsd };
+    };
+    let env: Record<string, string | undefined> = process.env;
+    if (settings.teamclaudeEnabled) {
+      // Never wait in the teamclaude gate for the smart call: the run itself handles an unreachable proxy.
+      const proxy = await prepareProxyEnv(settings.teamclaudeUrl);
+      if (!proxy.ok) return unavailable("teamclaude unreachable", 0);
+      env = applyProxyEnv(process.env, proxy.env);
+    }
+    if (job.cancelled) return { costUsd: 0 };
+    const r = await runSmart({
+      claudePath: settings.claudePath,
+      cwd: p.path,
+      env,
+      prompt: buildSmartPrompt({
+        title: fresh.title,
+        description: fresh.description,
+        columnName: column.name,
+        skill: column.skill,
+        mcpServers: readMcpServerNames(p.path),
+      }),
+      onSpawn: (proc) => {
+        job.proc = proc;
+        if (job.cancelled) proc.kill();
+      },
+    });
+    job.proc = undefined;
+    if (job.cancelled) return { costUsd: r.costUsd };
+    if (!r.ok) return unavailable(r.reason, r.costUsd);
+    const entry: SmartEntry = { ...r.choice, fingerprint, costUsd: r.costUsd, durationMs: r.durationMs, at: new Date().toISOString() };
+    p.mutate(() => {
+      const c = p.card(job.cardId);
+      // Only the run still current for this card and column writes the cache.
+      if (!c || c.columnId !== job.columnId || c.enteredColumnAt !== job.enteredAt) return;
+      c.smartChoices = { ...c.smartChoices, [column.id]: entry };
+    });
+    this.log(
+      p,
+      card.id,
+      "info",
+      `Smart: ${formatSmartChoice(r.choice)} — ${r.choice.reason} (haiku, ${formatSmartCost(r.costUsd)}, ${(r.durationMs / 1000).toFixed(1)} s).`,
+    );
+    return { choice: r.choice, costUsd: r.costUsd };
+  }
+
+  private cardTarget(job: Job, card: Card, column: Column, verb: string, smart?: SmartChoice): RunTarget {
     const p = job.project;
     // Read the card again at each spawn: the previous column's run may have set its models.
     const fresh = p.card(job.cardId) ?? card;
     const resolved = resolveModel(column, getSettings(), fresh);
-    const effort = resolveEffort(column, getSettings(), fresh);
+    const effort = resolveEffort(column, getSettings(), fresh, smart?.effort);
     return {
       name: `nightshift: ${card.title}`.slice(0, 80),
       schema: RESULT_SCHEMA,
       model: resolved.model,
       modelSource: resolved.source,
-      features: resolveAgentFeatures({ card: fresh, column, settings: getSettings() }),
+      features: resolveAgentFeatures({ card: fresh, column, settings: getSettings(), smart: smart?.features }),
       effort: effort.effort,
       effortSource: effort.source,
       log: (kind, text) => this.log(p, card.id, kind, text),

@@ -1,20 +1,23 @@
 #!/usr/bin/env bun
 // Stand-in for the `claude` CLI: emits stream-json events and a structured result.
 // FAKE_DELAY_MS controls run duration; a card titled "fail" produces an error result,
-// "slow" sleeps ~5 s before the normal result, "stay" returns move "stay",
+// "slow" sleeps FAKE_SLOW_MS (5000 by default) before the normal result, "stay" returns move "stay",
 // "progress" emits a TodoWrite, a progress marker, then another TodoWrite; "progress-todo" only a TodoWrite,
 // "progress-none" only a Bash tool_use with a description, "progress-marker-after-tool" a tool_use, a marker, a tool_use,
 // "progress-activity-subagent" a main tool_use then a subagent one, "progress-subagent" a marker then subagent events that must be ignored.
 // In --resume mode the prompt may contain FAKE_MOVE=<value> (move), FAKE_ASK (one question), FAKE_FAIL (error result)
-// or FAKE_SLOW (sleeps ~5 s first).
+// or FAKE_SLOW (sleeps FAKE_SLOW_MS first).
 // Quick runs: the instruction may contain FAKE_QUICK_ERROR (error status), FAKE_QUICK_INVALID (no status),
-// FAKE_QUICK_SLOW (sleeps ~5 s) or FAKE_QUICK_PROGRESS (emits a progress marker 1/2); otherwise success echoing it.
+// FAKE_QUICK_SLOW (sleeps FAKE_SLOW_MS) or FAKE_QUICK_PROGRESS (emits a progress marker 1/2); otherwise success echoing it.
 // FAKE_EXTRA_OUTPUT, when set, is a JSON object merged into the structured output of card runs.
 // FAKE_ARGS_LOG, when set, receives one JSON line per run: { title, resumed, continuing, resumeId, model, ... }.
 // FAKE_ENV_LOG, when set, receives one JSON line per run: { title, HTTPS_PROXY, NODE_EXTRA_CA_CERTS, ANTHROPIC_BASE_URL }.
 // A card titled "rate-limit" emits a rate_limit_event (5 h 38 %, 7 d 88 %); "rate-limit-bad" emits a malformed one.
 // A card titled "tokens-<n>" reports n context tokens in its assistant usage; "usage-multi" reports several (see usageOf).
 // FAKE_UNKNOWN_SESSION in the prompt of a continuing run answers like claude for a session it does not have.
+// Smart calls (prompt starting with <nightshift-smart>) never write FAKE_ARGS_LOG: they write { title, argv, prompt } to
+// FAKE_SMART_LOG and answer in --output-format json. The card title drives them: "smart-fail" (error result),
+// "smart-slow" (sleeps 10 s), "smart-invalid" (effort max); otherwise mcp on, effort high, cost 0.0012.
 // A card title containing FAKE_KEEP_DESC leaves the description alone; FAKE_SECTIONS adds a "Result" section instead.
 import { appendFileSync } from "node:fs";
 
@@ -22,6 +25,30 @@ import { appendFileSync } from "node:fs";
 const prompt = await new Response(Bun.stdin.stream()).text();
 const title = prompt.match(/<title>([\s\S]*?)<\/title>/)?.[1] ?? "";
 const delay = Number(process.env.FAKE_DELAY_MS ?? 200);
+const slowDelay = Number(process.env.FAKE_SLOW_MS ?? 5000);
+if (prompt.startsWith("<nightshift-smart>")) {
+  if (process.env.FAKE_SMART_LOG) {
+    appendFileSync(process.env.FAKE_SMART_LOG, `${JSON.stringify({ title, argv: process.argv.slice(2), prompt })}\n`);
+  }
+  if (title.includes("smart-slow")) await Bun.sleep(10_000);
+  const result = title.includes("smart-fail")
+    ? { type: "result", is_error: true, result: "smart boom", total_cost_usd: 0.0005 }
+    : {
+        type: "result",
+        is_error: false,
+        total_cost_usd: 0.0012,
+        structured_output: {
+          mcp: true,
+          chrome: false,
+          hooks: false,
+          userSettings: true,
+          effort: title.includes("smart-invalid") ? "max" : "high",
+          reason: "fake smart",
+        },
+      };
+  console.log(JSON.stringify(result));
+  process.exit(0);
+}
 // Quick runs (no card): the prompt carries an instruction block or "no instruction", and the instruction drives the behaviour.
 const quick = prompt.includes("<instruction>") || prompt.includes("no instruction");
 const instruction = prompt.match(/<instruction>\n([\s\S]*?)\n<\/instruction>/)?.[1] ?? "";
@@ -170,7 +197,7 @@ if (quick && instruction.includes("FAKE_QUICK_PROGRESS")) {
   emit(todos("in_progress", "pending"));
 }
 await Bun.sleep(
-  title === "slow" || (quick && instruction.includes("FAKE_QUICK_SLOW")) || (resumed && prompt.includes("FAKE_SLOW")) ? 5000 : delay,
+  title === "slow" || (quick && instruction.includes("FAKE_QUICK_SLOW")) || (resumed && prompt.includes("FAKE_SLOW")) ? slowDelay : delay,
 );
 if (quick) {
   if (instruction.includes("FAKE_QUICK_ERROR")) {

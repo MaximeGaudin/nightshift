@@ -95,13 +95,25 @@ setInterval(() => {}, 1 << 30);
   };
 }
 
-export async function waitFor(fn: () => Promise<boolean> | boolean, ms = 8000) {
+/**
+ * Polls `fn` until it returns true. On timeout the error names the wait: `label` is a string, or a function whose
+ * result (the state the test was waiting on) is serialized into the message.
+ */
+export async function waitFor(fn: () => Promise<boolean> | boolean, ms = 8000, label?: string | (() => unknown | Promise<unknown>)) {
   const end = Date.now() + ms;
   while (Date.now() < end) {
     if (await fn()) return;
     await Bun.sleep(25);
   }
-  throw new Error("timeout");
+  if (label === undefined) throw new Error("timeout");
+  if (typeof label === "string") throw new Error(`timeout: ${label}`);
+  let last: unknown;
+  try {
+    last = await label();
+  } catch (e) {
+    last = `(label failed: ${e})`;
+  }
+  throw new Error(`timeout after ${ms} ms, last state: ${JSON.stringify(last)}`);
 }
 
 /** Bounded wait for something that must NOT happen: an absence has no observable condition to poll, so a late event gets this long to show up. */
