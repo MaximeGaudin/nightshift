@@ -1,5 +1,6 @@
 // Types shared by the server and the web client.
 
+import type { AgentFeaturesOverride } from "./agentFeatures.ts";
 import type { FlowState } from "./flow.ts";
 import type { QuotaSnapshot } from "./usage.ts";
 
@@ -17,6 +18,8 @@ export interface Column {
   model?: string;
   /** Skill columns only: the column model wins over the card's per-skill model. Never stored as false. */
   lockModel?: true;
+  /** Skill columns only: agent features set for this column; a missing key inherits. Never `{}`. */
+  agentFeatures?: AgentFeaturesOverride;
   /** Max agents running at once in this column; absent = 1. The global setting still caps the total. */
   maxParallel?: number;
   /** Single grapheme shown instead of the type icon; absent = type icon. */
@@ -115,6 +118,8 @@ export interface Card {
   draft?: true;
   /** Per-skill model overrides (skill name -> alias or ID). Never `{}`; "default" is never stored. */
   models?: Record<string, string>;
+  /** Agent features set for this card, above the column's; a missing key inherits. Never `{}`. */
+  agentFeatures?: AgentFeaturesOverride;
   /** The card's Claude session: a column continues it unless it has `freshSession` (the default for new skill columns). */
   sessionId?: string;
   history: HistoryEntry[];
@@ -299,6 +304,8 @@ export interface Settings {
   permissionMode: PermissionMode;
   model: string;
   extraArgs: string;
+  /** Agent features set globally; a missing key inherits the economical default. `{}` when none. */
+  agentFeatures: AgentFeaturesOverride;
   recentProjects: string[];
   /** Play a sound when a card needs human attention. */
   soundNotifications: boolean;
