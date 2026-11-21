@@ -24,6 +24,7 @@ import type {
 import { canSendFeedback, cardRef, columnMaxParallel, isDoneColumn } from "../shared/types.ts";
 import { safeHttpUrl } from "../shared/urls.ts";
 import { buildEnvironment } from "./environment.ts";
+import { fallbackBlock, tryFastMerge } from "./fastMerge.ts";
 import { FlowController } from "./flow.ts";
 import { HttpError } from "./guard.ts";
 import { parseProgressMarker, progressFromTodos } from "./progress.ts";
@@ -36,6 +37,9 @@ import { findSkill } from "./skills.ts";
 import { isRaw, needsRun, newId, Project, type Raw } from "./store.ts";
 import { copyTemplateSkills } from "./templates.ts";
 import { recordRateLimit } from "./usage.ts";
+
+/** Skill whose columns try the deterministic merge before starting the agent. */
+const FAST_MERGE_SKILL = "nightshift-merge";
 
 /** One block of an assistant message in `claude -p --output-format stream-json` (only what Nightshift reads). */
 interface StreamBlock {
@@ -1036,6 +1040,32 @@ export class Orchestrator {
       });
     }
     const answer = card.pendingAnswer;
+    // Merge column: try the deterministic merge first; the agent only runs when it stops (fallback).
+    let fastMergeNote = "";
+    if (!answer && column.skill === FAST_MERGE_SKILL && column.fastMerge !== false) {
+      const o = await tryFastMerge({
+        projectPath: p.path,
+        cardId: card.id,
+        description: p.card(card.id)?.description ?? card.description,
+        column,
+        stopTest: () => this.stopTest(p, card.id),
+        isCancelled: () => job.cancelled,
+      });
+      if (o.kind === "cancelled") return this.finish(job, "cancelled", {});
+      if (o.kind === "merged" || o.kind === "busy") {
+        this.log(p, card.id, "info", o.kind === "merged" ? o.summary : `merge rapide abandonné : verrou tenu par ${o.owner}`);
+        return this.finish(job, "success", {
+          output: {
+            summary: o.summary,
+            move: o.kind === "merged" ? "next" : "stay",
+            questions: [],
+            sections: [{ heading: "Merge", content: o.merge }],
+          },
+        });
+      }
+      this.log(p, card.id, "info", `merge rapide abandonné : ${o.step} — ${o.error.replace(/\s+/g, " ").slice(0, 300)}`);
+      fastMergeNote = `\n\n${fallbackBlock(o)}`;
+    }
     // A new run needs its column's skill; a resumed session only uses it to tell the agent where the definition lives.
     const skill = job.skill ? findSkill(p.path, job.skill) : undefined;
     if (!answer && !skill) {
@@ -1043,7 +1073,7 @@ export class Orchestrator {
     }
     const skillRef = job.skill ? `the skill "${job.skill}"` : "the skill you applied earlier in this session";
     let prompt = !answer
-      ? buildPrompt(p.board, card, column, skill?.path, this.liveStatuses(p))
+      ? buildPrompt(p.board, card, column, skill?.path, this.liveStatuses(p)) + fastMergeNote
       : answer.kind === "resume"
         ? RECOVER_PROMPT
         : answer.kind === "feedback"
@@ -1079,7 +1109,7 @@ export class Orchestrator {
         this.log(p, card.id, "info", `Could not continue the card's session ${carried}: starting a new one.`);
         carried = undefined;
         resumeId = undefined;
-        prompt = buildPrompt(p.board, card, column, skill?.path, this.liveStatuses(p));
+        prompt = buildPrompt(p.board, card, column, skill?.path, this.liveStatuses(p)) + fastMergeNote;
         attempt--;
         continue;
       }
