@@ -228,8 +228,7 @@ test("api-sync-results-and-preview", async () => {
     nextCardNumber: 1,
     issueSources: [{ id: "src_p", ...source, labels: ["bug"], importedIds: [] }],
   };
-  const post = (s: ChildServer, path: string, d: string, body: Record<string, unknown>) =>
-    s.call(path, { body: { project: d, ...body } });
+  const post = (s: ChildServer, path: string, d: string, body: Record<string, unknown>) => s.call(path, { body: { project: d, ...body } });
 
   const idleDir = await openProject(idle, board);
   expect((await post(idle, "/api/issue-sources/preview", idleDir, { sourceId: "src_p" })).status).toBe(409);
