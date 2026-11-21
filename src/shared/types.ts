@@ -3,6 +3,7 @@
 import type { AgentFeaturesOverride } from "./agentFeatures.ts";
 import type { FlowState } from "./flow.ts";
 import type { CardExternal, IssueSource, IssueSourceStatus } from "./issues.ts";
+import type { MergeMethod, PullRequestsSetting } from "./pullRequests.ts";
 import type { QuotaSnapshot } from "./usage.ts";
 
 export type ColumnType = "inert" | "skill";
@@ -158,6 +159,12 @@ export interface Board {
   worktreePolicy?: WorktreePolicy;
   /** External issue trackers feeding the Backlog. Absent when none. Never holds a token. */
   issueSources?: IssueSource[];
+  /** Pull request flow: absent = `auto` (on when origin is GitHub and gh is authenticated). Never stored as the default. */
+  pullRequests?: PullRequestsSetting;
+  /** How Nightshift merges a card's pull request. Absent = `merge`. */
+  mergeMethod?: MergeMethod;
+  /** Pending required checks schedule a GitHub auto-merge. Absent = off; only `true` is stored. */
+  autoMerge?: true;
 }
 
 /** Agents must use a worktree per card, may choose, or must never create one. */

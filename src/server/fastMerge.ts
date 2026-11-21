@@ -5,6 +5,7 @@ import { execFile, spawn } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
+import { field, section } from "../shared/pullRequests.ts";
 import type { Column } from "../shared/types.ts";
 import { git, gitLine } from "./git.ts";
 
@@ -15,28 +16,14 @@ export type ResultFields =
 
 const SHA = /\b[0-9a-f]{7,40}\b/g;
 
-/** Body of a `## <heading>` section, or undefined when the note has none. */
-function section(description: string, heading: string): string | undefined {
-  const lines = description.split("\n");
-  const start = lines.findIndex((l) => l.trim() === `## ${heading}`);
-  if (start < 0) return undefined;
-  const end = lines.findIndex((l, i) => i > start && /^## /.test(l));
-  return lines.slice(start + 1, end < 0 ? undefined : end).join("\n");
-}
-
-/** Value of a `- Key: value` line, without backticks; undefined when the line is missing. */
-function field(body: string, key: string): string | undefined {
-  const re = new RegExp(`^\\s*[-*]\\s*${key}\\s*:\\s*(.*)$`, "im");
-  const m = body.match(re);
-  return m ? m[1].replace(/`/g, "").trim() : undefined;
-}
-
 /**
  * Reads Worktree, Base and Commits from `## Result`. Any doubt gives `{ missing }`: the fast path never guesses
- * a branch. A note that already has `## Merge` is a retry, left to the agent.
+ * a branch. A note that already has `## Merge` is a retry, left to the agent, unless `allowMerge` (the pull request
+ * path, whose waiting states live under `## Merge`).
  */
-export function parseResultFields(description: string): ResultFields | { missing: string } {
-  if (section(description, "Merge") !== undefined) return { missing: "the note already has a ## Merge section (retry)" };
+export function parseResultFields(description: string, opts: { allowMerge?: boolean } = {}): ResultFields | { missing: string } {
+  if (!opts.allowMerge && section(description, "Merge") !== undefined)
+    return { missing: "the note already has a ## Merge section (retry)" };
   const body = section(description, "Result");
   if (body === undefined) return { missing: "no ## Result section" };
   const worktreeRaw = field(body, "Worktree");
