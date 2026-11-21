@@ -37,6 +37,10 @@ export const settings: Record<keyof typeof enSettings, string> = {
   "settings.model.label": "Modèle par défaut",
   "settings.model.help": "S'applique aux colonnes sans modèle propre. Vide = défaut du CLI claude.",
   "settings.model.placeholder": "ex. sonnet, opus",
+  "settings.smart.label": "Mode smart",
+  "settings.smart.help":
+    "Avant chaque nouveau run de colonne, un appel rapide à haiku choisit les fonctionnalités d'agent et l'effort d'après la carte. Les réglages de la carte et de la colonne gardent la priorité.",
+  "settings.smart.fallback": "Utilisé quand le mode smart est désactivé ou échoue.",
   "settings.effort.label": "Effort",
   "settings.effort.help":
     "S'applique aux colonnes et cartes sans effort propre. Défaut économique : grill, implement, review medium ; plan high ; merge low ; autres skills medium. « Hériter de Claude » ne passe pas --effort.",
