@@ -1281,6 +1281,11 @@ export class Orchestrator {
       target.log("info", `Running via teamclaude (${url}).`);
       return { env: applyProxyEnv(process.env, first.env) };
     }
+    // Turned off during the check: nothing would ever release the gate for this run, so it goes on directly.
+    if (!getSettings().teamclaudeEnabled) {
+      target.log("info", "teamclaude was turned off: running without it.");
+      return { env: process.env };
+    }
     target.log("info", "The teamclaude proxy cannot be reached: waiting for a choice in the board.");
     const { promise, abort } = this.gate.wait(target.waitEntry, first.failure);
     job.abortWait = abort;
