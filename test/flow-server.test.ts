@@ -203,13 +203,17 @@ test("a retry moved elsewhere waits for play again", async () => {
   const dir = await open(live, 1);
   const { snap, create, move, flow } = api(live, dir);
   const busy = await create("slow busy", "col_grill");
-  await waitFor(async () => (await snap()).live[busy.id] === "running");
+  const state = async () => {
+    const s = await snap();
+    return { flow: s.flow, live: s.live, cards: s.board.cards.map((c) => [c.title, c.columnId, c.lastRun?.status]) };
+  };
+  await waitFor(async () => (await snap()).live[busy.id] === "running", 8000, state);
   await flow("pause");
   const { id } = await create("other", "col_grill");
   expect((await snap()).live[id]).toBe("paused");
   // The project cap is full: the retried card waits as queued, not paused.
   await live.call(`/api/cards/${id}/retry`, { body: { project: dir } });
-  await waitFor(async () => (await snap()).live[id] === "queued");
+  await waitFor(async () => (await snap()).live[id] === "queued", 8000, state);
   await move(id, "col_impl");
-  await waitFor(async () => (await snap()).live[id] === "paused");
+  await waitFor(async () => (await snap()).live[id] === "paused", 8000, state);
 });
