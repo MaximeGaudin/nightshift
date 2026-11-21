@@ -16,7 +16,7 @@ Other implementation cards may run on this repository at the same time. By defau
 ## Prerequisites
 
 - The Nightshift worker prompt contains the card (`<title>`, `<description>`, `id`) and the board columns. The description is the specification.
-- Return work only as Nightshift's structured result (`title`, `description`, `move`, `summary`, `questions`, `test`). Do not edit `nightshift.json`.
+- Return work only as Nightshift's structured result (`title`, `sections`, `move`, `summary`, `questions`, `test`). Return `description` only to restructure the whole note. Do not edit `nightshift.json`.
 - Do not call `AskUserQuestion`.
 - The process starts in the board project, and that directory is a git repository. Check with `git rev-parse --is-inside-work-tree`. If that fails, set `move` to `stay`, leave `questions` empty, write the git error under `## Result`, and stop.
 - Do not push. Do not create a pull request. Unless the worktree policy lets you work in the shared checkout (step 3), do not commit, stage, checkout, or edit it. Another implementation may be using it.
@@ -25,14 +25,14 @@ Other implementation cards may run on this repository at the same time. By defau
 
 Progress marker: at the start of each step, write `[nightshift-progress] N/M label` alone on its own line, where N is the current step number, M is the total, and label is a few words naming the step. Use the numbering of the card's `## Progress` list; when the card has none, use the numbering of this `## Steps` list. A machine reads this line, so it overrides any concise or no-narration style.
 
-1. Read the card. List the tasks in order (`Files`, `Context`, `Hard part`, `Done when`). A card planned before this format has waves and `Owns`: do its tasks in wave order, one after the other, and read `Owns` as `Files`; ignore `parallel` and the tasks' `Model:` lines.
+1. Read the card. List the tasks in order (`Files`, `Context`, `Hard part`, `Done when`).
    - If the prompt has no card: set `move` to `stay`, ask one question for the specification, and stop.
-2. If `## Tasks` is missing and the card does not say `Route: implement`, do not implement. Ask every blocker at once. See Questions.
+2. If `## Tasks` is missing and the card does not say `Route: implement`, do not implement. Ask every blocker at once. See Asking questions.
    - When `## Tasks` is missing and the card says `Route: implement`, the card skipped `nightshift-plan`: plan it yourself, briefly, without asking. Add to the description `## Plan` (the approach in a few lines, the files you expect to touch, the risk to watch), `## Progress` with one line `- [ ] 1. <card title>`, and `## Definition of done` built from `## Acceptance` (plus "affected tests pass" and "full suite: deferred to review"). Then implement it as one task, in this run's worktree: no task branch, no task worktree, no merge.
 3. Read the worktree policy: the `Worktree policy:` line of the `<environment>` block in the prompt (`required`, `auto` or `forbidden`; no block or no line means `required`). It decides where this run works. Call that place the work directory.
    - `required`: create the worktree below. The work directory is the worktree.
    - `auto`: create the worktree below, except when the change is trivial (documentation only, or a one-line fix) and no other agent runs on this project: the `<environment>` block shows no other card marked `[running]`, and `git worktree list` shows no `nightshift/*` worktree. Then use the shared checkout as in `forbidden`. When in doubt, create the worktree.
-   - `forbidden`: no worktree and no `nightshift/<card-id>` branch. The work directory is the board project, on the branch checked out there. Record the base as below (branch and SHA; `detached` on a detached `HEAD`) and commit on that branch directly. Do not switch branches. Leave other pending files alone. `## Result` gets `Worktree: none` (see Result), and `nightshift-merge` then only pushes the base.
+   - `forbidden`: no worktree and no `nightshift/<card-id>` branch. The work directory is the board project, on the branch checked out there. Record the base as below (branch and SHA; `detached` on a detached `HEAD`) and commit on that branch directly. Do not switch branches. Leave other pending files alone. `## Result` gets `Worktree: none` (see Writing the result), and `nightshift-merge` then only pushes the base.
    - Everywhere below, "this run's worktree" means the work directory, and the rules about the shared checkout apply only when the work directory is a worktree.
    Create this run's worktree before any commit, test, or edit. First record the base: the branch checked out in the shared checkout (`git symbolic-ref --short HEAD`, for example `WIP` or `main`) and its SHA (`git rev-parse HEAD`). On a detached `HEAD`, the base is `detached`. The card starts from that branch and `nightshift-merge` merges it back into it. Branch `nightshift/<card-id>`, directory from `mktemp -d`, then `git worktree add -b nightshift/<card-id> <dir> HEAD`. On failure: delete nothing, write the command and the error under `## Result`, set `move` to `stay`, and stop. Every command from here runs in that directory. Leave pending files in the shared checkout as they are.
    - Seed the test selection cache (worktree only; with no worktree the cache is already in the board project): when the board project keeps one that git ignores (for example `.testmondata` for pytest-testmon), copy it to the same path in the worktree (`cp`, never a link). It tells the runner which tests each piece of code runs, so the affected-tests command runs in seconds instead of running everything.
@@ -46,7 +46,7 @@ Progress marker: at the start of each step, write `[nightshift-progress] N/M lab
    - Record it: the `Tests` line of `## Result` names the affected-tests command, its exit code and the failing tests (none, or the baseline's). The full suite is not run here: `nightshift-review` runs it.
 9. `git status --porcelain` in this run's worktree must be empty except ignored secrets (with no worktree: no file this card changed is left uncommitted). A worktree run leaves the shared checkout unchanged. Tick the definition-of-done items that passed. Append `## Result`. Keep this run's worktree, if any. Set `move` to `next` and `questions` to an empty array.
 10. Set `test` so a human can try the card from the Nightshift card with one click. See Test command.
-11. Capture screenshots of the running result so the human can check them while testing. See Screenshots. On a stop before step 9, skip this step.
+11. Capture screenshots of the running result so the human can check them while testing. See Capturing screenshots. On a stop before step 9, skip this step.
 
 Follow extra column instructions in the worker prompt when they do not contradict the steps above.
 
@@ -66,7 +66,7 @@ The card already holds the research: grill and plan read the code and wrote what
 ## Implementation rules
 
 - Work only in the work directory: this run's worktree on `nightshift/<card-id>`, or the board project when the policy has no worktree. With a worktree, do not read or write the shared checkout.
-- Obey the Brief, the Architecture, the current task and the tests that name it.
+- Obey the grilled note (the top of the description), the Architecture, the current task and the tests that name it.
 - Write the real behavior. No TODO, FIXME, stub, skipped test, or empty body that only throws.
 - `Files` lists where a task is expected to land: a guide, not a wall. Touch another file when the task needs it, and say so in `## Result`. Do not reformat or rewrite code the card does not need to change.
 - Build on the previous tasks: they are committed in the work directory and you read their code already. Do not re-read what you wrote unless you need a detail.
@@ -108,7 +108,7 @@ Example:
 
 Also write the command under `## Result` as `- Test: <command>`.
 
-## Screenshots
+## Capturing screenshots
 
 Do this only after step 10, and only when `test.url` is set, which means the card changed a screen (Test command). Any other card has no screen: write `## Screenshots` with the line `No screen to capture.` and skip the rest: no server, no browser, no `npx playwright`.
 
@@ -131,7 +131,7 @@ npx --yes playwright screenshot --browser chromium --full-page --viewport-size=1
 ![Home](/absolute/path/nightshift-screenshots/01-home.png)
 ```
 
-## Questions
+## Asking questions
 
 Use this only in step 2. Ask in two places, same questions, same order. Under each question in the note, leave exactly three blank lines.
 
@@ -146,9 +146,9 @@ Use this only in step 2. Ask in two places, same questions, same order. Under ea
 
 On the next run, the answer is the text under that question. Ignore blank lines. When that text is empty and the resume prompt has an answer, use it. When both are empty, do not guess: set `move` to `stay` and stop.
 
-## Result
+## Writing the result
 
-Append this to the specification. Do not delete `## Brief`, `## Progress`, `## Architecture`, `## Tasks`, `## Tests`, or `## Definition of done`. Do not renumber `## Progress`.
+Append this to the specification. Do not delete `## Progress`, `## Architecture`, `## Tasks`, `## Tests`, or `## Definition of done`. Do not renumber `## Progress`.
 
 ```markdown
 ## Result
@@ -158,7 +158,6 @@ Append this to the specification. Do not delete `## Brief`, `## Progress`, `## A
 - Base: <branch the card started from, or detached> at <sha>
 - Shared checkout: untouched (or, with `Worktree: none`, committed to directly)
 - Baseline: pending work commit <sha or "clean">, affected tests → exit <code>, failing: <none, or the tests already failing on the base>
-- Waves: <n> (<n> tasks), all done in the card's session
 - Model: <the model this run used>; repairs: <n>
 - Tasks done: <names, in order>, in this session (no subagent)
 - Files beyond the tasks' `Files`: <paths and why, or none>
