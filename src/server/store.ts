@@ -137,6 +137,7 @@ const CARD_KEYS = [
   "dependsOn",
   "draft",
   "sessionId",
+  "seenDescription",
   "history",
   "timeBase",
   "models",
@@ -283,6 +284,12 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
       ...(models ? { models } : {}),
       ...(efforts ? { efforts } : {}),
       ...(typeof c.sessionId === "string" && c.sessionId ? { sessionId: c.sessionId } : {}),
+      ...(isRaw(c.seenDescription) &&
+      typeof c.seenDescription.sessionId === "string" &&
+      c.seenDescription.sessionId &&
+      typeof c.seenDescription.text === "string"
+        ? { seenDescription: { sessionId: c.seenDescription.sessionId, text: c.seenDescription.text } }
+        : {}),
       history: rawHistory.slice(-50),
       ...(timeBase ? { timeBase } : {}),
     };

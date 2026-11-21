@@ -39,7 +39,7 @@ import { HttpError } from "./guard.ts";
 import { parseProgressMarker, progressFromTodos } from "./progress.ts";
 import { buildQuickRunPrompt, parseQuickOutput, QUICK_INSTRUCTION_MAX, QUICK_RESULT_SCHEMA } from "./quickrun.ts";
 import { persistScreenshots } from "./screenshots.ts";
-import { applySections, parseSections } from "./sections.ts";
+import { applySections, diffSections, parseSections } from "./sections.ts";
 import { contextTokensOf, decideCarry } from "./sessionCarry.ts";
 import { getSettings, legacyMaxParallel, NIGHTSHIFT_HOME, onSettingsChange, rememberProject } from "./settings.ts";
 import { findSkill } from "./skills.ts";
@@ -133,6 +133,10 @@ interface Job extends Runner {
   skill?: string;
   /** Started in a skill column: such a job is stopped if the column stops being a skill column. */
   startedInSkillColumn: boolean;
+  /** Card description when a prompt carrying it (new run or feedback) was built: what the session saw at launch. */
+  seenAtLaunch?: string;
+  /** Session the run resumed at launch (carried, answered, fed back or recovered); undefined for a new session. */
+  resumedFrom?: string;
 }
 
 const MAX_LOG_LINES = 3000;
@@ -246,12 +250,42 @@ function formatColumns(board: Board): string {
     .join("\n");
 }
 
+/** Said instead of the description when a resumed session already saw it as it is. */
+export const DESCRIPTION_UNCHANGED = "The card description has not changed since your last run in this session.";
+/** First line of the changes block sent instead of the description when a resumed session saw an older version. */
+export const DESCRIPTION_CHANGED =
+  "The card description changed since your last run in this session. Only the changed parts are below; every other section is unchanged.";
+
+/**
+ * The card description in a prompt. `seen` is the description as the resumed session last saw it (absent for a new
+ * session): then only what changed since is sent, unless the diff cannot be trusted (duplicate headings) or is no shorter.
+ */
+export function descriptionBlock(description: string, seen?: string): string {
+  const full = `<description>\n${description}\n</description>`;
+  if (seen === undefined) return full;
+  const diff = diffSections(seen, description);
+  if (!diff) return full;
+  if (diff.unchanged) return `<description unchanged="true">\n${DESCRIPTION_UNCHANGED}\n</description>`;
+  const parts = [
+    DESCRIPTION_CHANGED,
+    ...(diff.preamble !== undefined
+      ? [diff.preamble ? `Text before the first section:\n${diff.preamble}` : "Text before the first section: removed."]
+      : []),
+    ...diff.changed,
+    ...(diff.deleted.length > 0 ? [`Deleted sections: ${diff.deleted.join(", ")}`] : []),
+  ];
+  const changes = parts.join("\n\n");
+  if (changes.length > description.length) return full;
+  return `<description-changes>\n${changes}\n</description-changes>`;
+}
+
 export function buildPrompt(
   board: Board,
   card: Card,
   column: Column,
   skillPath: string | undefined,
   live: Record<string, LiveStatus> = {},
+  seen?: string,
 ): string {
   const next = resolveNextColumn(board.columns, { columnId: column.id, skipColumnIds: card.skipColumnIds });
   const columns = formatColumns(board);
@@ -262,9 +296,7 @@ Invoke the skill with the Skill tool (skill name: "${column.skill}")${skillPath 
 ${column.instructions ? `\nAdditional instructions for this column:\n${column.instructions}\n` : ""}
 <card id="${card.id}" ref="${cardRef(card)}">
 <title>${card.title}</title>
-<description>
-${card.description}
-</description>
+${descriptionBlock(card.description, seen)}
 </card>
 
 ${buildEnvironment(board, card, live)}
@@ -300,6 +332,7 @@ export function buildFeedbackPrompt(
   skill: string | undefined,
   skillPath: string | undefined,
   live: Record<string, LiveStatus> = {},
+  seen?: string,
 ): string {
   const next = resolveNextColumn(board.columns, { columnId: column.id, skipColumnIds: card.skipColumnIds });
   const skillName = skill ? `the skill "${skill}"` : "the skill you applied earlier in this session";
@@ -314,9 +347,7 @@ Address this feedback on the card below. Follow ${skillName}${skill && skillPath
 
 <card id="${card.id}" ref="${cardRef(card)}">
 <title>${card.title}</title>
-<description>
-${card.description}
-</description>
+${descriptionBlock(card.description, seen)}
 </card>
 
 ${buildEnvironment(board, card, live)}
@@ -557,7 +588,8 @@ export class Orchestrator {
     }
     return {
       path: p.path,
-      board: p.board,
+      // The description a session saw stays on the server: several KB per card, of no use to the UI.
+      board: { ...p.board, cards: p.board.cards.map(({ seenDescription: _seen, ...card }) => card) },
       maxParallel: this.projectMaxParallel(p),
       live,
       testing,
@@ -1072,17 +1104,11 @@ export class Orchestrator {
       return this.finish(job, "error", { error: `Skill "${column.skill}" not found in project or user skills.` });
     }
     const skillRef = job.skill ? `the skill "${job.skill}"` : "the skill you applied earlier in this session";
-    let prompt = !answer
-      ? buildPrompt(p.board, card, column, skill?.path, this.liveStatuses(p))
-      : answer.kind === "resume"
-        ? RECOVER_PROMPT
-        : answer.kind === "feedback"
-          ? buildFeedbackPrompt(p.board, card, column, job.skill, skill?.path, this.liveStatuses(p))
-          : buildAnswerPrompt(card.title, skillRef, answer.text);
     if (answer?.kind === "feedback") this.log(p, card.id, "info", `Retour utilisateur : ${answer.text}`);
     else if (answer && answer.kind !== "resume") this.log(p, card.id, "info", `User answer: ${answer.text}`);
     // A new run continues the card's session (the previous columns' context), unless its column asks for a fresh one
     // or, in auto mode, the carried context is too big or too old to be worth re-reading.
+    // Decided before the prompt is built: a resumed session only gets what changed in the description since it saw it.
     let carried: string | undefined;
     const previousSession = !answer ? (card.sessionId ?? card.lastRun?.sessionId) : undefined;
     if (previousSession) {
@@ -1090,8 +1116,18 @@ export class Orchestrator {
       if (decision.log) this.log(p, card.id, "info", decision.log);
       if (decision.carry) carried = previousSession;
     }
-    if (carried) prompt = `${CONTINUE_PREFIX}\n\n${prompt}`;
     let resumeId = answer?.sessionId ?? carried;
+    const seen = resumeId && card.seenDescription?.sessionId === resumeId ? card.seenDescription.text : undefined;
+    job.resumedFrom = resumeId;
+    job.seenAtLaunch = !answer || answer.kind === "feedback" ? card.description : undefined;
+    let prompt = !answer
+      ? buildPrompt(p.board, card, column, skill?.path, this.liveStatuses(p), seen)
+      : answer.kind === "resume"
+        ? RECOVER_PROMPT
+        : answer.kind === "feedback"
+          ? buildFeedbackPrompt(p.board, card, column, job.skill, skill?.path, this.liveStatuses(p), seen)
+          : buildAnswerPrompt(card.title, skillRef, answer.text);
+    if (carried) prompt = `${CONTINUE_PREFIX}\n\n${prompt}`;
     let costUsd = 0;
 
     // One automatic recovery: an agent that stops without its structured result (interrupted, or it
@@ -1109,6 +1145,9 @@ export class Orchestrator {
         this.log(p, card.id, "info", `Could not continue the card's session ${carried}: starting a new one.`);
         carried = undefined;
         resumeId = undefined;
+        // A new session has seen nothing: the whole description again.
+        job.resumedFrom = undefined;
+        job.seenAtLaunch = card.description;
         prompt = buildPrompt(p.board, card, column, skill?.path, this.liveStatuses(p));
         attempt--;
         continue;
@@ -1338,15 +1377,27 @@ export class Orchestrator {
             ? `${colName}: ${out?.questions.length ?? 0} question(s) for the user`
             : `${colName}: ${status}${data.error ? ` (${data.error.slice(0, 200)})` : ""}`,
       );
-      if ((status !== "success" && status !== "question") || !out) return;
+      // The description as this session believes it is: what it saw at launch (or last time, for a resume without
+      // the description), plus its own edits. Not card.description: a human edit made during the run was never seen.
+      let seenText =
+        job.seenAtLaunch ??
+        (job.resumedFrom && card.seenDescription?.sessionId === job.resumedFrom ? card.seenDescription.text : undefined);
+      const rememberSeen = () => {
+        if (sessionId && seenText !== undefined) card.seenDescription = { sessionId, text: seenText };
+      };
+      if ((status !== "success" && status !== "question") || !out) return rememberSeen();
       if (typeof out.title === "string" && out.title.trim()) card.title = out.title.trim();
-      if (typeof out.description === "string") card.description = persistScreenshots(card.id, out.description);
+      if (typeof out.description === "string") {
+        card.description = persistScreenshots(card.id, out.description);
+        seenText = card.description;
+      }
       if (out.sections !== undefined) {
         try {
           const parsed = parseSections(out.sections);
           const edits = parsed.edits.map((e) => ({ ...e, content: persistScreenshots(card.id, e.content) }));
           const res = applySections(card.description, edits);
           card.description = res.text;
+          if (seenText !== undefined) seenText = applySections(seenText, edits).text;
           for (const l of [...parsed.logs, ...res.logs]) this.log(p, job.cardId, "info", l);
           if (res.applied.length > 0) p.addHistory(card, "edited", `sections: ${res.applied.join(", ")}`);
         } catch (e) {
@@ -1368,6 +1419,7 @@ export class Orchestrator {
       else delete card.efforts;
       if (mergedEfforts.changes.length > 0) p.addHistory(card, "edited", describeEffortChanges(mergedEfforts.changes, "agent"));
       if (mergedEfforts.dropped.length > 0) this.log(p, job.cardId, "info", mergedEfforts.dropped.map(formatDroppedEffort).join("; "));
+      rememberSeen();
       card.updatedAt = now;
       if (status === "question") {
         out.questions.forEach((q, i) => {
