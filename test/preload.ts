@@ -14,6 +14,10 @@ const fresh = (prefix: string) => {
 };
 process.env.NIGHTSHIFT_HOME ??= fresh("ns-test-home-");
 process.env.NIGHTSHIFT_USER_SKILLS ??= fresh("ns-test-skills-");
+// A developer shell or an agent running behind teamclaude exports a proxy: fake agents would inherit it and the
+// tests that assert "no proxy variable" would measure the ambient environment instead of what Nightshift injects.
+for (const k of ["HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "https_proxy", "http_proxy", "no_proxy", "ALL_PROXY", "all_proxy"])
+  delete process.env[k];
 // Do not leave these two folders in /tmp after every run.
 process.on("exit", () => {
   for (const dir of created) rmSync(dir, { recursive: true, force: true });

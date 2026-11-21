@@ -74,7 +74,11 @@ test("api-sources-roundtrip", async () => {
   const raw = JSON.parse(readFileSync(join(d, "nightshift.json"), "utf8"));
   raw.issueSources[0].importedIds = ["1"];
   writeFileSync(join(d, "nightshift.json"), JSON.stringify(raw));
-  await waitFor(async () => (await snap(idle, d)).board.issueSources?.[0]?.importedIds.length === 1);
+  await waitFor(
+    async () => (await snap(idle, d)).board.issueSources?.[0]?.importedIds.length === 1,
+    8000,
+    "server sees the external write of importedIds",
+  );
   const kept = (await (
     await idle.call("/api/issue-sources", { method: "PUT", body: { project: d, sources: [{ ...source, id: src?.id, labels: ["bug"] }] } })
   ).json()) as ProjectSnapshot;
