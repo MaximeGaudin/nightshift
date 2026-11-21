@@ -1,6 +1,7 @@
 import { copyFileSync, existsSync, type FSWatcher, readFileSync, statSync, watch } from "node:fs";
 import { basename, join } from "node:path";
 import { normalizeDependsOn, releaseTarget } from "../shared/dependencies.ts";
+import { normalizeCardExternal, normalizeIssueSources } from "../shared/issues.ts";
 import { sanitizeModels } from "../shared/models.ts";
 import { needsRun } from "../shared/needs-run.ts";
 import { normalizeSkipColumnIds, resolveNextColumn } from "../shared/skip.ts";
@@ -127,8 +128,19 @@ const CARD_KEYS = [
   "history",
   "timeBase",
   "models",
+  "external",
 ];
-const BOARD_KEYS = ["version", "name", "columns", "cards", "nextCardNumber", "maxParallel", "favoriteSkills", "worktreePolicy"];
+const BOARD_KEYS = [
+  "version",
+  "name",
+  "columns",
+  "cards",
+  "nextCardNumber",
+  "maxParallel",
+  "favoriteSkills",
+  "worktreePolicy",
+  "issueSources",
+];
 
 /**
  * Fields this version does not know, kept as they are. Several Nightshift versions write the same file
@@ -244,6 +256,7 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
     const skipColumnIds = normalizeSkipColumnIds(columns, c.skipColumnIds);
     const { models } = sanitizeModels(c.models);
     const columnId = typeof c.columnId === "string" && colIds.has(c.columnId) ? c.columnId : columns[0]?.id;
+    const external = normalizeCardExternal(c.external);
     return {
       ...unknownFields(c, CARD_KEYS),
       id: c.id,
@@ -264,6 +277,7 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
       ...(c.draft === true && columnId === BACKLOG_COLUMN_ID ? { draft: true as const } : {}),
       ...(models ? { models } : {}),
       ...(typeof c.sessionId === "string" && c.sessionId ? { sessionId: c.sessionId } : {}),
+      ...(external ? { external } : {}),
       history: rawHistory.slice(-50),
       ...(timeBase ? { timeBase } : {}),
     };
@@ -282,6 +296,7 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
   const favoriteSkills = normalizeFavoriteSkills(r.favoriteSkills);
   const maxParallel = normalizeProjectParallel(r.maxParallel);
   const worktreePolicy = normalizeWorktreePolicy(r.worktreePolicy);
+  const issueSources = normalizeIssueSources(r.issueSources);
   return {
     ...unknownFields(raw, BOARD_KEYS),
     version: 1,
@@ -292,6 +307,7 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
     ...(maxParallel !== undefined ? { maxParallel } : {}),
     ...(favoriteSkills ? { favoriteSkills } : {}),
     ...(worktreePolicy ? { worktreePolicy } : {}),
+    ...(issueSources ? { issueSources } : {}),
   };
 }
 

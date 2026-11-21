@@ -1,6 +1,7 @@
 // Types shared by the server and the web client.
 
 import type { FlowState } from "./flow.ts";
+import type { CardExternal, IssueSource, IssueSourceStatus } from "./issues.ts";
 import type { QuotaSnapshot } from "./usage.ts";
 
 export type ColumnType = "inert" | "skill";
@@ -117,6 +118,8 @@ export interface Card {
   models?: Record<string, string>;
   /** The card's Claude session: a column continues it unless it has `freshSession` (the default for new skill columns). */
   sessionId?: string;
+  /** Link to the external issue this card was imported from. Absent on manual cards. */
+  external?: CardExternal;
   history: HistoryEntry[];
   /** Time checkpoint of the history entries dropped by the history cap. */
   timeBase?: TimeState;
@@ -136,6 +139,8 @@ export interface Board {
   favoriteSkills?: string[];
   /** Whether agents work in a git worktree. Absent = `DEFAULT_WORKTREE_POLICY`; never stored as the default. */
   worktreePolicy?: WorktreePolicy;
+  /** External issue trackers feeding the Backlog. Absent when none. Never holds a token. */
+  issueSources?: IssueSource[];
 }
 
 /** Agents must use a worktree per card, may choose, or must never create one. */
@@ -408,6 +413,8 @@ export interface ProjectSnapshot {
   quickRuns: QuickRun[];
   /** Fast forward and pause, in memory per project. */
   flow: FlowState;
+  /** Live state of each issue source, by source id; present when the board has sources. */
+  issueSources?: Record<string, IssueSourceStatus>;
 }
 
 /** Why a card needs a human: it reached an inert column, asks questions, or its run failed. */
