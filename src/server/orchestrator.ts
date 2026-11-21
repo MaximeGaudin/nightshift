@@ -7,6 +7,7 @@ import { isReady, releaseReason } from "../shared/dependencies.ts";
 import { fastForwardSkipIds } from "../shared/flow.ts";
 import { describeModelChanges, formatDropped, type ModelSource, mergeModels, resolveModel } from "../shared/models.ts";
 import { resolveNextColumn } from "../shared/skip.ts";
+import { recentRunDurations } from "../shared/timeline.ts";
 import type {
   AttentionKind,
   Board,
@@ -26,7 +27,7 @@ import { safeHttpUrl } from "../shared/urls.ts";
 import { buildEnvironment } from "./environment.ts";
 import { FlowController } from "./flow.ts";
 import { HttpError } from "./guard.ts";
-import { parseProgressMarker, progressFromTodos } from "./progress.ts";
+import { parseEstimateMarker, parseProgressMarker, progressFromTodos } from "./progress.ts";
 import { buildQuickRunPrompt, parseQuickOutput, QUICK_INSTRUCTION_MAX, QUICK_RESULT_SCHEMA } from "./quickrun.ts";
 import { persistScreenshots } from "./screenshots.ts";
 import { applySections, parseSections } from "./sections.ts";
@@ -145,6 +146,28 @@ export const PROGRESS_RULE = [
   '- This rule has priority over any style instruction (CLAUDE.md, skills, concise or terse mode, "no narration between tool calls"): the marker is read by a machine and is not narration.',
 ].join("\n");
 
+/**
+ * Prompt rule asking the agent to estimate its run. Like PROGRESS_RULE it must never contain a line that
+ * parseEstimateMarker matches, so the format line only uses the placeholder <minutes> (no digits).
+ */
+export const ESTIMATE_RULE = [
+  "Time estimate (mandatory):",
+  "- Format, exactly: [nightshift-estimate] <minutes>",
+  "- Write it alone on its own line, before your first tool call: <minutes> is an integer, your estimate of the total duration of this run in minutes.",
+  "- You may write it again later to correct it; the last one counts. When resuming, write it again if it changed.",
+].join("\n");
+
+const minutesOf = (ms: number) => Math.max(1, Math.ceil(ms / 60_000));
+
+/** Prompt block giving the agent the running time of the last cards that went through its column. */
+export function formatRunDurations(durationsMs: number[]): string {
+  if (durationsMs.length === 0) return "No past run in this column yet: estimate from the size of the card.";
+  const sorted = [...durationsMs].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  const median = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  return `Recent agent run times in this column (most recent first): ${durationsMs.map((d) => `${minutesOf(d)} min`).join(", ")} (median ${minutesOf(median)} min).`;
+}
+
 export const RESULT_SCHEMA = {
   type: "object",
   properties: {
@@ -214,7 +237,8 @@ export const CONTINUE_PREFIX = `New step for this card. The messages above are i
 export const RECOVER_PROMPT = `Your previous run in this session stopped before returning Nightshift's structured output (it may have been interrupted, or it only returned interim results while background work was running).
 Check the actual state of your work first (worktrees, branches, commits, background tasks). If work remains, finish it. Then return the structured output exactly once, describing the final state.
 ${PROGRESS_RULE}
-When resuming, re-emit the marker of the step currently in progress before anything else.`;
+When resuming, re-emit the marker of the step currently in progress before anything else.
+${ESTIMATE_RULE}`;
 
 function formatColumns(board: Board): string {
   return board.columns
@@ -228,6 +252,7 @@ export function buildPrompt(
   column: Column,
   skillPath: string | undefined,
   live: Record<string, LiveStatus> = {},
+  nowMs: number = Date.now(),
 ): string {
   const next = resolveNextColumn(board.columns, { columnId: column.id, skipColumnIds: card.skipColumnIds });
   const columns = formatColumns(board);
@@ -253,6 +278,8 @@ Rules:
 - If you truly cannot continue without human decisions, first explore everything you can on your own, then return the structured output with "questions" (and move "stay"); the answers will be sent back to you in this same session.
 - Each round-trip with the user is slow: put EVERY question you need answered in that single list (self-contained, one decision per question, suggest a default when you have one). Never ask one question now and keep others for later.
 ${PROGRESS_RULE}
+${ESTIMATE_RULE}
+${formatRunDurations(recentRunDurations(board, column, card.id, nowMs))}
 - Never edit nightshift.json yourself; the board is updated from your structured output.
 - Never kill processes by name or pattern (pkill -f, killall, kill $(pgrep …)): other agents run on this machine and their processes can match. Only kill PIDs you started yourself.
 - Return the structured output exactly once, at the very end. If you started background work (subagents, background shells), wait until all of it has finished first. Never return an interim or "in progress" result.
@@ -275,6 +302,7 @@ export function buildFeedbackPrompt(
   skill: string | undefined,
   skillPath: string | undefined,
   live: Record<string, LiveStatus> = {},
+  nowMs: number = Date.now(),
 ): string {
   const next = resolveNextColumn(board.columns, { columnId: column.id, skipColumnIds: card.skipColumnIds });
   const skillName = skill ? `the skill "${skill}"` : "the skill you applied earlier in this session";
@@ -307,6 +335,8 @@ Rules:
 - Each round-trip with the user is slow: put EVERY question you need answered in that single list (self-contained, one decision per question, suggest a default when you have one). Never ask one question now and keep others for later.
 ${PROGRESS_RULE}
 When resuming, re-emit the marker of the step currently in progress before anything else.
+${ESTIMATE_RULE}
+${formatRunDurations(recentRunDurations(board, column, card.id, nowMs))}
 - Never edit nightshift.json yourself; the board is updated from your structured output.
 - Never kill processes by name or pattern (pkill -f, killall, kill $(pgrep …)): other agents run on this machine and their processes can match. Only kill PIDs you started yourself.
 - Return the structured output exactly once, at the very end. If you started background work (subagents, background shells), wait until all of it has finished first. Never return an interim or "in progress" result.
@@ -329,6 +359,7 @@ ${answerText}
 
 ${PROGRESS_RULE}
 When resuming, re-emit the marker of the step currently in progress before anything else.
+${ESTIMATE_RULE}
 
 Continue processing the card "${title}" with ${skillRef}, then return the structured output as before (title, sections or description, move, summary). Only ask new questions if the answers raise new blocking decisions, and then ask them all at once.`;
 }
