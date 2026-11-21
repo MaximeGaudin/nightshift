@@ -290,9 +290,9 @@ export class TeamclaudeQuotaPoller {
       if (this.url === null) return;
       this.stop();
       this.url = null;
-      const had = this.snap !== null;
       this.snap = null;
-      if (had) this.opts.onChange();
+      // The header goes back to the agents' own quota at once.
+      this.opts.onChange();
       return;
     }
     if (this.url === url && this.timer) return;
@@ -302,6 +302,8 @@ export class TeamclaudeQuotaPoller {
     const gen = this.generation;
     this.timer = setInterval(() => void this.poll(gen), this.opts.intervalMs);
     this.timer.unref?.();
+    // Switch the header to the pool at once (unknown until the first poll), not only after a successful poll.
+    this.opts.onChange();
     void this.poll(gen);
   }
 
