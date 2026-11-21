@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { TeamclaudeAction, TeamclaudeFailure, TeamclaudeWait } from "../shared/types.ts";
 import { api, useTeamclaudeWait } from "./api.ts";
 import { AppDialog } from "./components/app-dialog.tsx";
@@ -73,6 +73,10 @@ export function TeamclaudeWaitDialog() {
   const wait = useTeamclaudeWait();
   const [busy, setBusy] = useState(false);
   const [dismissed, setDismissed] = useState<string | null>(null);
+  // Once the wait is over, a later one shows again even with the same runs and reason.
+  useEffect(() => {
+    if (!wait) setDismissed(null);
+  }, [wait]);
   if (!wait || dismissed === signature(wait)) return null;
   const decide = (action: TeamclaudeAction) => {
     setBusy(true);
