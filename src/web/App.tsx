@@ -16,6 +16,7 @@ import { Alert } from "./components/ui/alert.tsx";
 import { Button } from "./components/ui/button.tsx";
 import { Kbd } from "./components/ui/kbd.tsx";
 import { Skeleton } from "./components/ui/skeleton.tsx";
+import { IssueSyncIndicator } from "./IssueSyncIndicator.tsx";
 import { resolveLocale, setLocale, useT } from "./i18n/index.ts";
 import { Logo } from "./Logo.tsx";
 import { cn } from "./lib/utils.ts";
@@ -345,6 +346,7 @@ export function App() {
             </span>
             {questions > 0 && <span className="questions-pill">{tn("board.app.questions", questions)}</span>}
           </div>
+          <IssueSyncIndicator sources={snap.board.issueSources ?? []} status={snap.issueSources} onOpen={() => setModal("settings")} />
           <QuotaIndicator />
           <nav className="flex items-center gap-0.5">
             <FlowButtons snap={snap} guard={guard} />

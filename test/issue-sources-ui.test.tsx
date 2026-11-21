@@ -3,7 +3,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { IssueSource } from "../src/shared/issues.ts";
 import type { Settings } from "../src/shared/types.ts";
 import {
-  confirmResync,
   draftFromDetect,
   draftFromSource,
   draftToInput,
@@ -12,6 +11,7 @@ import {
   saveDraft,
   toInput,
 } from "../src/web/IssueSourcesEditor.tsx";
+import { ResyncPreviewBody } from "../src/web/ResyncPreviewDialog.tsx";
 import { SettingsContent } from "../src/web/SettingsModal.tsx";
 
 const src: IssueSource = {
@@ -152,31 +152,20 @@ test("ui-resync", async () => {
   expect(resyncChanged(src, input({ repo: "o/other" }))).toBe(true);
   expect(resyncChanged(src, input({ provider: "gitea", baseUrl: "https://g.example.com" }))).toBe(true);
 
-  const calls: string[] = [];
-  const client = {
-    resyncIssues: async (project: string, id: string) => {
-      calls.push(`${project} ${id}`);
-      return {} as never;
-    },
-  };
-  const asked: string[] = [];
-  expect(
-    await confirmResync(
-      client,
-      "/p",
-      "src_a",
-      (m) => {
-        asked.push(m);
-        return false;
-      },
-      "sure?",
-    ),
-  ).toBe(false);
-  expect(calls).toEqual([]);
-  expect(await confirmResync(client, "/p", "src_a", () => true, "sure?")).toBe(true);
-  expect(calls).toEqual(["/p src_a"]);
-  expect(asked).toEqual(["sure?"]);
-
   const html = renderToStaticMarkup(<IssueSourcesEditor project="/p" sources={[src]} status={{}} canSync />);
   expect(html).toContain("issue-source-resync");
+});
+
+test("ui-resync-dialog-states", () => {
+  const loading = renderToStaticMarkup(<ResyncPreviewBody state={{ kind: "loading" }} />);
+  expect(loading).toContain("resync-preview-loading");
+  const preview = { sourceId: "src_a", matching: 5, toImport: 2, toUpdate: 1, toClose: 1, toPrune: 2, backlogNow: 6 };
+  const ready = renderToStaticMarkup(<ResyncPreviewBody state={{ kind: "ready", preview }} />);
+  expect(ready).toContain("5");
+  expect(ready).toContain("2");
+  expect(ready).toContain("3"); // removed = toClose + toPrune
+  expect(ready).toContain("6 → 5"); // before → after
+  const failed = renderToStaticMarkup(<ResyncPreviewBody state={{ kind: "failed", error: "bad token" }} />);
+  expect(failed).toContain("resync-preview-error");
+  expect(failed).toContain("bad token");
 });

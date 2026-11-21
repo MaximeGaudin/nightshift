@@ -5,7 +5,7 @@ import type { Server, ServerWebSocket } from "bun";
 import { diffAgentFeatures, validateAgentFeaturesStrict } from "../shared/agentFeatures.ts";
 import { dependencyCycle, describeCycle, releaseReason, resolveDependencyRefs, unmetDependencies } from "../shared/dependencies.ts";
 import { describeEffortChanges, diffEfforts, type EffortLevel, isValidEffort, validateEffortsStrict } from "../shared/effort.ts";
-import { effectiveBaseUrl, matchesLabels, parseGitRemote, providerInfo } from "../shared/issues.ts";
+import { effectiveBaseUrl, type IssueSyncResult, matchesLabels, parseGitRemote, providerInfo } from "../shared/issues.ts";
 import { describeModelChanges, diffModels, validateModelsStrict } from "../shared/models.ts";
 import { MAX_PENDING_IMAGES, pendingIds, resolvePending } from "../shared/pendingImages.ts";
 import { MERGE_METHODS, type MergeMethod, PULL_REQUESTS_SETTINGS, type PullRequestsSetting } from "../shared/pullRequests.ts";
@@ -697,11 +697,26 @@ export function startServer({ port, development, agents = true }: { port: number
           if (b.prune != null && typeof b.prune !== "boolean") throw new Error("prune must be a boolean");
           const prune = b.prune === true;
           if (prune && !sourceId) throw new Error("prune needs a sourceId");
+          let results: IssueSyncResult[];
           if (sourceId) {
             if (!p.board.issueSources?.some((s) => s.id === sourceId)) throw new HttpError(404, "Unknown issue source");
-            await orch.issues.syncSource(p, sourceId, { prune });
-          } else await orch.issues.syncAll(p);
-          return orch.snapshot(p);
+            results = [await orch.issues.syncSource(p, sourceId, { prune })];
+          } else results = await orch.issues.syncAll(p);
+          // The snapshot stays at the root of the answer; `results` is the outcome of each source synced.
+          return { ...orch.snapshot(p), results };
+        }),
+      },
+      "/api/issue-sources/preview": {
+        // Dry run of a resync: what it would change, without touching the board.
+        POST: h(async (b, url) => {
+          const p = project(b, url);
+          if (!orch.canRunAgents(p)) throw new HttpError(409, "This instance does not run this project's agents");
+          const sourceId = optString(b, "sourceId");
+          if (!sourceId) throw new Error("sourceId is required");
+          const src = p.board.issueSources?.find((s) => s.id === sourceId);
+          if (!src) throw new HttpError(404, "Unknown issue source");
+          if (!src.enabled) throw new Error("Issue source is not enabled");
+          return orch.issues.preview(p, sourceId);
         }),
       },
       "/api/issue-sources/detect": {

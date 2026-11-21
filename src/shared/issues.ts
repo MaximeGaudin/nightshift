@@ -114,6 +114,31 @@ export interface IssueSourceStatus {
   writeBackErrorAt?: string;
 }
 
+/** Outcome of one sync of one source. `skipped`: the sync did not run (no agents here, source gone or disabled). */
+export interface IssueSyncResult {
+  sourceId: string;
+  ok: boolean;
+  skipped?: true;
+  imported: number;
+  updated: number;
+  /** Backlog cards removed because their issue is closed or gone. */
+  deleted: number;
+  /** Backlog cards removed because they no longer match the source's filters (resync only). */
+  pruned: number;
+  error?: string;
+}
+
+/** Dry run of a resync: what it would change, and how many Backlog cards of the source remain. */
+export interface IssueSyncPreview {
+  sourceId: string;
+  matching: number;
+  toImport: number;
+  toUpdate: number;
+  toClose: number;
+  toPrune: number;
+  backlogNow: number;
+}
+
 const REPO_RE = /^[^/\s]+\/[^/\s]+$/;
 
 export function validRepo(repo: string): boolean {

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { AgentFeaturesOverride } from "../shared/agentFeatures.ts";
 import type { FlowState } from "../shared/flow.ts";
-import type { IssueSourceInput } from "../shared/issues.ts";
+import type { IssueSourceInput, IssueSyncPreview, IssueSyncResult } from "../shared/issues.ts";
 import type { PullRequestSettings } from "../shared/pullRequests.ts";
 import type { CardImageStored, CardImageUpload } from "../shared/screenshots.ts";
 import type {
@@ -127,10 +127,15 @@ export const api = {
   testIssueSource: (project: string, source: IssueSourceInput, token?: string) =>
     call<{ count: number }>("POST", "/api/issue-sources/test", { project, source, ...(token ? { token } : {}) }),
   syncIssues: (project: string, sourceId?: string) =>
-    call<ProjectSnapshot>("POST", "/api/issue-sources/sync", { project, ...(sourceId ? { sourceId } : {}) }),
+    call<ProjectSnapshot & { results: IssueSyncResult[] }>("POST", "/api/issue-sources/sync", {
+      project,
+      ...(sourceId ? { sourceId } : {}),
+    }),
   /** Resync: a sync of one source that also deletes its Backlog cards that no longer match its filters. */
   resyncIssues: (project: string, sourceId: string) =>
-    call<ProjectSnapshot>("POST", "/api/issue-sources/sync", { project, sourceId, prune: true }),
+    call<ProjectSnapshot & { results: IssueSyncResult[] }>("POST", "/api/issue-sources/sync", { project, sourceId, prune: true }),
+  /** Dry run of a resync: how many cards it would import, update and delete. */
+  previewResync: (project: string, sourceId: string) => call<IssueSyncPreview>("POST", "/api/issue-sources/preview", { project, sourceId }),
   detectIssueSource: (project: string) =>
     call<{ provider?: string; baseUrl?: string; repo?: string }>("GET", `/api/issue-sources/detect?${q(project)}`),
 };

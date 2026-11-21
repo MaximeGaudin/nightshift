@@ -491,3 +491,98 @@ test("resync-after-repo-change-skips-getIssue", async () => {
   expect(fake.calls.filter((c) => c.startsWith("get"))).toEqual([]);
   expect(backlog(p).map((c) => c.external?.externalId)).toEqual(["b1"]);
 });
+
+// ---- results and preview ----------------------------------------------------
+
+/** Board with: #1 up to date, #2 upstream-edited, #3 closed upstream, #4 out of filter (#2 and #5 new/changed upstream). */
+async function resultsBoard() {
+  const ctx = setup([{ labels: ["a"] }]);
+  fake.issues.set("o/r", [
+    issue(1, { labels: ["a"] }),
+    issue(2, { labels: ["a"] }),
+    issue(3, { labels: ["a"] }),
+    issue(4, { labels: ["a"] }),
+  ]);
+  await ctx.sync.syncAll(ctx.p);
+  fake.issues.set("o/r", [
+    issue(1, { labels: ["a"] }),
+    issue(2, { labels: ["a"], updatedAt: "2026-02-01T00:00:00Z" }),
+    issue(3, { labels: ["a"], state: "closed" }),
+    issue(4, { labels: ["b"] }),
+    issue(5, { labels: ["a"] }),
+  ]);
+  return ctx;
+}
+
+test("sync-result-counts", async () => {
+  const { p, sync } = await resultsBoard();
+  // A resync prunes by filter before looking issues up: the closed #3 counts as pruned, with the out-of-filter #4.
+  const r = await sync.syncSource(p, "src_0", { prune: true });
+  expect(r).toEqual({ sourceId: "src_0", ok: true, imported: 1, updated: 1, deleted: 0, pruned: 2 });
+  expect((await sync.syncAll(p))[0]).toEqual({ sourceId: "src_0", ok: true, imported: 0, updated: 0, deleted: 0, pruned: 0 });
+});
+
+test("sync-result-closed-upstream", async () => {
+  const { p, sync } = await resultsBoard();
+  // A plain sync never prunes: #3 is deleted because its issue is closed, #4 stays.
+  const r = await sync.syncSource(p, "src_0");
+  expect(r).toEqual({ sourceId: "src_0", ok: true, imported: 1, updated: 1, deleted: 1, pruned: 0 });
+});
+
+test("sync-result-error", async () => {
+  const { p, sync } = setup();
+  fake.fail = new Error("boom");
+  const r = await sync.syncSource(p, "src_0");
+  expect(r.ok).toBe(false);
+  expect(r.error).toBe("boom");
+  expect(sync.status(p)?.src_0?.lastError).toBe("boom");
+});
+
+test("sync-result-skipped", async () => {
+  const { p } = setup([{ enabled: false }]);
+  const sync = new IssueSync({ canRun: () => false, onState: () => {}, purge: () => {} });
+  expect((await sync.syncSource(p, "src_0")).skipped).toBe(true);
+  expect(await sync.syncAll(p)).toEqual([]);
+});
+
+test("sync-result-queued", async () => {
+  const { p, sync } = setup([{ labels: ["a"] }]);
+  fake.issues.set("o/r", [issue(1, { labels: ["a"] }), issue(2, { labels: ["a"] })]);
+  await sync.syncAll(p);
+  let release = () => {};
+  fake.gate = new Promise<void>((r) => {
+    release = r;
+  });
+  const first = sync.syncSource(p, "src_0");
+  await flush();
+  p.mutate((b) => {
+    const s = b.issueSources?.[0];
+    if (s) s.labels = ["b"];
+  });
+  const second = sync.syncSource(p, "src_0", { prune: true });
+  fake.gate = undefined;
+  release();
+  expect((await first).pruned).toBe(0);
+  expect((await second).pruned).toBe(2);
+});
+
+test("preview-matches-resync", async () => {
+  const { p, sync } = await resultsBoard();
+  const pre = await sync.preview(p, "src_0");
+  expect(pre).toEqual({ sourceId: "src_0", matching: 3, toImport: 1, toUpdate: 1, toClose: 0, toPrune: 2, backlogNow: 4 });
+  const r = await sync.syncSource(p, "src_0", { prune: true });
+  expect([r.imported, r.updated, r.deleted, r.pruned]).toEqual([pre.toImport, pre.toUpdate, pre.toClose, pre.toPrune]);
+  expect(backlog(p).length).toBe(pre.matching);
+});
+
+test("preview-no-mutation", async () => {
+  const { p, sync } = await resultsBoard();
+  const before = JSON.stringify(p.board);
+  const statusBefore = JSON.stringify(sync.status(p));
+  await sync.preview(p, "src_0");
+  expect(JSON.stringify(p.board)).toBe(before);
+  expect(JSON.stringify(sync.status(p))).toBe(statusBefore);
+  fake.fail = new Error("nope");
+  await expect(sync.preview(p, "src_0")).rejects.toThrow("nope");
+  expect(sync.status(p)?.src_0?.lastError).toBeUndefined();
+});

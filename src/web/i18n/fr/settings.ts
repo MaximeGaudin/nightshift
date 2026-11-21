@@ -100,10 +100,18 @@ export const settings: Record<keyof typeof enSettings, string> = {
   "settings.issues.sync": "Synchroniser",
   "settings.issues.syncing": "Synchronisation…",
   "settings.issues.resync": "Resynchroniser",
-  "settings.issues.resyncConfirm":
-    "Resynchroniser {repo} ? Les cartes du Backlog de cette source qui ne correspondent plus à ses filtres seront supprimées.",
-  "settings.issues.resyncAfterSave":
-    "Filtres modifiés. Resynchroniser {repo} maintenant ? Les cartes du Backlog qui ne correspondent plus seront supprimées.",
+  "settings.issues.resyncPreviewTitle": "Resynchroniser {repo}",
+  "settings.issues.resyncPreviewLoading": "Chargement de l'aperçu…",
+  "settings.issues.resyncPreviewSummary":
+    "{matching} ticket(s) ouvert(s) correspondent aux filtres. Après la resynchronisation : {imported} importée(s), {updated} mise(s) à jour, {removed} supprimée(s) du Backlog (Backlog : {before} → {after}).",
+  "settings.issues.resyncPreviewFailed": "Aperçu en échec : {error}",
+  "settings.issues.resyncPreviewApprox": "Les nombres sont indicatifs : la resynchronisation relit les tickets.",
+  "settings.issues.resyncConfirmButton": "Resynchroniser",
+  "settings.issues.resyncCancel": "Annuler",
+  "settings.issues.syncDone": "{repo} synchronisé : {imported} importée(s), {updated} mise(s) à jour, {removed} supprimée(s).",
+  "settings.issues.syncUpToDate": "{repo} est à jour.",
+  "settings.issues.syncFailed": "Synchronisation de {repo} en échec : {error}",
+  "settings.issues.resyncAfterSave": "Filtres modifiés. Resynchronisez pour supprimer les cartes du Backlog qui ne correspondent plus.",
   "settings.issues.edit": "Modifier",
   "settings.issues.remove": "Supprimer",
   "settings.issues.removeConfirm": "Supprimer la source de tickets {repo} ? Ses cartes restent sur le tableau.",

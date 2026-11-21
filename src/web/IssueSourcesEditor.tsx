@@ -22,7 +22,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Switch } from "./components/ui/switch.tsx";
 import { useT } from "./i18n/index.ts";
 import { ProviderIcon } from "./icons.tsx";
-import { notifyError } from "./notify.ts";
+import { notifyError, notifySyncResults } from "./notify.ts";
+import { ResyncPreviewDialog } from "./ResyncPreviewDialog.tsx";
 import { timeAgo } from "./ui.tsx";
 
 /** Form state of a source being added or edited. `labels` is the comma separated text; `token` is write-only. */
@@ -118,17 +119,15 @@ export function resyncChanged(old: IssueSource | undefined, input: IssueSourceIn
   );
 }
 
-/** Asks with `message`, then resyncs the source only when the user confirms. Returns whether it resynced. */
-export async function confirmResync(
-  client: Pick<typeof api, "resyncIssues">,
+/** Runs a manual sync (`prune`: resync) and shows one toast per source with its outcome. Returns whether it ran. */
+export async function syncAndNotify(
+  client: Pick<typeof api, "syncIssues" | "resyncIssues">,
   project: string,
-  sourceId: string,
-  ask: (message: string) => boolean,
-  message: string,
-): Promise<boolean> {
-  if (!ask(message)) return false;
-  await client.resyncIssues(project, sourceId);
-  return true;
+  sources: Pick<IssueSource, "id" | "repo">[],
+  { sourceId, prune = false }: { sourceId?: string; prune?: boolean } = {},
+): Promise<void> {
+  const answer = prune && sourceId ? await client.resyncIssues(project, sourceId) : await client.syncIssues(project, sourceId);
+  notifySyncResults(answer.results ?? [], sources);
 }
 
 /**
@@ -166,6 +165,8 @@ export function IssueSourcesEditor({
   const [draft, setDraft] = useState<SourceDraft | null>(initialDraft ?? null);
   const [busy, setBusy] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; text: string } | null>(null);
+  /** Source whose resync preview dialog is open; `afterSave` when it was offered after changing the filters. */
+  const [resyncTarget, setResyncTarget] = useState<{ sourceId: string; repo: string; afterSave: boolean } | null>(null);
 
   const run = async (fn: () => Promise<unknown>) => {
     setBusy(true);
@@ -194,8 +195,7 @@ export function IssueSourcesEditor({
       const old = draft.id ? sources.find((s) => s.id === draft.id) : undefined;
       // Changed filters or target: offer to drop the Backlog cards that no longer match (else the normal sync runs).
       if (old && canSync && draft.enabled && resyncChanged(old, draftToInput(draft))) {
-        const repo = draft.repo.trim();
-        await confirmResync(api, project, old.id, confirm, t("settings.issues.resyncAfterSave", { repo }));
+        setResyncTarget({ sourceId: old.id, repo: draft.repo.trim(), afterSave: true });
       }
     });
 
@@ -235,7 +235,7 @@ export function IssueSourcesEditor({
               size="sm"
               variant="outline"
               disabled={!canSync || busy}
-              onClick={() => run(() => api.syncIssues(project))}
+              onClick={() => run(() => syncAndNotify(api, project, sources))}
             >
               {t("settings.issues.syncAll")}
             </Button>
@@ -271,7 +271,7 @@ export function IssueSourcesEditor({
                   size="sm"
                   variant="ghost"
                   disabled={!canSync || busy || !s.enabled}
-                  onClick={() => run(() => api.syncIssues(project, s.id))}
+                  onClick={() => run(() => syncAndNotify(api, project, sources, { sourceId: s.id }))}
                 >
                   {st?.syncing ? t("settings.issues.syncing") : t("settings.issues.sync")}
                 </Button>
@@ -281,9 +281,7 @@ export function IssueSourcesEditor({
                   variant="ghost"
                   className="issue-source-resync"
                   disabled={!canSync || busy || !s.enabled}
-                  onClick={() =>
-                    run(() => confirmResync(api, project, s.id, confirm, t("settings.issues.resyncConfirm", { repo: s.repo })))
-                  }
+                  onClick={() => setResyncTarget({ sourceId: s.id, repo: s.repo, afterSave: false })}
                 >
                   {t("settings.issues.resync")}
                 </Button>
@@ -453,6 +451,20 @@ export function IssueSourcesEditor({
             </Button>
           </div>
         </div>
+      )}
+      {resyncTarget && (
+        <ResyncPreviewDialog
+          project={project}
+          sourceId={resyncTarget.sourceId}
+          repo={resyncTarget.repo}
+          description={resyncTarget.afterSave ? t("settings.issues.resyncAfterSave") : undefined}
+          onClose={() => setResyncTarget(null)}
+          onConfirm={() => {
+            const target = resyncTarget;
+            setResyncTarget(null);
+            void run(() => syncAndNotify(api, project, sources, { sourceId: target.sourceId, prune: true }));
+          }}
+        />
       )}
     </div>
   );
