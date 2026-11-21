@@ -169,3 +169,98 @@ export function quotaFromSummary(json: unknown, at: string): QuotaSnapshot | nul
   if (Array.isArray(json.accounts)) snap.accounts = json.accounts.filter((a) => !(isObject(a) && a.disabled === true)).length;
   return snap;
 }
+
+/** How a launch held by the gate goes on. */
+export type GateOutcome =
+  | { mode: "proxy"; env: ProxyEnv } // a retry reached the proxy
+  | { mode: "direct" } // launch without teamclaude
+  | { mode: "cancel" } // the run fails
+  | { mode: "aborted" }; // the run was stopped while waiting (card moved, cancelled, shutdown)
+
+interface Pending {
+  entry: TeamclaudeWaitEntry;
+  resolve: (o: GateOutcome) => void;
+}
+
+/**
+ * Holds the agent launches that could not reach teamclaude until a human chooses what to do. One instance per
+ * orchestrator. Invariant: an entry leaves `pending` before its promise is resolved, and is resolved once.
+ */
+export class ProxyGate {
+  private pending: Pending[] = [];
+  private failure: TeamclaudeFailure | null = null;
+  private retrying = false;
+
+  constructor(
+    private readonly opts: {
+      /** Called after every change, with the projects whose waiting cards changed. */
+      onChange: (projects: Set<string>) => void;
+      /** What a retry runs: the same check as a launch. */
+      prepare: () => Promise<{ ok: true; env: ProxyEnv } | { ok: false; failure: TeamclaudeFailure }>;
+    },
+  ) {}
+
+  state(): TeamclaudeWait | null {
+    if (this.pending.length === 0 || !this.failure) return null;
+    return { failure: this.failure, entries: this.pending.map((p) => p.entry), retrying: this.retrying };
+  }
+
+  /** Ids of this project's cards waiting for the proxy. */
+  waitingCards(project: string): string[] {
+    return this.pending.filter((p) => p.entry.project === project && p.entry.cardId).map((p) => p.entry.cardId as string);
+  }
+
+  get size(): number {
+    return this.pending.length;
+  }
+
+  /** Holds a launch. `abort` removes it (resolving "aborted"); it does nothing once the entry is resolved. */
+  wait(entry: TeamclaudeWaitEntry, failure: TeamclaudeFailure): { promise: Promise<GateOutcome>; abort: () => void } {
+    let pending!: Pending;
+    const promise = new Promise<GateOutcome>((resolve) => {
+      pending = { entry, resolve };
+    });
+    this.pending.push(pending);
+    this.failure = failure;
+    this.opts.onChange(new Set([entry.project]));
+    return { promise, abort: () => this.settle([pending], { mode: "aborted" }) };
+  }
+
+  /** Applies a human choice. Ignored while a retry is in progress. Resolves to the state after it. */
+  async decide(action: TeamclaudeAction): Promise<TeamclaudeWait | null> {
+    if (this.retrying || this.pending.length === 0) return this.state();
+    if (action === "direct" || action === "cancel") {
+      this.settle([...this.pending], { mode: action });
+      return this.state();
+    }
+    this.retrying = true;
+    this.opts.onChange(new Set());
+    let r: Awaited<ReturnType<typeof this.opts.prepare>>;
+    try {
+      r = await this.opts.prepare();
+    } finally {
+      this.retrying = false;
+    }
+    // Entries that joined during the retry go on too; the ones aborted meanwhile are already gone.
+    if (r.ok) this.settle([...this.pending], { mode: "proxy", env: r.env });
+    else {
+      this.failure = r.failure;
+      this.opts.onChange(new Set());
+    }
+    return this.state();
+  }
+
+  /** Lets every waiting launch go on with `outcome` (the option was turned off, for instance). */
+  releaseAll(outcome: GateOutcome) {
+    if (this.pending.length > 0) this.settle([...this.pending], outcome);
+  }
+
+  private settle(list: Pending[], outcome: GateOutcome) {
+    const taken = list.filter((p) => this.pending.includes(p));
+    if (taken.length === 0) return;
+    this.pending = this.pending.filter((p) => !taken.includes(p));
+    if (this.pending.length === 0) this.failure = null;
+    this.opts.onChange(new Set(taken.map((p) => p.entry.project)));
+    for (const p of taken) p.resolve(outcome);
+  }
+}

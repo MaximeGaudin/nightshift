@@ -20,6 +20,9 @@ import type {
   RunProgress,
   RunStatus,
   ServerEvent,
+  TeamclaudeAction,
+  TeamclaudeWait,
+  TeamclaudeWaitEntry,
 } from "../shared/types.ts";
 import { canSendFeedback, cardRef, columnMaxParallel, isDoneColumn } from "../shared/types.ts";
 import { safeHttpUrl } from "../shared/urls.ts";
@@ -34,6 +37,7 @@ import { contextTokensOf, decideCarry } from "./sessionCarry.ts";
 import { getSettings, legacyMaxParallel, NIGHTSHIFT_HOME, onSettingsChange, rememberProject } from "./settings.ts";
 import { findSkill } from "./skills.ts";
 import { isRaw, needsRun, newId, Project, type Raw } from "./store.ts";
+import { applyProxyEnv, ProxyGate, prepareProxyEnv } from "./teamclaude.ts";
 import { copyTemplateSkills } from "./templates.ts";
 import { recordRateLimit } from "./usage.ts";
 
@@ -78,6 +82,8 @@ interface Runner {
   markerSeen?: boolean;
   /** A TodoWrite was seen in the current process: tool activity no longer overwrites it. */
   todoSeen?: boolean;
+  /** Set while the launch waits in the teamclaude gate: removes it from there. */
+  abortWait?: () => void;
 }
 
 /** Where a run writes its log and progress, and how it is launched: the card path and the quick-run path differ only here. */
@@ -92,6 +98,8 @@ interface RunTarget {
   setProgress(v: { step: number; total: number; label: string }, source: RunProgress["source"]): void;
   /** First log line, once the model and permission mode are known. */
   startMessage(model: string | undefined, permissionMode: string, source: ModelSource): string;
+  /** How the run is listed while it waits for the teamclaude proxy. */
+  waitEntry: TeamclaudeWaitEntry;
 }
 
 /** A skill launched from the command palette: in memory only, never written to nightshift.json. */
@@ -399,9 +407,23 @@ export class Orchestrator {
   /** False for a test instance (`--no-agents`): it shows and edits boards but never runs agents nor takes locks. */
   readonly agents: boolean;
 
+  /** Agent launches held while the teamclaude proxy is unreachable, until a human chooses. */
+  private readonly gate = new ProxyGate({
+    onChange: (projects) => {
+      this.broadcast({ type: "teamclaude", wait: this.gate.state() });
+      for (const path of projects) {
+        const p = this.projects.get(path);
+        if (p) this.broadcast({ type: "board", project: p.path, snapshot: this.snapshot(p) });
+      }
+    },
+    prepare: () => prepareProxyEnv(getSettings().teamclaudeUrl),
+  });
+
   constructor({ agents = true }: { agents?: boolean } = {}) {
     this.agents = agents;
     onSettingsChange((settings) => {
+      // Turning teamclaude off while launches wait for it lets them go on directly.
+      if (!settings.teamclaudeEnabled) this.gate.releaseAll({ mode: "direct" });
       this.broadcast({ type: "settings", settings });
       this.scheduleTick();
     });
@@ -548,7 +570,7 @@ export class Orchestrator {
           ...(q.status === "running" && q.progress ? { progress: q.progress } : {}),
         })),
       flow: this.flow.get(p),
-      proxyWaiting: [],
+      proxyWaiting: this.gate.waitingCards(p.path),
       ...(lockedBy ? { lockedBy } : {}),
       ...(this.agents ? {} : { agentsDisabled: true }),
     };
@@ -747,6 +769,7 @@ export class Orchestrator {
 
   private kill(job: Runner) {
     job.cancelled = true;
+    job.abortWait?.();
     try {
       job.proc?.kill("SIGTERM");
       setTimeout(() => {
@@ -847,6 +870,7 @@ export class Orchestrator {
         } catch {}
       },
       setProgress: (v, source) => this.setProgress(q, v, source),
+      waitEntry: { project: q.project.path, quickRunId: q.id, title: q.skill },
       startMessage: (model, permissionMode, source) =>
         `Starting quick run of skill "${q.skill}" (permission mode: ${permissionMode}, model: ${modelLabel(model, source)}).`,
     };
@@ -1132,6 +1156,7 @@ export class Orchestrator {
       modelSource: resolved.source,
       log: (kind, text) => this.log(p, card.id, kind, text),
       setProgress: (v, source) => this.setProgress(job, v, source),
+      waitEntry: { project: p.path, cardId: card.id, ref: cardRef(fresh), title: fresh.title },
       startMessage: (model, permissionMode, source) =>
         `${verb} ${job.skill ? `skill "${job.skill}"` : "session"} in "${column.name}" (permission mode: ${permissionMode}, model: ${modelLabel(model, source)}).`,
     };
@@ -1172,12 +1197,23 @@ export class Orchestrator {
     ];
     target.log("info", target.startMessage(model, settings.permissionMode, target.modelSource));
 
+    let env: Record<string, string | undefined> = process.env;
+    if (settings.teamclaudeEnabled) {
+      const r = await this.teamclaudeEnv(job, target, settings.teamclaudeUrl);
+      if ("startError" in r || "aborted" in r) {
+        return "startError" in r ? r : { result: null, stderr: "", exit: "cancelled while waiting for teamclaude" };
+      }
+      env = r.env;
+    }
+    // The run may have been stopped while it waited: never launch claude after that.
+    if (job.cancelled) return { result: null, stderr: "", exit: "cancelled before start" };
+
     let result: StreamEvent | null = null;
     let stderr = "";
     try {
       const proc = Bun.spawn(args, {
         cwd: p.path,
-        env: process.env,
+        env,
         stdout: "pipe",
         stderr: "pipe",
         stdin: new TextEncoder().encode(prompt),
@@ -1213,6 +1249,50 @@ export class Orchestrator {
     } catch (e) {
       return { startError: `Could not start "${settings.claudePath}": ${e instanceof Error ? e.message : String(e)}` };
     }
+  }
+
+  /**
+   * The environment of a launch through teamclaude. When the proxy cannot be reached, the launch waits in the gate
+   * until a human chooses: retry (proxy env), launch directly, or cancel (start error). A run stopped meanwhile is aborted.
+   */
+  private async teamclaudeEnv(
+    job: Runner,
+    target: RunTarget,
+    url: string,
+  ): Promise<{ env: Record<string, string | undefined> } | { startError: string } | { aborted: true }> {
+    const first = await prepareProxyEnv(url);
+    if (job.cancelled) return { aborted: true };
+    if (first.ok) {
+      target.log("info", `Running via teamclaude (${url}).`);
+      return { env: applyProxyEnv(process.env, first.env) };
+    }
+    target.log("info", "The teamclaude proxy cannot be reached: waiting for a choice in the board.");
+    const { promise, abort } = this.gate.wait(target.waitEntry, first.failure);
+    job.abortWait = abort;
+    let outcome: Awaited<typeof promise>;
+    try {
+      outcome = await promise;
+    } finally {
+      job.abortWait = undefined;
+    }
+    if (outcome.mode === "aborted" || job.cancelled) return { aborted: true };
+    if (outcome.mode === "cancel") return { startError: `teamclaude proxy unreachable at ${getSettings().teamclaudeUrl}` };
+    if (outcome.mode === "direct") {
+      target.log("info", "Running without teamclaude (user choice).");
+      return { env: process.env };
+    }
+    target.log("info", `Running via teamclaude (${getSettings().teamclaudeUrl}).`);
+    return { env: applyProxyEnv(process.env, outcome.env) };
+  }
+
+  /** Runs held for the teamclaude proxy, or null. */
+  teamclaudeWait(): TeamclaudeWait | null {
+    return this.gate.state();
+  }
+
+  /** Applies a human choice to the runs held for the teamclaude proxy. */
+  teamclaudeDecide(action: TeamclaudeAction): Promise<TeamclaudeWait | null> {
+    return this.gate.decide(action);
   }
 
   private handleEvent(job: Runner, target: RunTarget, ev: StreamEvent) {
