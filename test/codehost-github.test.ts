@@ -43,6 +43,33 @@ test("create, find and update a PR, bodies through stdin", async () => {
   expect(fake.state().prs[0]).toMatchObject({ title: "T2", body: "new" });
 });
 
+test("draft PRs: created with --draft, marked ready, converted back", async () => {
+  const saved = fake.state();
+  const url = await github.createPr(cwd, { base: "main", head: "nightshift/d1", title: "T", body: "b", draft: true });
+  expect(fake.calls().findLast((c) => c.args[1] === "create")?.args).toEqual([
+    "pr",
+    "create",
+    "--base",
+    "main",
+    "--head",
+    "nightshift/d1",
+    "--title",
+    "T",
+    "--body-file",
+    "-",
+    "--draft",
+  ]);
+  expect((await github.findPr(cwd, "nightshift/d1"))?.isDraft).toBe(true);
+  await github.markReady(cwd, url);
+  expect(fake.calls().at(-1)?.args).toEqual(["pr", "ready", url]);
+  expect((await github.prState(cwd, url))?.isDraft).toBe(false);
+  await github.markDraft(cwd, url);
+  expect(fake.calls().at(-1)?.args).toEqual(["pr", "ready", url, "--undo"]);
+  expect((await github.prState(cwd, url))?.isDraft).toBe(true);
+  await expect(github.markReady(cwd, "https://github.com/o/r/pull/99")).rejects.toBeInstanceOf(CodeHostError);
+  fake.setState(saved);
+});
+
 test("checks: none, pending, fail, pass", async () => {
   const url = "https://github.com/o/r/pull/1";
   expect(await github.checks(cwd, url)).toEqual({ state: "none", failed: [] });

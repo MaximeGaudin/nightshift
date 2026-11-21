@@ -129,7 +129,7 @@ export class PrFlow {
       return existing;
     }
     const url = await host.createPr(p.path, { base: el.base, head: el.branch, title: card.title, body: buildPrBody(card) });
-    return (await host.prState(p.path, url)) ?? { url, number: 0, state: "OPEN", body: "", mergeable: "UNKNOWN", baseRefName: el.base };
+    return (await host.prState(p.path, url)) ?? { url, number: 0, state: "OPEN", body: "", mergeable: "UNKNOWN", baseRefName: el.base, isDraft: false };
   }
 
   /** After a successful review: push, create or update the PR, write `- PR:` under `## Review`. Never throws. */

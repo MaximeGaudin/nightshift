@@ -15,6 +15,8 @@ export interface PrInfo {
   /** Full sha of the merge commit, once merged. */
   mergeCommit?: string;
   baseRefName: string;
+  /** Draft pull request: GitHub refuses to merge it until it is marked ready. */
+  isDraft: boolean;
 }
 
 export interface FailedCheck {
@@ -36,8 +38,12 @@ export interface CodeHost {
   /** The pull request whose head is `head` (open first), or null when there is none. */
   findPr(cwd: string, head: string): Promise<PrInfo | null>;
   /** Opens a pull request and returns its URL. */
-  createPr(cwd: string, pr: { base: string; head: string; title: string; body: string }): Promise<string>;
+  createPr(cwd: string, pr: { base: string; head: string; title: string; body: string; draft?: boolean }): Promise<string>;
   updatePr(cwd: string, url: string, pr: { title: string; body: string }): Promise<void>;
+  /** Marks a draft pull request ready for review. */
+  markReady(cwd: string, url: string): Promise<void>;
+  /** Converts an open pull request back to a draft. */
+  markDraft(cwd: string, url: string): Promise<void>;
   /** The PR by URL (state, mergeability, merge commit). */
   prState(cwd: string, url: string): Promise<PrInfo | null>;
   checks(cwd: string, url: string): Promise<ChecksSummary>;

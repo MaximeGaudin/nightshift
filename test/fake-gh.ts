@@ -4,7 +4,8 @@
 //
 // State: { auth?: boolean, remote?: string, nextNumber?: number, mergeError?: string, runLogs?: { [id]: string },
 //          defaultChecks?, defaultMergeable? (given to created PRs),
-//          prs: [{ number, url, head, base, title, body, state, mergeable, checks?, autoMerge?, mergeCommit? }] }
+//          prs: [{ number, url, head, base, title, body, state, mergeable, checks?, autoMerge?, mergeCommit?, isDraft? }] }
+//        draftError? (makes `pr create --draft` fail)
 // `pr merge` on a mergeable PR simulates GitHub on the bare `remote`: the base ref moves to the head sha and,
 // with --delete-branch, the head ref is deleted.
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -22,12 +23,15 @@ interface FakePr {
   autoMerge?: boolean;
   mergeCommit?: string;
   method?: string;
+  isDraft?: boolean;
 }
 interface State {
   auth?: boolean;
   remote?: string;
   nextNumber?: number;
   mergeError?: string;
+  /** Makes `pr create --draft` fail with this message. */
+  draftError?: string;
   runLogs?: Record<string, string>;
   /** Given to each PR `pr create` opens. */
   defaultChecks?: FakePr["checks"];
@@ -88,12 +92,15 @@ if (cmd === "pr" && sub === "view") {
       mergeable: p.mergeable ?? "MERGEABLE",
       mergeCommit: p.mergeCommit ? { oid: p.mergeCommit } : null,
       baseRefName: p.base,
+      isDraft: p.isDraft === true,
     }),
   );
   process.exit(0);
 }
 if (cmd === "pr" && sub === "create") {
   const head = opt("--head") ?? "";
+  const draft = args.includes("--draft");
+  if (draft && state.draftError) fail(state.draftError);
   if (state.prs.some((p) => p.head === head && p.state === "OPEN")) fail(`a pull request for branch "${head}" already exists`);
   const number = state.nextNumber ?? state.prs.length + 1;
   state.nextNumber = number + 1;
@@ -106,6 +113,7 @@ if (cmd === "pr" && sub === "create") {
     title: opt("--title") ?? "",
     body: stdin ?? "",
     state: "OPEN",
+    ...(draft ? { isDraft: true } : {}),
     ...(state.defaultChecks ? { checks: state.defaultChecks } : {}),
     ...(state.defaultMergeable ? { mergeable: state.defaultMergeable } : {}),
   });
@@ -119,6 +127,14 @@ if (cmd === "pr" && sub === "edit") {
   if (stdin !== undefined) pr.body = stdin;
   save();
   out(pr.url);
+  process.exit(0);
+}
+if (cmd === "pr" && sub === "ready") {
+  const pr = find(args[2]) ?? fail(`could not find pull request ${args[2]}`);
+  if (pr.state !== "OPEN") fail(`Pull request ${pr.url} is closed`);
+  pr.isDraft = args.includes("--undo");
+  save();
+  out(pr.isDraft ? `Pull request o/r#${pr.number} is converted to "draft"` : `Pull request o/r#${pr.number} is marked as "ready for review"`);
   process.exit(0);
 }
 if (cmd === "pr" && sub === "checks") {
@@ -137,6 +153,7 @@ if (cmd === "pr" && sub === "merge") {
     process.exit(0);
   }
   if (state.mergeError) fail(state.mergeError);
+  if (pr.isDraft) fail(`Pull request o/r#${pr.number} is still a draft`);
   if (pr.state !== "OPEN") fail(`Pull request ${pr.url} is closed`);
   if (pr.mergeable === "CONFLICTING") fail(`Pull request o/r#${pr.number} is not mergeable: the merge commit cannot be cleanly created.`);
   pr.method = ["--merge", "--squash", "--rebase"].find((m) => args.includes(m))?.slice(2);
