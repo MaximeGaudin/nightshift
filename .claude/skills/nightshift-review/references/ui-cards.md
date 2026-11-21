@@ -20,6 +20,11 @@ A screen usually needs more than its front end: a backend, a database, other ser
 - Start the command and check that it works: the url answers (`curl -sf -o /dev/null`, 10 tries, one second apart), and so does each backend it started. Keep the stack running for the screenshots.
 - Return the checked `test` in the output, changed or not. A `test` that only starts a front-end dev server without its backend is never returned.
 
-## Refresh screenshots
+## Screenshots
 
-With the stack running, capture each screen already listed under `## Screenshots` with `npx --yes playwright screenshot --browser chromium --full-page --viewport-size=1280,800 "<url>" "<png>"`. Retry a file once on failure. Stop the stack after and leave the ports free. Do not stage the PNGs. Keep the same absolute paths in `## Screenshots`. When there is no `test.url`, leave screenshots unchanged.
+Review captures, once, with the stack already running for the `test` check, after its fixes. Implement leaves `## Screenshots` as `Deferred to review.` (or the list of screens, when it captured).
+
+- Screens: each one already listed under `## Screenshots`; else one PNG per screen the note or brief names, else `test.url` once as `01-home.png`. Save them in `<worktree>/nightshift-screenshots/`, numbered `01-slug.png`, `02-slug.png`.
+- Playwright: the project's own first: `<worktree>/node_modules/.bin/playwright`, else the board project's; `bunx playwright` when `bun.lock` exists and `package.json` declares `playwright` or `@playwright/test`; else `npx --yes playwright`, which resolves the package on every call. On a missing browser, retry once with `npx --yes playwright`.
+- Command: `playwright screenshot --browser chromium --full-page --viewport-size=1280,800 "<url>" "<png>"`. Retry a file once on failure, then write its error under `## Screenshots` and go on: a missed screenshot never fails the card.
+- Stop the stack after and leave the ports free. Do not stage the PNGs. Write `## Screenshots` as one markdown image per PNG, absolute path, alt text the screen name (`![Home](/abs/path/nightshift-screenshots/01-home.png)`). With no `test.url`, leave it unchanged.

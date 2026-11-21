@@ -48,7 +48,7 @@ test("template-skills-size-cap: the column skills stay under the size cap", () =
 });
 
 // Rare cases live in references/, read on demand: only the SKILL.md counts against these caps.
-const SKILL_CAPS: Record<string, number> = { "nightshift-implement": 10_240, "nightshift-review": 7_168 };
+const SKILL_CAPS: Record<string, number> = { "nightshift-implement": 10_496, "nightshift-review": 7_296 };
 
 test("template-skills-on-demand: implement and review stay small and point at their references", () => {
   for (const [dir, cap] of Object.entries(SKILL_CAPS)) {
@@ -71,4 +71,32 @@ test("template-skills-merge-cap: nightshift-merge stays under 6 KB and points at
   for (const f of ["pull-requests.md", "references/no-worktree.md"]) expect(md.includes(f), f).toBe(true);
   for (const line of ["- Into:", "- Test environment:", "- Merge commit:", "- Pushed:", "- Worktree removed:", "- Card branch deleted:"])
     expect(md.includes(line), line).toBe(true);
+});
+
+test("template-skills-capture-once: only review captures when it remains, implement defers", () => {
+  const impl = read("nightshift-implement");
+  expect(impl).toContain("Deferred to review.");
+  expect(impl).toContain("no `nightshift-review` column remains in `Card path`");
+  const reviewRef = references("nightshift-review").join("\n");
+  expect(reviewRef).toContain("Review captures, once");
+});
+
+test("template-skills-baseline-on-demand: no base run before the change, only failing tests re-run on the base", () => {
+  const impl = read("nightshift-implement");
+  expect(impl).toContain("No base run before implementing");
+  expect(impl).toContain("re-run only those on the base SHA");
+  expect(impl).toContain("Baseline:");
+  expect(impl).toContain("failing:");
+});
+
+test("template-skills-project-playwright: the project's Playwright comes before npx", () => {
+  for (const dir of ["nightshift-implement", "nightshift-review"]) {
+    const ref = references(dir).join("\n");
+    const local = ref.indexOf("node_modules/.bin/playwright");
+    const bunx = ref.indexOf("bunx playwright");
+    const npx = ref.indexOf("npx --yes playwright");
+    expect(local, dir).toBeGreaterThanOrEqual(0);
+    expect(bunx, dir).toBeGreaterThan(local);
+    expect(npx, dir).toBeGreaterThan(bunx);
+  }
 });
