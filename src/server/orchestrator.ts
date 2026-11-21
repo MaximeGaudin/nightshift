@@ -3,9 +3,9 @@ import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Subprocess } from "bun";
+import { agentFeatureArgs, formatAgentFeatures, type ResolvedAgentFeatures, resolveAgentFeatures } from "../shared/agentFeatures.ts";
 import { isReady, releaseReason } from "../shared/dependencies.ts";
 import { fastForwardSkipIds } from "../shared/flow.ts";
-import { agentFeatureArgs, formatAgentFeatures, type ResolvedAgentFeatures, resolveAgentFeatures } from "../shared/agentFeatures.ts";
 import { describeModelChanges, formatDropped, type ModelSource, mergeModels, resolveModel } from "../shared/models.ts";
 import { resolveNextColumn } from "../shared/skip.ts";
 import type {

@@ -52,7 +52,11 @@ async function setup(columnFeatures?: object) {
     "/api/board",
     {
       project: dir,
-      columns: [backlog, { name: "Enrich", type: "skill", skill: "enrich", ...(columnFeatures ? { agentFeatures: columnFeatures } : {}) }, done],
+      columns: [
+        backlog,
+        { name: "Enrich", type: "skill", skill: "enrich", ...(columnFeatures ? { agentFeatures: columnFeatures } : {}) },
+        done,
+      ],
     },
     "PUT",
   );

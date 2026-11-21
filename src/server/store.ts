@@ -1,7 +1,7 @@
 import { copyFileSync, existsSync, type FSWatcher, readFileSync, statSync, watch } from "node:fs";
 import { basename, join } from "node:path";
-import { normalizeDependsOn, releaseTarget } from "../shared/dependencies.ts";
 import { sanitizeAgentFeatures } from "../shared/agentFeatures.ts";
+import { normalizeDependsOn, releaseTarget } from "../shared/dependencies.ts";
 import { sanitizeModels } from "../shared/models.ts";
 import { needsRun } from "../shared/needs-run.ts";
 import { normalizeSkipColumnIds, resolveNextColumn } from "../shared/skip.ts";
@@ -108,7 +108,19 @@ export function systemColumnsChanged(raw: unknown, board: Board): boolean {
   return JSON.stringify(rawCols) !== JSON.stringify(board.columns);
 }
 
-export const COLUMN_KEYS = ["id", "name", "type", "skill", "instructions", "model", "lockModel", "agentFeatures", "maxParallel", "emoji", "freshSession"];
+export const COLUMN_KEYS = [
+  "id",
+  "name",
+  "type",
+  "skill",
+  "instructions",
+  "model",
+  "lockModel",
+  "agentFeatures",
+  "maxParallel",
+  "emoji",
+  "freshSession",
+];
 const CARD_KEYS = [
   "id",
   "number",
@@ -218,7 +230,9 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
             ...(c.instructions ? { instructions: String(c.instructions) } : {}),
             ...(typeof c.model === "string" && c.model.trim() ? { model: c.model.trim() } : {}),
             ...(type === "skill" && c.lockModel === true ? { lockModel: true as const } : {}),
-            ...(type === "skill" && sanitizeAgentFeatures(c.agentFeatures) ? { agentFeatures: sanitizeAgentFeatures(c.agentFeatures) } : {}),
+            ...(type === "skill" && sanitizeAgentFeatures(c.agentFeatures)
+              ? { agentFeatures: sanitizeAgentFeatures(c.agentFeatures) }
+              : {}),
             ...(type === "skill" && (c.freshSession === true || c.freshSession === "auto") ? { freshSession: c.freshSession } : {}),
             ...(maxParallel !== undefined ? { maxParallel } : {}),
             ...(emoji !== undefined ? { emoji } : {}),

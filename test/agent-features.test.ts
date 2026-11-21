@@ -12,11 +12,27 @@ import { resolveLayered } from "../src/shared/layers.ts";
 const none = { agentFeatures: {} };
 
 test("resolveLayered: false and empty string win, order decides", () => {
-  expect(resolveLayered<boolean>([{ source: "column", value: false }, { source: "settings", value: true }], true)).toEqual({
+  expect(
+    resolveLayered<boolean>(
+      [
+        { source: "column", value: false },
+        { source: "settings", value: true },
+      ],
+      true,
+    ),
+  ).toEqual({
     value: false,
     source: "column",
   });
-  expect(resolveLayered<string>([{ source: "card", value: undefined }, { source: "settings", value: "" }], "x")).toEqual({
+  expect(
+    resolveLayered<string>(
+      [
+        { source: "card", value: undefined },
+        { source: "settings", value: "" },
+      ],
+      "x",
+    ),
+  ).toEqual({
     value: "",
     source: "settings",
   });
