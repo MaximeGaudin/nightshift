@@ -1,7 +1,7 @@
 // Deterministic merge tried before the nightshift-merge agent. The skill stays the reference of the behaviour:
 // this module only covers the mechanical path and falls back to the agent on anything unexpected.
 
-import { type ChildProcess, execFile, spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
@@ -77,8 +77,6 @@ export interface FastMergeInput {
   column: Column;
   /** Orchestrator.stopTest bound to the card. */
   stopTest: () => void;
-  /** Receives the test command's process, so cancelling the job reaches it. */
-  onProc?: (p: ChildProcess) => void;
   isCancelled: () => boolean;
   sleep?: (ms: number) => Promise<void>;
   now?: () => Date;
@@ -160,14 +158,13 @@ function runTestCommand(
   command: string,
   cwd: string,
   timeoutMs: number,
-  onProc?: (p: ChildProcess) => void,
+  isCancelled: () => boolean,
 ): Promise<{ code: number | null; output: string; timedOut: boolean }> {
   return new Promise((resolve) => {
     let output = "";
     let timedOut = false;
     let settled = false;
     const proc = spawn("sh", ["-c", command], { cwd, detached: true, stdio: ["ignore", "pipe", "pipe"] });
-    onProc?.(proc);
     const killGroup = () => {
       try {
         if (proc.pid) process.kill(-proc.pid, "SIGKILL");
@@ -183,10 +180,15 @@ function runTestCommand(
       timedOut = true;
       killGroup();
     }, timeoutMs);
+    // A cancelled job stops the whole test group.
+    const poll = setInterval(() => {
+      if (isCancelled()) killGroup();
+    }, 200);
     const done = (code: number | null) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      clearInterval(poll);
       killGroup();
       // Let the pipes drain; a leftover child holding them cannot block the merge.
       setTimeout(() => resolve({ code, output, timedOut }), 100);
@@ -406,7 +408,7 @@ export async function tryFastMerge(input: FastMergeInput): Promise<FastMergeOutc
         const kept = `the merge commit of ${base} (${short(mergedSha)}) stays on ${cardBranch}; ${base} was not changed by it`;
         if (mode === "test") {
           check();
-          const t = await runTestCommand(command, worktree, input.testTimeoutMs ?? TEST_TIMEOUT_MS, input.onProc);
+          const t = await runTestCommand(command, worktree, input.testTimeoutMs ?? TEST_TIMEOUT_MS, input.isCancelled);
           check();
           if (t.code !== 0) {
             const why = t.timedOut ? `timed out after ${Math.round((input.testTimeoutMs ?? TEST_TIMEOUT_MS) / 1000)} s` : `exit ${t.code}`;
