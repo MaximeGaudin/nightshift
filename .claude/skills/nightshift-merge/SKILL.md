@@ -11,9 +11,9 @@ Branch `nightshift/<card-id>`, worktree path on the `Worktree` line under `## Re
 - `Pull requests:` line in `<environment>`: read pull-requests.md first.
 - No `<fast-merge>` block in the prompt (fast path off, or a resumed card): read references/full-merge.md and follow it. Everything else below assumes the block.
 
-## Fast path stopped
+## Steps
 
-Nightshift tries the whole merge itself (lock, test environment stop, merge, tests, fast-forward, push, cleanup) and starts you only when it stopped. The prompt ends with:
+Nightshift tries the whole merge itself (lock, test environment stop, merge, tests, fast-forward, push, cleanup) and starts you only when it stopped. The prompt then ends with:
 
 ```
 <fast-merge>
@@ -24,14 +24,15 @@ State left: <what it left behind>
 </fast-merge>
 ```
 
-The lock is released and no merge is in progress. Read `Command`, `Error` and `State left`, then resume from there. Never touch the target without the lock: `mkdir .git/nightshift-merge.lock` (write `<card-id> <UTC time>` in `owner`; a lock older than 30 minutes or owned by this card is stale), and `rm -rf` it before every stop, success included.
-
-- `merge-base-into-card` (conflict) or `test` (failure): in the card worktree, `git merge --no-edit <target>` if no merge is in progress, then follow Conflicts. A merge commit of the base left on the card branch means only the tests and the fast-forward remain.
-- `State left` says a local merge is kept on the target and not pushed: the card is already in it, only the push remains.
-- `check-card`, `base-checkout`, `moved-base`, `upstream`, `push`, `read-result`, `check-commits`, `stop-test`, `lock`: a dirty checkout, a moved or diverged target, a rejected push or a missing field. Fix what the error names if it is safe (a push rejected because the remote moved: `git fetch`, merge it into the card branch, re-run the tests, push again once). Otherwise set `move` to `stay`, leave `questions` empty, write the command and the error under `## Merge`, and stop. A missing or unknown target: ask once (see Asking questions); refuse `nightshift/*`.
-- references/full-merge.md has the detail of any step you must do yourself.
-
-Then finish: tests on the combined code, `git merge --ff-only nightshift/<card-id>` from the target checkout, `git push <remote> <target>` (never `--force` or `--no-verify`; a target without upstream: `Pushed: skipped, no upstream`), then the cleanup: stop the card's test environment (`POST http://localhost:4545/api/cards/<card-id>/test/stop` with `{"project": "<board project>"}`, then only processes whose command line holds the worktree's name), `git worktree remove <path>`, `git branch -d nightshift/<card-id>`. Refuse the merge when the card changes `nightshift.json`.
+1. Read the block. The lock is released and no merge is in progress. Never touch the target without the lock: `mkdir .git/nightshift-merge.lock` (write `<card-id> <UTC time>` in `owner`; a lock older than 30 minutes or owned by this card is stale), and `rm -rf` it before every stop, success included.
+2. Resume from `Step`, `Command`, `Error` and `State left`:
+   - `merge-base-into-card` (conflict) or `test` (failure): in the card worktree, `git merge --no-edit <target>` if no merge is in progress, then follow Conflicts. A merge commit of the base left on the card branch means only the tests and the fast-forward remain.
+   - `State left` says a local merge is kept on the target and not pushed: the card is already in it, only the push remains.
+   - Any other step (a dirty checkout, a moved or diverged target, a rejected push, a missing field): fix what the error names if it is safe (a push rejected because the remote moved: `git fetch`, merge it into the card branch, re-run the tests, push again once). Otherwise set `move` to `stay`, leave `questions` empty, write the command and the error under `## Merge`, and stop. A missing or unknown target: ask once (see Asking questions); refuse `nightshift/*`.
+   - references/full-merge.md has the detail of any step you must do yourself.
+3. Finish: tests on the combined code, `git merge --ff-only nightshift/<card-id>` from the target checkout, `git push <remote> <target>` (never `--force` or `--no-verify`; a target without upstream: `Pushed: skipped, no upstream`). Refuse the merge when the card changes `nightshift.json`.
+4. Clean up: stop the card's test environment (`POST http://localhost:4545/api/cards/<card-id>/test/stop` with `{"project": "<board project>"}`, then only processes whose command line holds the worktree's name), `git worktree remove <path>`, `git branch -d nightshift/<card-id>`.
+5. Append `## Merge`, set `move` to `next`, release the lock.
 
 ## Conflicts
 
