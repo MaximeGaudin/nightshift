@@ -15,6 +15,7 @@
 // A card titled "rate-limit" emits a rate_limit_event (5 h 38 %, 7 d 88 %); "rate-limit-bad" emits a malformed one.
 // A card titled "tokens-<n>" reports n context tokens in its assistant usage; "usage-multi" reports several (see usageOf).
 // FAKE_UNKNOWN_SESSION in the prompt of a continuing run answers like claude for a session it does not have.
+// A card title containing FAKE_KEEP_DESC leaves the description alone; FAKE_SECTIONS adds a "Result" section instead.
 import { appendFileSync } from "node:fs";
 
 // Nightshift sends the prompt on stdin (never argv).
@@ -43,7 +44,7 @@ if (process.env.FAKE_ARGS_LOG) {
       argvHasCard: process.argv.some((a) => a.includes("<card")),
       argv: process.argv.slice(2),
       promptHasQuick: quick,
-      prompt: quick ? prompt : undefined,
+      prompt,
     })}\n`,
   );
 }
@@ -231,7 +232,11 @@ if (quick) {
     total_cost_usd: 0.01,
     structured_output: {
       title: `${title} ✓`,
-      description: "done by fake",
+      ...(title.includes("FAKE_KEEP_DESC")
+        ? {}
+        : title.includes("FAKE_SECTIONS")
+          ? { sections: [{ heading: "Result", content: "done by fake" }] }
+          : { description: "done by fake" }),
       move: "next",
       summary: "fake run",
       ...(title === "js-url" ? { test: { command: "echo hi", url: "javascript:alert(1)" } } : {}),

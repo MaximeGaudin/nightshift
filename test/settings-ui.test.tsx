@@ -7,6 +7,7 @@ const base: Settings = {
   claudePath: "claude",
   permissionMode: "auto",
   model: "",
+  effort: "",
   extraArgs: "",
   recentProjects: [],
   soundNotifications: false,

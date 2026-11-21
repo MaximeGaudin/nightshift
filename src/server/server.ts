@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import type { Server, ServerWebSocket } from "bun";
 import { dependencyCycle, describeCycle, releaseReason, resolveDependencyRefs, unmetDependencies } from "../shared/dependencies.ts";
+import { describeEffortChanges, diffEfforts, type EffortLevel, isValidEffort, validateEffortsStrict } from "../shared/effort.ts";
 import { describeModelChanges, diffModels, validateModelsStrict } from "../shared/models.ts";
 import { MAX_PENDING_IMAGES, pendingIds, resolvePending } from "../shared/pendingImages.ts";
 import { type CardImageStored, cardImageType } from "../shared/screenshots.ts";
@@ -312,6 +313,8 @@ export function startServer({ port, development, agents = true }: { port: number
                 const skill = field("skill");
                 const instructions = field("instructions")?.trim();
                 const model = field("model")?.trim();
+                const effort = field("effort")?.trim();
+                if (effort && !isValidEffort(effort)) throw new Error(`Column ${i + 1}: invalid effort ${JSON.stringify(effort)}`);
                 const type: ColumnType = c.type === "skill" ? "skill" : "inert";
                 const maxParallel = normalizeColumnParallel(type, c.maxParallel);
                 const emoji = normalizeColumnEmoji(c.emoji);
@@ -324,6 +327,7 @@ export function startServer({ port, development, agents = true }: { port: number
                   ...(instructions ? { instructions } : {}),
                   ...(model ? { model } : {}),
                   ...(type === "skill" && c.lockModel === true ? { lockModel: true as const } : {}),
+                  ...(type === "skill" && effort ? { effort: effort as EffortLevel } : {}),
                   ...(type === "skill" && (c.freshSession === true || c.freshSession === "auto") ? { freshSession: c.freshSession } : {}),
                   ...(maxParallel !== undefined ? { maxParallel } : {}),
                   ...(emoji !== undefined ? { emoji } : {}),
@@ -408,10 +412,13 @@ export function startServer({ port, development, agents = true }: { port: number
           const description = optString(b, "description");
           const skipInput = optSkipIds(b);
           const hasModels = b.models !== undefined;
+          const hasEfforts = b.efforts !== undefined;
           const dependsOnInput = optDependsOn(b);
           const draftInput = optDraft(b);
           const modelsCheck = validateModelsStrict(b.models);
           if (!modelsCheck.ok) throw new Error(modelsCheck.error);
+          const effortsCheck = validateEffortsStrict(b.efforts);
+          if (!effortsCheck.ok) throw new Error(effortsCheck.error);
           p.mutate((board) => {
             const card = p.card(req.params.id);
             if (!card) throw new HttpError(404, "Unknown card");
@@ -426,7 +433,7 @@ export function startServer({ port, development, agents = true }: { port: number
             if (
               title !== undefined ||
               description !== undefined ||
-              (skipInput === undefined && !hasModels && dependsOnInput === undefined && draftInput === undefined)
+              (skipInput === undefined && !hasModels && !hasEfforts && dependsOnInput === undefined && draftInput === undefined)
             )
               p.addHistory(card, "edited", "Edited by user");
             if (hasModels) {
@@ -434,6 +441,12 @@ export function startServer({ port, development, agents = true }: { port: number
               if (modelsCheck.models) card.models = modelsCheck.models;
               else delete card.models;
               if (changes.length > 0) p.addHistory(card, "edited", describeModelChanges(changes, "user"));
+            }
+            if (hasEfforts) {
+              const changes = diffEfforts(card.efforts, effortsCheck.efforts);
+              if (effortsCheck.efforts) card.efforts = effortsCheck.efforts;
+              else delete card.efforts;
+              if (changes.length > 0) p.addHistory(card, "edited", describeEffortChanges(changes, "user"));
             }
             if (skipInput !== undefined) {
               const skip = normalizeSkipColumnIds(board.columns, skipInput);

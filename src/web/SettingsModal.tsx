@@ -1,5 +1,6 @@
 import { TriangleAlert } from "lucide-react";
 import { type ReactNode, useState } from "react";
+import { EFFORT_LEVELS } from "../shared/effort.ts";
 import { type LanguageSetting, MAX_PARALLEL, type Settings, WORKTREE_POLICIES, type WorktreePolicy } from "../shared/types.ts";
 import { api } from "./api.ts";
 import { AppDialog } from "./components/app-dialog.tsx";
@@ -190,6 +191,22 @@ export function SettingsContent({
             onChange={(e) => onChange({ ...s, model: e.target.value })}
           />
         </Row>
+        <Row id="set-effort" label={t("settings.effort.label")} help={t("settings.effort.help")}>
+          <select
+            id="set-effort"
+            className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+            value={s.effort}
+            onChange={(e) => onChange({ ...s, effort: e.target.value as Settings["effort"] })}
+          >
+            <option value="">{t("settings.effort.economic")}</option>
+            <option value="inherit">{t("settings.effort.inherit")}</option>
+            {EFFORT_LEVELS.map((l) => (
+              <option key={l} value={l}>
+                {l}
+              </option>
+            ))}
+          </select>
+        </Row>
         <Row id="set-claude-path" label={t("settings.claudePath.label")}>
           <Input id="set-claude-path" value={s.claudePath} onChange={(e) => onChange({ ...s, claudePath: e.target.value })} />
         </Row>
@@ -247,6 +264,7 @@ const EDITABLE = [
   "claudePath",
   "permissionMode",
   "model",
+  "effort",
   "extraArgs",
   "soundNotifications",
   "language",
