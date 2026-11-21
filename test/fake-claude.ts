@@ -11,6 +11,7 @@
 // FAKE_QUICK_SLOW (sleeps ~5 s) or FAKE_QUICK_PROGRESS (emits a progress marker 1/2); otherwise success echoing it.
 // FAKE_EXTRA_OUTPUT, when set, is a JSON object merged into the structured output of card runs.
 // FAKE_ARGS_LOG, when set, receives one JSON line per run: { title, resumed, continuing, resumeId, model, ... }.
+// FAKE_ENV_LOG, when set, receives one JSON line per run: { title, HTTPS_PROXY, NODE_EXTRA_CA_CERTS, ANTHROPIC_BASE_URL }.
 // A card titled "rate-limit" emits a rate_limit_event (5 h 38 %, 7 d 88 %); "rate-limit-bad" emits a malformed one.
 // A card titled "tokens-<n>" reports n context tokens in its assistant usage; "usage-multi" reports several (see usageOf).
 // FAKE_UNKNOWN_SESSION in the prompt of a continuing run answers like claude for a session it does not have.
@@ -45,6 +46,10 @@ if (process.env.FAKE_ARGS_LOG) {
       prompt: quick ? prompt : undefined,
     })}\n`,
   );
+}
+if (process.env.FAKE_ENV_LOG) {
+  const { HTTPS_PROXY, NODE_EXTRA_CA_CERTS, ANTHROPIC_BASE_URL } = process.env;
+  appendFileSync(process.env.FAKE_ENV_LOG, `${JSON.stringify({ title, HTTPS_PROXY, NODE_EXTRA_CA_CERTS, ANTHROPIC_BASE_URL })}\n`);
 }
 const extra = process.env.FAKE_EXTRA_OUTPUT ? JSON.parse(process.env.FAKE_EXTRA_OUTPUT) : {};
 const emit = (o: unknown) => console.log(JSON.stringify(o));
