@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { economicEffort, mergeEfforts, resolveEffort, resolveQuickEffort, sanitizeEfforts, validateEffortsStrict } from "../src/shared/effort.ts";
+import {
+  economicEffort,
+  mergeEfforts,
+  resolveEffort,
+  resolveQuickEffort,
+  sanitizeEfforts,
+  validateEffortsStrict,
+} from "../src/shared/effort.ts";
 import type { Column } from "../src/shared/types.ts";
 
 const col = (over: Partial<Column> = {}): Column => ({ id: "c", name: "C", type: "skill", skill: "nightshift-merge", ...over });
@@ -7,7 +14,10 @@ const s = (effort: "" | "inherit" | "low" | "medium" | "high" | "xhigh" | "max" 
 
 describe("resolveEffort", () => {
   test("card > column > settings > default", () => {
-    expect(resolveEffort(col({ effort: "high" }), s("max"), { efforts: { "nightshift-merge": "xhigh" } })).toEqual({ effort: "xhigh", source: "card" });
+    expect(resolveEffort(col({ effort: "high" }), s("max"), { efforts: { "nightshift-merge": "xhigh" } })).toEqual({
+      effort: "xhigh",
+      source: "card",
+    });
     expect(resolveEffort(col({ effort: "high" }), s("max"))).toEqual({ effort: "high", source: "column" });
     expect(resolveEffort(col(), s("max"))).toEqual({ effort: "max", source: "settings" });
     expect(resolveEffort(col(), s())).toEqual({ effort: "low", source: "default" });

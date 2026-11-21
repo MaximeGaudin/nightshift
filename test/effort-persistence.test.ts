@@ -41,7 +41,11 @@ test("valid column effort kept on skill columns, dropped on inert ones", async (
   ]);
   expect(r.status).toBe(200);
   const cols: Column[] = (await snapshot()).board.columns;
-  const by = (n: string) => must(cols.find((c) => c.name === n), n);
+  const by = (n: string) =>
+    must(
+      cols.find((c) => c.name === n),
+      n,
+    );
   expect(by("A").effort).toBe("high");
   expect("effort" in by("B")).toBe(false);
   expect("effort" in by("C")).toBe(false);
@@ -53,10 +57,16 @@ test("card efforts: invalid PATCH 400, valid persisted, cleared with {}", async 
     expect((await patch(id, { efforts })).status).toBe(400);
   }
   expect((await patch(id, { efforts: { "nightshift-merge": "low" } })).status).toBe(200);
-  let card: Card = must((await snapshot()).board.cards.find((c: Card) => c.id === id), "card");
+  let card: Card = must(
+    (await snapshot()).board.cards.find((c: Card) => c.id === id),
+    "card",
+  );
   expect(card.efforts).toEqual({ "nightshift-merge": "low" });
   expect((await patch(id, { efforts: {} })).status).toBe(200);
-  card = must((await snapshot()).board.cards.find((c: Card) => c.id === id), "card");
+  card = must(
+    (await snapshot()).board.cards.find((c: Card) => c.id === id),
+    "card",
+  );
   expect("efforts" in card).toBe(false);
 });
 

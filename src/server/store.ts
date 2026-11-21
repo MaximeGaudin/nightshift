@@ -108,7 +108,19 @@ export function systemColumnsChanged(raw: unknown, board: Board): boolean {
   return JSON.stringify(rawCols) !== JSON.stringify(board.columns);
 }
 
-export const COLUMN_KEYS = ["id", "name", "type", "skill", "instructions", "model", "lockModel", "effort", "maxParallel", "emoji", "freshSession"];
+export const COLUMN_KEYS = [
+  "id",
+  "name",
+  "type",
+  "skill",
+  "instructions",
+  "model",
+  "lockModel",
+  "effort",
+  "maxParallel",
+  "emoji",
+  "freshSession",
+];
 const CARD_KEYS = [
   "id",
   "number",
@@ -218,7 +230,9 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
             ...(c.instructions ? { instructions: String(c.instructions) } : {}),
             ...(typeof c.model === "string" && c.model.trim() ? { model: c.model.trim() } : {}),
             ...(type === "skill" && c.lockModel === true ? { lockModel: true as const } : {}),
-            ...(type === "skill" && typeof c.effort === "string" && isValidEffort(c.effort) ? { effort: c.effort.trim() as EffortLevel } : {}),
+            ...(type === "skill" && typeof c.effort === "string" && isValidEffort(c.effort)
+              ? { effort: c.effort.trim() as EffortLevel }
+              : {}),
             ...(type === "skill" && (c.freshSession === true || c.freshSession === "auto") ? { freshSession: c.freshSession } : {}),
             ...(maxParallel !== undefined ? { maxParallel } : {}),
             ...(emoji !== undefined ? { emoji } : {}),

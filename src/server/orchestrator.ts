@@ -4,8 +4,17 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSyn
 import { join, resolve } from "node:path";
 import type { Subprocess } from "bun";
 import { isReady, releaseReason } from "../shared/dependencies.ts";
+import {
+  describeEffortChanges,
+  type EffortLevel,
+  type EffortSource,
+  effortLabel,
+  formatDroppedEffort,
+  mergeEfforts,
+  resolveEffort,
+  resolveQuickEffort,
+} from "../shared/effort.ts";
 import { fastForwardSkipIds } from "../shared/flow.ts";
-import { describeEffortChanges, type EffortLevel, type EffortSource, effortLabel, formatDroppedEffort, mergeEfforts, resolveEffort, resolveQuickEffort } from "../shared/effort.ts";
 import { describeModelChanges, formatDropped, type ModelSource, mergeModels, resolveModel } from "../shared/models.ts";
 import { resolveNextColumn } from "../shared/skip.ts";
 import type {
@@ -94,7 +103,13 @@ interface RunTarget {
   log(kind: LogLine["kind"], text: string): void;
   setProgress(v: { step: number; total: number; label: string }, source: RunProgress["source"]): void;
   /** First log line, once the model and permission mode are known. */
-  startMessage(model: string | undefined, permissionMode: string, source: ModelSource, effort: EffortLevel | undefined, effortSource: EffortSource): string;
+  startMessage(
+    model: string | undefined,
+    permissionMode: string,
+    source: ModelSource,
+    effort: EffortLevel | undefined,
+    effortSource: EffortSource,
+  ): string;
 }
 
 /** A skill launched from the command palette: in memory only, never written to nightshift.json. */

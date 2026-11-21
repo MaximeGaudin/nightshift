@@ -104,7 +104,8 @@ export function validateMapStrict(
   const models: Models = {};
   for (const [key, value] of Object.entries(raw)) {
     if (!SKILL_KEY_RE.test(key)) return { ok: false, error: `Invalid skill name "${key}"` };
-    if (typeof value !== "string" || !isValid(value)) return { ok: false, error: `Invalid ${label} ${JSON.stringify(render(value))} for ${key}` };
+    if (typeof value !== "string" || !isValid(value))
+      return { ok: false, error: `Invalid ${label} ${JSON.stringify(render(value))} for ${key}` };
     models[key] = value.trim();
   }
   return { ok: true, models: Object.keys(models).length > 0 ? models : undefined };

@@ -1,8 +1,8 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { DEFAULT_PROJECT_PARALLEL, LANGUAGE_SETTINGS, normalizeProjectParallel, PERMISSION_MODES, type Settings } from "../shared/types.ts";
 import { isValidEffortSetting } from "../shared/effort.ts";
+import { DEFAULT_PROJECT_PARALLEL, LANGUAGE_SETTINGS, normalizeProjectParallel, PERMISSION_MODES, type Settings } from "../shared/types.ts";
 import { writeFileAtomic } from "./fsutil.ts";
 
 export const NIGHTSHIFT_HOME = process.env.NIGHTSHIFT_HOME ?? join(homedir(), ".nightshift");

@@ -1,13 +1,6 @@
 // Per-column / per-card / global effort levels (`claude --effort`): validation, merge and resolution. Pure, no I/O.
 
-import {
-  type Dropped,
-  diffModels,
-  mergeMap,
-  type Models,
-  sanitizeMap,
-  validateMapStrict,
-} from "./models.ts";
+import { type Dropped, diffModels, type Models, mergeMap, sanitizeMap, validateMapStrict } from "./models.ts";
 import { type Layer, resolveLayers } from "./resolve.ts";
 import type { Card, Column, Settings } from "./types.ts";
 
@@ -50,11 +43,7 @@ export function resolveEffort(
 ): { effort: EffortLevel | undefined; source: EffortSource } {
   const cardValue = card && column.type === "skill" && column.skill ? card.efforts?.[column.skill] : undefined;
   const r = resolveLayers<EffortLevel, EffortSource>(
-    [
-      { source: "card", value: cardValue },
-      { source: "column", value: column.effort },
-      settingsLayer(settings),
-    ],
+    [{ source: "card", value: cardValue }, { source: "column", value: column.effort }, settingsLayer(settings)],
     { source: "default", value: economicEffort(column.type === "skill" ? column.skill : undefined) },
   );
   return { effort: r.value, source: r.source };
