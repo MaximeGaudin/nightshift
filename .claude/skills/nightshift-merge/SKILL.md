@@ -11,6 +11,27 @@ The worktree and the branch come from `nightshift-implement`: branch `nightshift
 
 A card implemented with no worktree (the project's worktree policy was `forbidden`, or `auto` chose the shared checkout) has `Worktree: none` under `## Result`. Its commits are already on the base branch, so there is nothing to merge: this skill only pushes the base. Decide from `## Result`, not from the current policy, since the policy may have changed after the card was implemented.
 
+## Fast path
+
+Before starting this skill, Nightshift tries the merge itself, without an agent, when the merge column has "Merge without an agent when possible" checked (the default). It follows this skill: same lock, same test stop, same guards, base merged into the card branch then `--ff-only` of the base, push without force, worktree and branch removed, the same `## Merge` lines. When the base moved since the card started, the column decides: merge then run the column's test command (the default), merge without tests, or hand over to you.
+
+You run only when that fast path stopped. Your prompt then ends with a block:
+
+```
+<fast-merge>
+Step: <the step that stopped: read-result, lock, stop-test, check-card, check-commits, upstream, base-checkout, moved-base, merge-base-into-card, test, ff-base, push>
+Command: <the command it ran>
+Error: <its error, or the last 50 lines of the test output>
+State left: <what it left behind>
+</fast-merge>
+```
+
+The lock is released and no merge is in progress. Start from step 1 and take the block into account:
+
+- `State left` says the merge commit of the base stays on the card branch: the card branch already holds the base, so step 7 has nothing new to merge, and the tests must still pass there before the fast-forward.
+- `State left` says a local merge is kept on the base and not pushed: the card branch is already in the target, so step 4's "already contained" bullet applies and only the push (step 8) remains.
+- Step `test`: the error holds the failing output. Fix the merge on the card branch as in step 7; a second failure follows Conflicts step 4.
+
 ## Prerequisites
 
 - The Nightshift worker prompt contains the card (`<title>`, `<description>`, `id`).
