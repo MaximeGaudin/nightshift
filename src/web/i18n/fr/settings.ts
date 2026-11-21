@@ -39,6 +39,11 @@ export const settings: Record<keyof typeof enSettings, string> = {
   "settings.model.placeholder": "ex. sonnet, opus",
   "settings.claudePath.label": "Commande claude",
   "settings.extraArgs.label": "Arguments supplémentaires",
+  "settings.teamclaude.label": "Faire passer les agents par teamclaude",
+  "settings.teamclaude.help":
+    "Lance claude avec les variables de « teamclaude env », pour que les agents utilisent votre groupe de comptes. Lancez « teamclaude server » vous-même. L'en-tête montre alors le quota groupé.",
+  "settings.teamclaudeUrl.label": "URL du proxy teamclaude",
+  "settings.teamclaudeUrl.help": "Sert à vérifier le proxy avant chaque agent et à lire le quota groupé.",
   "settings.extraArgs.placeholder": 'ex. --allowedTools "Bash(git *)" --max-budget-usd 2',
   "settings.worktree.label": "Worktrees git",
   "settings.worktree.help":

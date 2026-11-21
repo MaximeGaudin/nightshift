@@ -201,6 +201,17 @@ export function SettingsContent({
             onChange={(e) => onChange({ ...s, extraArgs: e.target.value })}
           />
         </Row>
+        <Row id="set-teamclaude" label={t("settings.teamclaude.label")} help={t("settings.teamclaude.help")}>
+          <Switch id="set-teamclaude" checked={s.teamclaudeEnabled} onCheckedChange={(v) => onChange({ ...s, teamclaudeEnabled: v })} />
+        </Row>
+        <Row id="set-teamclaude-url" label={t("settings.teamclaudeUrl.label")} help={t("settings.teamclaudeUrl.help")}>
+          <Input
+            id="set-teamclaude-url"
+            value={s.teamclaudeUrl}
+            placeholder="http://localhost:3456"
+            onChange={(e) => onChange({ ...s, teamclaudeUrl: e.target.value })}
+          />
+        </Row>
       </Section>
 
       <Section title={t("settings.recent.title")} description={t("settings.recent.description")}>
@@ -241,6 +252,8 @@ const EDITABLE = [
   "language",
   "carryMaxTokens",
   "carryMaxAgeMinutes",
+  "teamclaudeEnabled",
+  "teamclaudeUrl",
 ] as const;
 
 /** True when the form differs from the saved settings on any editable field, or the project cap changed. */
