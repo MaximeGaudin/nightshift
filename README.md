@@ -122,10 +122,20 @@ Options: `--port <n>` / `-p <n>` (0..65535, also read from the `PORT` environmen
 
 The server listens on `127.0.0.1` only, and rejects requests whose `Host` or `Origin` is not local or whose body is not `application/json`.
 
+## teamclaude
+
+[teamclaude](https://github.com/KarpelesLab/teamclaude) is a local proxy that pools several Claude accounts and moves to the next one when a quota runs out. Nightshift can run its agents through it. Install it (`npm install -g @karpeleslab/teamclaude`), add your accounts and start `teamclaude server` yourself: Nightshift never installs, starts or configures it.
+
+Then turn on **Run agents through teamclaude** in Settings (off by default) and check the proxy URL (default `http://localhost:3456`). Both are global settings (`teamclaudeEnabled`, `teamclaudeUrl` in `~/.nightshift/settings.json`). With the option on:
+
+- Before each `claude -p` (card runs, feedback and quick runs), Nightshift checks `GET <url>/teamclaude/quota` (2 s at most), then adds the variables printed by `teamclaude env` to the agent's environment. The command and its arguments do not change; the card log says "via teamclaude".
+- When teamclaude is not on the `PATH`, `teamclaude env` fails or the proxy does not answer, the run waits and no `claude` starts. The card shows that it waits, and a dialog opens in every open tab with the reason and the waiting runs: **Retry** checks again, **Run without teamclaude** starts these runs directly (the next run checks again), **Cancel the runs** fails them with "teamclaude proxy unreachable at <url>" (the card stays in its column and can be rerun). A choice closes the dialog everywhere. A waiting run counts toward the parallel limits; moving or deleting its card removes it; turning the option off starts the waiting runs directly.
+- The header shows the pooled quota of all the accounts, read from `/teamclaude/quota` every 60 s, with the account count in its tooltip. When the proxy stops answering, the gauge keeps the last values, dimmed. The agents' own `rate_limit_info` is still recorded and comes back when the option is turned off.
+
 ## Files
 
 - `<project>/nightshift.json`: columns and cards. Commit it in your projects. This repository ignores it (`.gitignore`): it is the dogfooding board of Nightshift itself. External edits (e.g. `git pull`) are picked up live.
-- `~/.nightshift/settings.json`: global settings (permission mode, model, extra `claude` args, recent projects).
+- `~/.nightshift/settings.json`: global settings (permission mode, model, extra `claude` args, teamclaude, recent projects).
 - `~/.nightshift/logs/`: last agent log per card (removed with the card).
 - `~/.nightshift/screenshots/`: card screenshots.
 - `~/.nightshift/locks/`: one lock per open project folder.

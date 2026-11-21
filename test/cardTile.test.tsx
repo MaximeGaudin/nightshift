@@ -35,3 +35,11 @@ test("card-tile-dimmed-while-dragged", () => {
   expect(renderToStaticMarkup(<CardTile {...base} dragging />)).toMatch(/<article[^>]*class="[^"]*\bdragging\b/);
   expect(renderToStaticMarkup(<CardTile {...base} />)).not.toMatch(/<article[^>]*class="[^"]*\bdragging\b/);
 });
+
+test("teamclaude-card-waiting: a run waiting for the proxy shows the waiting line instead of its progress", () => {
+  const progress = { step: 1, total: 3, label: "x", source: "marker" as const, at: "T" };
+  const html = renderToStaticMarkup(<CardTile {...base} live="running" progress={progress} proxyWaiting />);
+  expect(html).toContain("En attente : proxy teamclaude injoignable");
+  expect(html).not.toContain('role="progressbar"');
+  expect(renderToStaticMarkup(<CardTile {...base} live="running" progress={progress} />)).not.toContain("teamclaude");
+});

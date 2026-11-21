@@ -12,10 +12,10 @@ The note is the card description. This skill stops when that note is ready to sp
 ## Prerequisites
 
 - The Nightshift worker prompt contains the card (`<title>`, `<description>`) and the board columns.
-- Return work only as Nightshift's structured result (`title`, `description`, `move`, `summary`, `questions`). Nightshift updates the board from that result.
+- Return work only as Nightshift's structured result (`title`, `sections`, `move`, `summary`, `questions`, `models`). Return `description` only to restructure the whole note. Nightshift updates the board from that result.
 - Do not call `AskUserQuestion`. Do not edit `nightshift.json`.
 - The working directory is the board project.
-- Project context files are optional. Happy path, when present: `README.md`, `docs/Stack.md`, and `docs/01 - Briefs/`. If a path is missing, skip it and continue from the note. Do not ask for a different tree.
+- Project context files are optional. Happy path, when present: `README.md`, `docs/Stack.md`, and the brief under `docs/01 - Briefs/` that the note cites by path or name. When the note cites none, do not read that folder. If a path is missing, skip it and continue from the note. Do not ask for a different tree.
 
 ## Steps
 
@@ -28,7 +28,7 @@ Progress marker: at the start of each step, write `[nightshift-progress] N/M lab
    - On a missing file: skip it and continue from the note alone.
 3. List every blocking gap against the readiness bar. A gap is blocking when a specification agent would have to invent a product decision to build this card.
 4. Decide every non-blocking choice yourself and write it into the note. Do not ask about file layout, library choice, or internal names.
-5. If any blocking gap remains, write every gap into the note under `## Questions` (see Questions), return the same list in `questions`, and set `move` to `stay`. Stop. Do not hold questions back for a later round.
+5. If any blocking gap remains, write every gap into the note under `## Questions` (see Asking questions), return the same list in `questions`, and set `move` to `stay`. Stop. Do not hold questions back for a later round.
 6. On the next run, read each answer from the note first: the text under that question, down to the next numbered question. Ignore blank lines. When that text is empty and the resume prompt has an answer for the same question, use the resume answer.
    - When both are empty, decide it yourself. Do not ask that question again.
    - Fold the answers into the note, delete `## Questions`, then repeat from step 3.
@@ -38,7 +38,7 @@ Progress marker: at the start of each step, write `[nightshift-progress] N/M lab
 
 Follow extra column instructions in the worker prompt when they do not contradict the steps above.
 
-## Questions
+## Asking questions
 
 Ask in two places, with the same questions in the same order:
 
@@ -88,7 +88,7 @@ Most cards do not need a written plan: the implement agent plans small work itse
 - it is large: more than about five files of new logic, or other cards of a series depend on its design;
 - the note asks for a plan.
 
-When one holds, set `move` to `next` (the plan column). Otherwise set `move` to the id of the column whose skill is `nightshift-implement`, read from the board columns in the worker prompt; when no such column exists, use `next`. Write the decision as the last line before `## Acceptance`: `Route: plan — <the rule that holds>` or `Route: implement — no plan needed (<one clause>)`.
+When one holds, set `move` to `next` (the plan column). Otherwise set `move` to the id of the column whose skill is `nightshift-implement`, read from the board columns in the worker prompt; when no such column exists, use `next`. When the card skips the plan, also return `models`, using the rules of `## Choosing models` in `nightshift-plan`: `nightshift-implement` is `haiku` when everything is mechanical and fully specified, `sonnet` otherwise (never `opus`: a card that needs it holds a rule above and goes to the plan); `nightshift-review` and `nightshift-merge` are `sonnet`. When the card goes to the plan, return no `models`. Write the decision as the last line before `## Acceptance`: `Route: plan — <the rule that holds>` or `Route: implement — no plan needed (<one clause>)`.
 
 ## Updating the card
 
@@ -141,6 +141,7 @@ Ready, small enough to skip the plan (`move` is the implement column's id):
   "title": "current title",
   "sections": [{"heading": "Acceptance", "content": "…"}],
   "move": "col_implement_id",
+  "models": {"nightshift-implement": "sonnet", "nightshift-review": "sonnet", "nightshift-merge": "sonnet"},
   "summary": "Note is ready. No plan needed: one module, existing pattern. Sent to Implement.",
   "questions": []
 }

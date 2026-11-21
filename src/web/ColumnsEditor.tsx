@@ -3,6 +3,7 @@ import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalList
 import { CSS } from "@dnd-kit/utilities";
 import { ChevronDown, GripVertical, Lock, Plus, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { EFFORT_LEVELS, type EffortLevel, economicEffort } from "../shared/effort.ts";
 import { MODEL_ALIASES } from "../shared/models.ts";
 import {
   type Column,
@@ -12,9 +13,11 @@ import {
   isSystemColumn,
   MAX_PARALLEL,
   type ProjectSnapshot,
+  type Settings,
   type SkillInfo,
 } from "../shared/types.ts";
-import { api } from "./api.ts";
+import { AgentFeaturesFields, inheritedFeatures } from "./AgentFeaturesFields.tsx";
+import { api, useSettings } from "./api.ts";
 import { type KeyedColumn, reorderColumns } from "./columnOrder.ts";
 import { AppDialog } from "./components/app-dialog.tsx";
 import { IconButton } from "./components/icon-button.tsx";
@@ -147,11 +150,13 @@ type RowProps = {
   skillsLoading: boolean;
   cardCount: number;
   reducedMotion: boolean;
+  /** Global settings, for the value an agent feature inherits. Null while loading. */
+  settings: Settings | null;
   onPatch: (p: Partial<Column>) => void;
   onRemove: () => void;
 };
 
-function SortableColumnRow({ col, skills, skillsLoading, cardCount, reducedMotion, onPatch, onRemove }: RowProps) {
+function SortableColumnRow({ col, skills, skillsLoading, cardCount, reducedMotion, settings, onPatch, onRemove }: RowProps) {
   const { t } = useT();
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: col.key });
   const [open, setOpen] = useState(false);
@@ -271,6 +276,23 @@ function SortableColumnRow({ col, skills, skillsLoading, cardCount, reducedMotio
                   onChange={(e) => onPatch({ model: e.target.value })}
                 />
                 <p className="text-xs text-muted-foreground">{t("columns.modelHint")}</p>
+                <div className="column-effort grid gap-1.5">
+                  <Label htmlFor={`effort-${col.key}`}>{t("columns.effort")}</Label>
+                  <select
+                    id={`effort-${col.key}`}
+                    className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                    value={col.effort ?? ""}
+                    onChange={(e) => onPatch({ effort: e.target.value ? (e.target.value as EffortLevel) : undefined })}
+                  >
+                    <option value="">{t("columns.effortInherit")}</option>
+                    {EFFORT_LEVELS.map((l) => (
+                      <option key={l} value={l}>
+                        {l}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-muted-foreground">{t("columns.effortHint", { level: economicEffort(col.skill) })}</p>
+                </div>
                 <label className="lock-model flex items-center gap-2 text-xs" title={t("columns.lockModelHint")}>
                   <input type="checkbox" checked={col.lockModel === true} onChange={(e) => onPatch(lockModelPatch(e.target.checked))} />
                   {t("columns.lockModel")}
@@ -292,6 +314,16 @@ function SortableColumnRow({ col, skills, skillsLoading, cardCount, reducedMotio
                 </div>
               </div>
               <FastMergeControls col={col} onPatch={onPatch} />
+              <div className="grid gap-1.5 sm:col-span-2">
+                <Label>{t("agentFeatures.title")}</Label>
+                <AgentFeaturesFields
+                  idPrefix={`features-${col.key}`}
+                  value={col.agentFeatures}
+                  inherited={inheritedFeatures({ settings })}
+                  onChange={(next) => onPatch({ agentFeatures: next })}
+                />
+                <p className="text-xs text-muted-foreground">{t("agentFeatures.help")}</p>
+              </div>
               <div className="grid gap-1.5 sm:col-span-2">
                 <Label htmlFor={`instructions-${col.key}`}>{t("columns.instructions")}</Label>
                 <Textarea
@@ -333,6 +365,7 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
   const [skills, setSkills] = useState<SkillInfo[]>([]);
   const [skillsLoading, setSkillsLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const settings = useSettings();
   const reducedMotion = usePrefersReducedMotion();
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
@@ -459,6 +492,7 @@ export function ColumnsEditor({ snap, onClose }: { snap: ProjectSnapshot; onClos
                   skillsLoading={skillsLoading}
                   cardCount={count(c.id)}
                   reducedMotion={reducedMotion}
+                  settings={settings}
                   onPatch={(p) => patch(c.key, p)}
                   onRemove={() => setCols((cs) => cs.filter((x) => x.key !== c.key))}
                 />

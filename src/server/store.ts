@@ -1,6 +1,9 @@
 import { copyFileSync, existsSync, type FSWatcher, readFileSync, statSync, watch } from "node:fs";
 import { basename, join } from "node:path";
-import { normalizeDependsOn, releaseTarget } from "../shared/dependencies.ts";
+import { sanitizeAgentFeatures } from "../shared/agentFeatures.ts";
+import { normalizeDependsOn, releaseReason, releaseTarget, unmetDependencies } from "../shared/dependencies.ts";
+import { type EffortLevel, isValidEffort, sanitizeEfforts } from "../shared/effort.ts";
+import { normalizeCardExternal, normalizeIssueSources } from "../shared/issues.ts";
 import { sanitizeModels } from "../shared/models.ts";
 import { needsRun } from "../shared/needs-run.ts";
 import { normalizeSkipColumnIds, resolveNextColumn } from "../shared/skip.ts";
@@ -12,6 +15,7 @@ import {
   type Card,
   type Column,
   type ColumnType,
+  cardRef,
   DEFAULT_WORKTREE_POLICY,
   doneColumn,
   ensureSystemColumns,
@@ -115,6 +119,8 @@ export const COLUMN_KEYS = [
   "instructions",
   "model",
   "lockModel",
+  "agentFeatures",
+  "effort",
   "maxParallel",
   "emoji",
   "freshSession",
@@ -151,11 +157,25 @@ const CARD_KEYS = [
   "dependsOn",
   "draft",
   "sessionId",
+  "seenDescription",
   "history",
   "timeBase",
   "models",
+  "agentFeatures",
+  "efforts",
+  "external",
 ];
-const BOARD_KEYS = ["version", "name", "columns", "cards", "nextCardNumber", "maxParallel", "favoriteSkills", "worktreePolicy"];
+const BOARD_KEYS = [
+  "version",
+  "name",
+  "columns",
+  "cards",
+  "nextCardNumber",
+  "maxParallel",
+  "favoriteSkills",
+  "worktreePolicy",
+  "issueSources",
+];
 
 /**
  * Fields this version does not know, kept as they are. Several Nightshift versions write the same file
@@ -243,6 +263,12 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
             ...(c.instructions ? { instructions: String(c.instructions) } : {}),
             ...(typeof c.model === "string" && c.model.trim() ? { model: c.model.trim() } : {}),
             ...(type === "skill" && c.lockModel === true ? { lockModel: true as const } : {}),
+            ...(type === "skill" && sanitizeAgentFeatures(c.agentFeatures)
+              ? { agentFeatures: sanitizeAgentFeatures(c.agentFeatures) }
+              : {}),
+            ...(type === "skill" && typeof c.effort === "string" && isValidEffort(c.effort)
+              ? { effort: c.effort.trim() as EffortLevel }
+              : {}),
             ...(type === "skill" && (c.freshSession === true || c.freshSession === "auto") ? { freshSession: c.freshSession } : {}),
             ...(maxParallel !== undefined ? { maxParallel } : {}),
             ...(emoji !== undefined ? { emoji } : {}),
@@ -271,7 +297,10 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
     if (rawHistory.length > 50) timeBase = replayHistory(timeBase, rawHistory.slice(0, -50), asString(c.createdAt) ?? now());
     const skipColumnIds = normalizeSkipColumnIds(columns, c.skipColumnIds);
     const { models } = sanitizeModels(c.models);
+    const agentFeatures = sanitizeAgentFeatures(c.agentFeatures);
+    const { efforts } = sanitizeEfforts(c.efforts);
     const columnId = typeof c.columnId === "string" && colIds.has(c.columnId) ? c.columnId : columns[0]?.id;
+    const external = normalizeCardExternal(c.external);
     return {
       ...unknownFields(c, CARD_KEYS),
       id: c.id,
@@ -291,7 +320,16 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
       ...(skipColumnIds ? { skipColumnIds } : {}),
       ...(c.draft === true && columnId === BACKLOG_COLUMN_ID ? { draft: true as const } : {}),
       ...(models ? { models } : {}),
+      ...(agentFeatures ? { agentFeatures } : {}),
+      ...(efforts ? { efforts } : {}),
       ...(typeof c.sessionId === "string" && c.sessionId ? { sessionId: c.sessionId } : {}),
+      ...(external ? { external } : {}),
+      ...(isRaw(c.seenDescription) &&
+      typeof c.seenDescription.sessionId === "string" &&
+      c.seenDescription.sessionId &&
+      typeof c.seenDescription.text === "string"
+        ? { seenDescription: { sessionId: c.seenDescription.sessionId, text: c.seenDescription.text } }
+        : {}),
       history: rawHistory.slice(-50),
       ...(timeBase ? { timeBase } : {}),
     };
@@ -310,6 +348,7 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
   const favoriteSkills = normalizeFavoriteSkills(r.favoriteSkills);
   const maxParallel = normalizeProjectParallel(r.maxParallel);
   const worktreePolicy = normalizeWorktreePolicy(r.worktreePolicy);
+  const issueSources = normalizeIssueSources(r.issueSources);
   return {
     ...unknownFields(raw, BOARD_KEYS),
     version: 1,
@@ -320,6 +359,7 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
     ...(maxParallel !== undefined ? { maxParallel } : {}),
     ...(favoriteSkills ? { favoriteSkills } : {}),
     ...(worktreePolicy ? { worktreePolicy } : {}),
+    ...(issueSources ? { issueSources } : {}),
   };
 }
 
@@ -468,6 +508,54 @@ export class Project {
       const dropped = card.history.splice(0, card.history.length - 50);
       card.timeBase = replayHistory(card.timeBase, dropped, card.createdAt);
     }
+  }
+
+  /**
+   * Creates a card at the end of its column inside a mutation: id, number, timestamps, the "created" history entry,
+   * then queueing. `historyText` defaults to "Created in <column>".
+   */
+  addCard(
+    board: Board,
+    fields: Pick<Card, "title" | "description" | "columnId"> & Partial<Pick<Card, "skipColumnIds" | "dependsOn" | "draft" | "external">>,
+    historyText?: string,
+  ): Card {
+    const at = now();
+    const card: Card = {
+      ...fields,
+      id: newId("card"),
+      number: board.nextCardNumber,
+      title: (fields.title || "Untitled").trim(),
+      createdAt: at,
+      updatedAt: at,
+      enteredColumnAt: at,
+      history: [],
+    };
+    board.nextCardNumber += 1;
+    this.addHistory(card, "created", historyText ?? `Created in ${board.columns.find((c) => c.id === card.columnId)?.name}`, card.columnId);
+    board.cards.push(card);
+    this.addQueued(card, board);
+    return card;
+  }
+
+  /**
+   * Removes a card inside a mutation and returns it (undefined when unknown). A deleted dependency counts as met:
+   * it is dropped from every card waiting for it, and a Backlog card left with no unmet dependency is released.
+   * Files kept for the card (screenshots, logs) are the caller's to remove, after the mutation.
+   */
+  deleteCard(board: Board, cardId: string): Card | undefined {
+    const gone = board.cards.find((c) => c.id === cardId);
+    if (!gone) return undefined;
+    board.cards = board.cards.filter((c) => c.id !== cardId);
+    for (const card of board.cards) {
+      if (!card.dependsOn?.includes(gone.id)) continue;
+      const rest = card.dependsOn.filter((id) => id !== gone.id);
+      if (rest.length > 0) card.dependsOn = rest;
+      else delete card.dependsOn;
+      this.addHistory(card, "edited", `Dependency ${cardRef(gone)} deleted`);
+      if (card.columnId === BACKLOG_COLUMN_ID && !card.draft && unmetDependencies(board, card).length === 0)
+        this.releaseDependencies(board, card, releaseReason(board, card));
+    }
+    return gone;
   }
 
   /** Records that a card waits for an agent, when it is in a skill column and needs a run. */

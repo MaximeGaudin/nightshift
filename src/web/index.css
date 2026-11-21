@@ -10,9 +10,9 @@
 :root {
   --radius: 8px;
   /* Surface ladder: page < panel < lane < card (see test/theme.test.ts). */
-  --background: #f1f2f4;
-  --panel: #fbfbfc;
-  --lane: #f3f4f6;
+  --background: #eceef4;
+  --panel: #f9fafc;
+  --lane: #eff1f6;
   --foreground: #1f2023;
   --card: #ffffff;
   --card-foreground: #1f2023;
@@ -20,11 +20,11 @@
   --popover-foreground: #1f2023;
   --primary: #5e6ad2;
   --primary-foreground: #ffffff;
-  --secondary: #f4f5f7;
+  --secondary: #f2f4f8;
   --secondary-foreground: #1f2023;
-  --muted: #f4f5f7;
-  --muted-foreground: #63666d;
-  --accent: #eceef1;
+  --muted: #f2f4f8;
+  --muted-foreground: #5f6470;
+  --accent: #e9ecf3;
   --accent-foreground: #1f2023;
   --destructive: #cf5050;
   --border: rgb(0 0 0 / 0.08);
@@ -37,29 +37,34 @@
   --warn-soft: rgb(181 131 43 / 0.13);
   --err: #cf5050;
   --err-soft: rgb(207 80 80 / 0.12);
+  /* Night identity: the lighter indigo of the logo, and the elevation of a card at rest and lifted. */
+  --glow: #5e6ad2;
+  --card-shadow: 0 1px 2px rgb(22 27 60 / 0.06), 0 0 0 0.5px rgb(22 27 60 / 0.04);
+  --card-shadow-lift: 0 6px 16px -6px rgb(22 27 60 / 0.18), 0 2px 4px rgb(22 27 60 / 0.06);
+  --aurora: radial-gradient(900px 260px at 18% -80px, rgb(94 106 210 / 0.1), transparent 70%);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #08090a;
-    --panel: #0f1011;
-    --lane: #151618;
-    --foreground: #e4e5e9;
-    --card: #1c1d20;
-    --card-foreground: #e4e5e9;
-    --popover: #1c1d20;
-    --popover-foreground: #e4e5e9;
+    --background: #06070b;
+    --panel: #0b0c13;
+    --lane: #10121a;
+    --foreground: #e6e7ee;
+    --card: #171923;
+    --card-foreground: #e6e7ee;
+    --popover: #171923;
+    --popover-foreground: #e6e7ee;
     --primary: #5e6ad2;
     --primary-foreground: #ffffff;
-    --secondary: #222327;
-    --secondary-foreground: #e4e5e9;
-    --muted: #222327;
-    --muted-foreground: #8a8f98;
-    --accent: #28292e;
-    --accent-foreground: #e4e5e9;
+    --secondary: #1f2230;
+    --secondary-foreground: #e6e7ee;
+    --muted: #1f2230;
+    --muted-foreground: #8b90a5;
+    --accent: #262a3a;
+    --accent-foreground: #e6e7ee;
     --destructive: #e5676b;
-    --border: rgb(255 255 255 / 0.06);
-    --input: rgb(255 255 255 / 0.12);
+    --border: rgb(170 180 255 / 0.09);
+    --input: rgb(170 180 255 / 0.16);
     --ring: #5e6ad2;
     --overlay: rgb(0 0 0 / 0.55);
     --ok: #4cb782;
@@ -68,6 +73,22 @@
     --warn-soft: rgb(214 162 74 / 0.15);
     --err: #e5676b;
     --err-soft: rgb(229 103 107 / 0.15);
+    --glow: #8f99ff;
+    --card-shadow: 0 1px 2px rgb(0 0 0 / 0.4), inset 0 1px 0 rgb(255 255 255 / 0.03);
+    --card-shadow-lift: 0 10px 24px -8px rgb(0 0 0 / 0.7), 0 0 0 1px rgb(143 153 255 / 0.1), inset 0 1px 0 rgb(255 255 255 / 0.05);
+    /* A glow rising behind the header, and a few stars above the lanes. */
+    --aurora:
+      radial-gradient(1.5px 1.5px at 7% 22px, rgb(255 255 255 / 0.55), transparent 100%),
+      radial-gradient(1px 1px at 16% 96px, rgb(255 255 255 / 0.35), transparent 100%),
+      radial-gradient(1px 1px at 29% 58px, rgb(255 255 255 / 0.45), transparent 100%),
+      radial-gradient(1.5px 1.5px at 41% 14px, rgb(200 206 255 / 0.5), transparent 100%),
+      radial-gradient(1px 1px at 52% 82px, rgb(255 255 255 / 0.3), transparent 100%),
+      radial-gradient(1px 1px at 63% 30px, rgb(255 255 255 / 0.5), transparent 100%),
+      radial-gradient(1.5px 1.5px at 74% 70px, rgb(200 206 255 / 0.4), transparent 100%),
+      radial-gradient(1px 1px at 86% 18px, rgb(255 255 255 / 0.45), transparent 100%),
+      radial-gradient(1px 1px at 94% 104px, rgb(255 255 255 / 0.3), transparent 100%),
+      radial-gradient(1100px 320px at 16% -110px, rgb(94 106 210 / 0.3), transparent 70%),
+      radial-gradient(700px 240px at 88% -120px, rgb(143 110 255 / 0.14), transparent 70%);
   }
 }
 
@@ -108,7 +129,7 @@
   --radius-lg: calc(var(--radius) + 2px);
   --radius-xl: calc(var(--radius) + 4px);
 
-  --shadow-xs: 0 1px 2px rgb(0 0 0 / 0.06), 0 0 0 0.5px rgb(0 0 0 / 0.04);
+  --shadow-xs: var(--card-shadow);
   --default-transition-duration: 120ms;
 }
 
@@ -222,4 +243,235 @@
   .run-progress-indeterminate > .run-progress-fill {
     left: 0;
   }
+}
+
+/* ---- Night identity. Unlayered on purpose: these rules refine the utilities of the components they target. ---- */
+
+@property --orbit {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--muted-foreground) 35%, transparent) transparent;
+}
+::selection {
+  background: color-mix(in srgb, var(--primary) 35%, transparent);
+}
+
+/* The board panel carries the sky: glow and stars sit behind the header and the lanes. */
+.board-panel {
+  position: relative;
+  isolation: isolate;
+  background-image: var(--aurora);
+  background-repeat: no-repeat;
+}
+/* The constellation (AgentSky.tsx) is painted over the panel background and under everything else. */
+.agent-sky {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+}
+.agent-sky > canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.project-tab.is-active {
+  box-shadow: var(--card-shadow);
+}
+
+/* Header counters. */
+.agents-pill,
+.questions-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  padding: 1px 8px 1px 7px;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+}
+.agents-pill.is-running {
+  border-color: color-mix(in srgb, var(--ok) 35%, transparent);
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+.agents-pill.is-running .agents-dot {
+  animation: beacon 1.8s ease-out infinite;
+}
+.questions-pill {
+  border-color: color-mix(in srgb, var(--warn) 40%, transparent);
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-weight: 500;
+}
+@keyframes beacon {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, currentColor 60%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+}
+
+/* Lanes let the sky through. */
+.column {
+  background-color: color-mix(in srgb, var(--lane) 82%, transparent);
+}
+.column-parallel.is-running {
+  border-color: color-mix(in srgb, var(--primary) 45%, transparent);
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  color: var(--glow);
+}
+
+/* Cards: lift on hover, a status rail on the left, and a light that orbits a card while its agent works. */
+.card {
+  transition:
+    transform 150ms cubic-bezier(0.2, 0, 0, 1),
+    box-shadow 150ms cubic-bezier(0.2, 0, 0, 1),
+    border-color 150ms,
+    background-color 150ms;
+}
+.card:hover:not(.dragging) {
+  transform: translateY(-1px);
+  --tw-shadow: var(--card-shadow-lift);
+}
+.card::before {
+  content: "";
+  position: absolute;
+  left: -1px;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--rail, transparent);
+  pointer-events: none;
+}
+.card.st-running {
+  --rail: var(--glow);
+  border-color: color-mix(in srgb, var(--primary) 40%, transparent);
+  --tw-shadow:
+    0 0 0 1px color-mix(in srgb, var(--primary) 18%, transparent), 0 8px 28px -10px color-mix(in srgb, var(--primary) 70%, transparent);
+}
+.card.st-running::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: conic-gradient(from var(--orbit), transparent 0 62%, var(--glow) 86%, #fff 92%, transparent 100%);
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: orbit 3.2s linear infinite;
+  pointer-events: none;
+}
+@keyframes orbit {
+  to {
+    --orbit: 360deg;
+  }
+}
+.card.st-question {
+  --rail: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 45%, transparent);
+}
+/* A card that waits for an answer breathes, so it is found at a glance. */
+.card.st-question::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  box-shadow: 0 0 22px -4px color-mix(in srgb, var(--warn) 70%, transparent);
+  animation: ask 2.6s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes ask {
+  0%,
+  100% {
+    opacity: 0.15;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.card.st-error {
+  --rail: var(--err);
+  border-color: color-mix(in srgb, var(--err) 35%, transparent);
+}
+.card.st-success {
+  --rail: var(--ok);
+}
+.card.st-queued,
+.card.st-paused {
+  --rail: color-mix(in srgb, var(--warn) 55%, transparent);
+}
+
+/* Status chip of a card. */
+.status-chip {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 5px;
+  border-radius: 999px;
+  padding: 1px 8px 1px 3px;
+  background: var(--secondary);
+}
+.status-chip.st-running {
+  background: color-mix(in srgb, var(--primary) 16%, transparent);
+  color: var(--glow);
+}
+.status-chip.st-running .status-label {
+  color: inherit;
+}
+.status-chip.st-success {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+.status-chip.st-error {
+  background: var(--err-soft);
+}
+.status-chip.st-question,
+.status-chip.st-paused,
+.status-chip.st-queued {
+  background: var(--warn-soft);
+}
+
+/* Run progress: a lit fill instead of a flat one. */
+.run-progress-bar > .run-progress-fill {
+  background-image: linear-gradient(90deg, var(--primary), var(--glow));
+  box-shadow: 0 0 8px color-mix(in srgb, var(--glow) 70%, transparent);
+}
+
+/* The dragged card floats above the board. */
+.drag-ghost {
+  rotate: 2deg;
+  scale: 1.02;
+  border-radius: 10px;
+  box-shadow:
+    0 24px 48px -12px rgb(0 0 0 / 0.45),
+    0 0 0 1px color-mix(in srgb, var(--primary) 45%, transparent);
+}
+
+/* Primary buttons catch a little light. */
+[data-slot="button"].bg-primary {
+  background-image: linear-gradient(180deg, rgb(255 255 255 / 0.14), transparent);
+  --tw-shadow: inset 0 1px 0 rgb(255 255 255 / 0.18), 0 1px 2px rgb(0 0 0 / 0.25);
+  box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow);
+}
+
+/* Dialogs: the board blurs away behind them. */
+[data-slot="dialog-overlay"] {
+  backdrop-filter: blur(6px) saturate(120%);
+}
+[data-slot="dialog-content"] {
+  box-shadow:
+    0 32px 80px -20px rgb(0 0 0 / 0.55),
+    0 0 0 1px color-mix(in srgb, var(--glow) 10%, transparent);
 }

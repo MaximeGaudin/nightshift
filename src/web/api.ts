@@ -1,7 +1,18 @@
 import { useEffect, useRef, useState } from "react";
+import type { AgentFeaturesOverride } from "../shared/agentFeatures.ts";
 import type { FlowState } from "../shared/flow.ts";
+import type { IssueSourceInput } from "../shared/issues.ts";
 import type { CardImageStored, CardImageUpload } from "../shared/screenshots.ts";
-import type { LogLine, ProjectSnapshot, ServerEvent, Settings, SkillInfo, WorktreePolicy } from "../shared/types.ts";
+import type {
+  LogLine,
+  ProjectSnapshot,
+  ServerEvent,
+  Settings,
+  SkillInfo,
+  TeamclaudeAction,
+  TeamclaudeWait,
+  WorktreePolicy,
+} from "../shared/types.ts";
 import type { QuotaSnapshot } from "../shared/usage.ts";
 
 async function call<T = unknown>(method: string, url: string, body?: unknown): Promise<T> {
@@ -29,6 +40,8 @@ const q = (project: string) => `project=${encodeURIComponent(project)}`;
 export const api = {
   settings: () => call<Settings>("GET", "/api/settings"),
   usage: () => call<{ usage: QuotaSnapshot | null }>("GET", "/api/usage"),
+  teamclaudeWait: () => call<{ wait: TeamclaudeWait | null }>("GET", "/api/teamclaude/wait"),
+  teamclaudeDecision: (action: TeamclaudeAction) => call<{ wait: TeamclaudeWait | null }>("POST", "/api/teamclaude/decision", { action }),
   saveSettings: (s: Partial<Settings>) => call<Settings>("PUT", "/api/settings", s),
   open: (path: string) => call<ProjectSnapshot>("POST", "/api/projects/open", { path }),
   fs: (dir?: string) =>
@@ -68,6 +81,7 @@ export const api = {
       dependsOn?: string[];
       draft?: boolean;
       models?: Record<string, string> | null;
+      agentFeatures?: AgentFeaturesOverride | null;
     },
   ) => call("PATCH", `/api/cards/${id}`, { project, ...patch }),
   /** Stores a pasted image in the card's folder; the answer is its absolute path. */
@@ -102,6 +116,17 @@ export const api = {
   startQuickRun: (project: string, skill: string, instruction: string) =>
     call<{ id: string }>("POST", "/api/quick-runs", { project, skill, instruction }),
   cancelQuickRun: (project: string, id: string) => call<{ ok: boolean }>("POST", `/api/quick-runs/${id}/cancel`, { project }),
+  saveIssueSources: (project: string, sources: IssueSourceInput[]) =>
+    call<ProjectSnapshot>("PUT", "/api/issue-sources", { project, sources }),
+  /** An empty token removes the saved one. The token is never sent back. */
+  saveIssueToken: (provider: string, baseUrl: string, token: string) =>
+    call<{ ok: boolean }>("PUT", "/api/issue-tokens", { provider, baseUrl, token }),
+  testIssueSource: (project: string, source: IssueSourceInput, token?: string) =>
+    call<{ count: number }>("POST", "/api/issue-sources/test", { project, source, ...(token ? { token } : {}) }),
+  syncIssues: (project: string, sourceId?: string) =>
+    call<ProjectSnapshot>("POST", "/api/issue-sources/sync", { project, ...(sourceId ? { sourceId } : {}) }),
+  detectIssueSource: (project: string) =>
+    call<{ provider?: string; baseUrl?: string; repo?: string }>("GET", `/api/issue-sources/detect?${q(project)}`),
 };
 
 type Listener = (e: ServerEvent) => void;
@@ -178,4 +203,17 @@ export function useUsage(): QuotaSnapshot | null {
   }, []);
   useServerEvents((e) => e.type === "usage" && setUsage(e.usage));
   return usage;
+}
+
+/** Agent launches waiting for the teamclaude proxy (server-wide): loaded once, then pushed on every change. */
+export function useTeamclaudeWait(): TeamclaudeWait | null {
+  const [wait, setWait] = useState<TeamclaudeWait | null | undefined>(undefined);
+  useEffect(() => {
+    api
+      .teamclaudeWait()
+      .then((r) => setWait((cur) => (cur === undefined ? r.wait : cur)))
+      .catch(() => {});
+  }, []);
+  useServerEvents((e) => e.type === "teamclaude" && setWait(e.wait));
+  return wait ?? null;
 }
