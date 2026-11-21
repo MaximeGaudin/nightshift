@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -142,3 +142,31 @@ export function must<T>(value: T | null | undefined, what = "value"): T {
 
 /** The settings module keeps its state on globalThis (shared across `bun --hot` reloads); tests reset it between cases. */
 export const settingsGlobal = () => globalThis as { __nightshiftSettings?: { current: unknown; listeners: Set<unknown> } };
+
+/** A fake `gh` (test/fake-gh.ts) in its own folder, with its JSON state and call log. Prepend `dir` to PATH to use it. */
+export function installFakeGh(initial: Record<string, unknown> = { prs: [] }) {
+  const dir = tempDir("ns-fake-gh-");
+  const statePath = join(dir, "state.json");
+  const logPath = join(dir, "calls.jsonl");
+  const bin = join(dir, "gh");
+  writeFileSync(bin, `#!/bin/sh\nexec "${process.execPath}" "${join(import.meta.dir, "fake-gh.ts")}" "$@"\n`);
+  chmodSync(bin, 0o755);
+  writeFileSync(statePath, JSON.stringify(initial));
+  return {
+    dir,
+    statePath,
+    logPath,
+    env: { FAKE_GH_STATE: statePath, FAKE_GH_LOG: logPath },
+    // biome-ignore lint/suspicious/noExplicitAny: test state is free-form JSON
+    state: (): any => JSON.parse(readFileSync(statePath, "utf8")),
+    setState: (s: unknown) => writeFileSync(statePath, JSON.stringify(s)),
+    calls: (): { args: string[]; stdin?: string }[] =>
+      existsSync(logPath)
+        ? readFileSync(logPath, "utf8")
+            .trim()
+            .split("\n")
+            .filter(Boolean)
+            .map((l) => JSON.parse(l))
+        : [],
+  };
+}
