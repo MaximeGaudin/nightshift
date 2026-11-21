@@ -1380,16 +1380,21 @@ export class Orchestrator {
   private syncPrScreenshots(p: Project, cardId: string) {
     if (!p.card(cardId)) return;
     const k = this.key(p, cardId);
-    const next = (this.prSyncs.get(k) ?? Promise.resolve()).then(async () => {
-      const card = p.card(cardId);
-      if (!card) return;
-      await syncPrScreenshots({
-        projectPath: p.path,
-        cardId,
-        description: card.description,
-        log: (text) => this.log(p, cardId, "info", text),
+    const next = (this.prSyncs.get(k) ?? Promise.resolve())
+      .then(async () => {
+        const card = p.card(cardId);
+        if (!card) return;
+        await syncPrScreenshots({
+          projectPath: p.path,
+          cardId,
+          description: card.description,
+          log: (text) => this.log(p, cardId, "info", text),
+        });
+      })
+      .catch((e) => {
+        // syncPrScreenshots never rejects; this guards the chain itself so a later sync still runs.
+        console.warn(`[nightshift] PR screenshots of ${cardId}: ${(e as Error).message}`);
       });
-    });
     this.prSyncs.set(k, next);
     void next.finally(() => {
       if (this.prSyncs.get(k) === next) this.prSyncs.delete(k);
