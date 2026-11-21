@@ -79,6 +79,64 @@ export function typePatch(type: Column["type"]): Partial<Column> {
   return type === "skill" ? { type, freshSession: "auto" } : { type };
 }
 
+/** Skill whose columns try a deterministic merge before starting the agent. */
+export const FAST_MERGE_SKILL = "nightshift-merge";
+
+/** What the fast merge does when the base moved since the card started. */
+export const MOVED_BASE_MODES = ["test", "merge", "agent"] as const;
+export type MovedBaseMode = (typeof MOVED_BASE_MODES)[number];
+
+/** Checkbox state → column patch: `fastMerge` is only stored as `false` (absent = on). */
+export function fastMergePatch(checked: boolean): Partial<Column> {
+  return { fastMerge: checked ? undefined : false };
+}
+
+/** Select choice → column patch: `test` is the default and never stored. */
+export function movedBasePatch(mode: MovedBaseMode): Partial<Column> {
+  return { fastMergeMovedBase: mode === "test" ? undefined : mode };
+}
+
+/** Fast-merge settings, shown only for a skill column that runs the merge skill. */
+export function FastMergeControls({ col, onPatch }: { col: Draft; onPatch: (p: Partial<Column>) => void }) {
+  const { t } = useT();
+  if (col.type !== "skill" || col.skill !== FAST_MERGE_SKILL) return null;
+  const enabled = col.fastMerge !== false;
+  const mode: MovedBaseMode = col.fastMergeMovedBase ?? "test";
+  return (
+    <div className="fast-merge grid gap-1.5 sm:col-span-2">
+      <label className="fast-merge-toggle flex items-center gap-2 text-xs" title={t("columns.fastMergeHint")}>
+        <input type="checkbox" checked={enabled} onChange={(e) => onPatch(fastMergePatch(e.target.checked))} />
+        {t("columns.fastMerge")}
+      </label>
+      <div className="fast-merge-moved flex items-center gap-2 text-xs" title={t("columns.fastMergeMovedHint")}>
+        <Label htmlFor={`moved-${col.key}`}>{t("columns.fastMergeMoved")}</Label>
+        <Select value={mode} disabled={!enabled} onValueChange={(v) => onPatch(movedBasePatch(v as MovedBaseMode))}>
+          <SelectTrigger id={`moved-${col.key}`} className="w-48">
+            <SelectValue>{t(`columns.fastMergeMoved.${mode}`)}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {MOVED_BASE_MODES.map((m) => (
+              <SelectItem key={m} value={m}>
+                {t(`columns.fastMergeMoved.${m}`)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <Label htmlFor={`fm-test-${col.key}`}>{t("columns.fastMergeTestCommand")}</Label>
+      <Input
+        id={`fm-test-${col.key}`}
+        className="fast-merge-command"
+        placeholder="bun run check"
+        disabled={!enabled || mode !== "test"}
+        value={col.fastMergeTestCommand ?? ""}
+        onChange={(e) => onPatch({ fastMergeTestCommand: e.target.value })}
+      />
+      <p className="text-xs text-muted-foreground">{t("columns.fastMergeTestCommandHint")}</p>
+    </div>
+  );
+}
+
 function errorMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
@@ -233,6 +291,7 @@ function SortableColumnRow({ col, skills, skillsLoading, cardCount, reducedMotio
                   </Select>
                 </div>
               </div>
+              <FastMergeControls col={col} onPatch={onPatch} />
               <div className="grid gap-1.5 sm:col-span-2">
                 <Label htmlFor={`instructions-${col.key}`}>{t("columns.instructions")}</Label>
                 <Textarea
