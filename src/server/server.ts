@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import type { Server, ServerWebSocket } from "bun";
 import { dependencyCycle, describeCycle, releaseReason, resolveDependencyRefs, unmetDependencies } from "../shared/dependencies.ts";
+import { diffAgentFeatures, validateAgentFeaturesStrict } from "../shared/agentFeatures.ts";
 import { describeModelChanges, diffModels, validateModelsStrict } from "../shared/models.ts";
 import { MAX_PENDING_IMAGES, pendingIds, resolvePending } from "../shared/pendingImages.ts";
 import { type CardImageStored, cardImageType } from "../shared/screenshots.ts";
@@ -303,6 +304,8 @@ export function startServer({ port, development, agents = true }: { port: number
                 const type: ColumnType = c.type === "skill" ? "skill" : "inert";
                 const maxParallel = normalizeColumnParallel(type, c.maxParallel);
                 const emoji = normalizeColumnEmoji(c.emoji);
+                const features = validateAgentFeaturesStrict(c.agentFeatures);
+                if (!features.ok) throw new Error(`Column ${i + 1}: ${features.error}`);
                 return {
                   ...unknownFields(c, COLUMN_KEYS),
                   id: id || newId("col"),
@@ -312,6 +315,7 @@ export function startServer({ port, development, agents = true }: { port: number
                   ...(instructions ? { instructions } : {}),
                   ...(model ? { model } : {}),
                   ...(type === "skill" && c.lockModel === true ? { lockModel: true as const } : {}),
+                  ...(type === "skill" && features.value ? { agentFeatures: features.value } : {}),
                   ...(type === "skill" && (c.freshSession === true || c.freshSession === "auto") ? { freshSession: c.freshSession } : {}),
                   ...(maxParallel !== undefined ? { maxParallel } : {}),
                   ...(emoji !== undefined ? { emoji } : {}),
@@ -400,6 +404,9 @@ export function startServer({ port, development, agents = true }: { port: number
           const draftInput = optDraft(b);
           const modelsCheck = validateModelsStrict(b.models);
           if (!modelsCheck.ok) throw new Error(modelsCheck.error);
+          const hasFeatures = b.agentFeatures !== undefined;
+          const featuresCheck = validateAgentFeaturesStrict(b.agentFeatures);
+          if (!featuresCheck.ok) throw new Error(featuresCheck.error);
           p.mutate((board) => {
             const card = p.card(req.params.id);
             if (!card) throw new HttpError(404, "Unknown card");
@@ -414,7 +421,7 @@ export function startServer({ port, development, agents = true }: { port: number
             if (
               title !== undefined ||
               description !== undefined ||
-              (skipInput === undefined && !hasModels && dependsOnInput === undefined && draftInput === undefined)
+              (skipInput === undefined && !hasModels && !hasFeatures && dependsOnInput === undefined && draftInput === undefined)
             )
               p.addHistory(card, "edited", "Edited by user");
             if (hasModels) {
@@ -422,6 +429,12 @@ export function startServer({ port, development, agents = true }: { port: number
               if (modelsCheck.models) card.models = modelsCheck.models;
               else delete card.models;
               if (changes.length > 0) p.addHistory(card, "edited", describeModelChanges(changes, "user"));
+            }
+            if (hasFeatures) {
+              const changes = diffAgentFeatures(card.agentFeatures, featuresCheck.value);
+              if (featuresCheck.value) card.agentFeatures = featuresCheck.value;
+              else delete card.agentFeatures;
+              if (changes.length > 0) p.addHistory(card, "edited", `Agent features: ${changes.join(", ")} (by user)`);
             }
             if (skipInput !== undefined) {
               const skip = normalizeSkipColumnIds(board.columns, skipInput);
