@@ -213,3 +213,17 @@ test("a retry moved elsewhere waits for play again", async () => {
   await move(id, "col_impl");
   await waitFor(async () => (await snap()).live[id] === "paused");
 });
+
+test("turning fast forward on reruns a cancelled card", async () => {
+  const dir = await open(live);
+  const { find, create, flow, starts } = api(live, dir);
+  const card = await create("slow cancel", "col_grill");
+  await waitFor(async () => (await starts(card.id)) === 1);
+  expect((await live.call(`/api/cards/${card.id}/cancel`, { body: { project: dir } })).status).toBe(200);
+  await waitFor(async () => (await find(card.id)).lastRun?.status === "cancelled");
+  await flow("fast-forward/on");
+  await waitFor(async () => (await starts(card.id)) === 2);
+  const after = await find(card.id);
+  expect(after.history.some((h) => h.text === "Fast forward: retry of cancelled run")).toBe(true);
+  await waitFor(async () => (await find(card.id)).columnId !== "col_grill");
+});
