@@ -18,6 +18,7 @@ import type {
   ProjectSnapshot,
   QuickRun,
   QuickRunResult,
+  RunEstimate,
   RunProgress,
   RunStatus,
   ServerEvent,
@@ -75,6 +76,10 @@ interface Runner {
   contextTokens?: number;
   /** Live progress of the current process; reset at each spawn, never persisted. */
   progress?: RunProgress;
+  /** Live estimate of the current process (`[nightshift-estimate]`); reset at each spawn, never persisted. */
+  estimate?: RunEstimate;
+  /** ISO time the current process was launched. */
+  startedAt?: string;
   /** A valid marker was seen in the current process: TodoWrite no longer counts. */
   markerSeen?: boolean;
   /** A TodoWrite was seen in the current process: tool activity no longer overwrites it. */
@@ -91,6 +96,8 @@ interface RunTarget {
   modelSource: ModelSource;
   log(kind: LogLine["kind"], text: string): void;
   setProgress(v: { step: number; total: number; label: string }, source: RunProgress["source"]): void;
+  /** Card runs only: stores the agent's time estimate. */
+  setEstimate?(minutes: number): void;
   /** First log line, once the model and permission mode are known. */
   startMessage(model: string | undefined, permissionMode: string, source: ModelSource): string;
 }
@@ -556,9 +563,11 @@ export class Orchestrator {
     const lockedBy = this.lockedBy.get(p.path);
     const testing = [...this.tests.values()].filter((t) => t.project === p).map((t) => t.cardId);
     const progress: Record<string, RunProgress> = {};
+    const estimates: Record<string, RunEstimate> = {};
     for (const card of p.board.cards) {
       const job = this.jobs.get(this.key(p, card.id));
       if (job?.progress && !job.done) progress[card.id] = job.progress;
+      if (job?.estimate && !job.done) estimates[card.id] = job.estimate;
     }
     return {
       path: p.path,
@@ -567,6 +576,7 @@ export class Orchestrator {
       live,
       testing,
       progress,
+      estimates,
       quickRuns: [...this.quickRuns.values()]
         .filter((q) => q.project === p)
         .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
@@ -1162,6 +1172,7 @@ export class Orchestrator {
       modelSource: resolved.source,
       log: (kind, text) => this.log(p, card.id, kind, text),
       setProgress: (v, source) => this.setProgress(job, v, source),
+      setEstimate: (minutes) => this.setEstimate(job, minutes),
       startMessage: (model, permissionMode, source) =>
         `${verb} ${job.skill ? `skill "${job.skill}"` : "session"} in "${column.name}" (permission mode: ${permissionMode}, model: ${modelLabel(model, source)}).`,
     };
@@ -1176,6 +1187,8 @@ export class Orchestrator {
   ): Promise<{ startError: string } | { result: StreamEvent | null; stderr: string; exit: string }> {
     const p = job.project;
     job.progress = undefined;
+    job.estimate = undefined;
+    job.startedAt = new Date().toISOString();
     job.markerSeen = false;
     job.todoSeen = false;
     const settings = getSettings();
@@ -1260,6 +1273,8 @@ export class Orchestrator {
             job.markerSeen = true;
             target.setProgress(m, "marker");
           }
+          const minutes = own ? parseEstimateMarker(block.text) : undefined;
+          if (minutes !== undefined) target.setEstimate?.(minutes);
         } else if (block.type === "tool_use" && block.name !== "StructuredOutput") {
           target.log("tool", summarizeToolInput(block.name ?? "tool", block.input));
           if (!own) continue;
@@ -1283,6 +1298,14 @@ export class Orchestrator {
       if (ev.session_id) job.sessionId = ev.session_id;
       target.log("info", `Session ${ev.session_id} (model ${ev.model ?? "default"})`);
     }
+  }
+
+  /** Stores the agent's estimate and broadcasts the board, unless the minutes did not change. */
+  private setEstimate(job: Runner, minutes: number) {
+    if (job.estimate?.minutes === minutes) return;
+    const now = new Date().toISOString();
+    job.estimate = { minutes, runStartedAt: job.startedAt ?? now, at: now };
+    this.broadcast({ type: "board", project: job.project.path, snapshot: this.snapshot(job.project) });
   }
 
   /** Stores a new progress value and broadcasts the board, unless nothing changed. */
