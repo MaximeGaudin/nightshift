@@ -25,8 +25,10 @@ import { canSendFeedback, cardRef, columnMaxParallel, isDoneColumn } from "../sh
 import { safeHttpUrl } from "../shared/urls.ts";
 import { buildEnvironment } from "./environment.ts";
 import { FlowController } from "./flow.ts";
+import { ensureScreenshotsExcluded } from "./gitExclude.ts";
 import { HttpError } from "./guard.ts";
 import { parseProgressMarker, progressFromTodos } from "./progress.ts";
+import { syncPrScreenshots } from "./prScreenshots.ts";
 import { buildQuickRunPrompt, parseQuickOutput, QUICK_INSTRUCTION_MAX, QUICK_RESULT_SCHEMA } from "./quickrun.ts";
 import { persistScreenshots } from "./screenshots.ts";
 import { applySections, parseSections } from "./sections.ts";
@@ -378,6 +380,10 @@ export class Orchestrator {
   private jobs = new Map<string, Job>();
   private quickRuns = new Map<string, QuickJob>();
   private logs = new Map<string, LogLine[]>();
+  /** Projects where `nightshift-screenshots/` could not be excluded from git, reported once per process. */
+  private excludeFailed = new Set<string>();
+  /** Running PR screenshot syncs, chained per card so two never edit the same PR body at once. */
+  private prSyncs = new Map<string, Promise<void>>();
   private listeners = new Set<(e: ServerEvent) => void>();
   private tickScheduled = false;
   /** Projects waiting for a dependency pass (coalesced per microtask). */
@@ -855,6 +861,7 @@ export class Orchestrator {
     const skill = findSkill(q.project.path, q.skill);
     if (!skill) return this.endQuick(q, { status: "error", error: `Skill "${q.skill}" not found in project or user skills.` });
     const target = this.quickTarget(q);
+    this.excludeScreenshots(q.project);
     const r = await this.spawnAgent(q, target, buildQuickRunPrompt(q.skill, skill.path, q.instruction), undefined);
     if ("startError" in r) return this.endQuick(q, { status: "error", error: r.startError });
     if (q.cancelled) return this.endQuick(q, { status: "cancelled" });
@@ -1063,6 +1070,7 @@ export class Orchestrator {
     if (carried) prompt = `${CONTINUE_PREFIX}\n\n${prompt}`;
     let resumeId = answer?.sessionId ?? carried;
     let costUsd = 0;
+    this.excludeScreenshots(p, card.id);
 
     // One automatic recovery: an agent that stops without its structured result (interrupted, or it
     // returned only interim results while background work was running) is resumed once to collect it.
@@ -1348,6 +1356,44 @@ export class Orchestrator {
       }
     });
     if (attention) this.broadcast({ type: "attention", project: p.path, cardId: job.cardId, kind: attention });
+    if (status === "success" || status === "question") this.syncPrScreenshots(p, job.cardId);
+  }
+
+  /** Keeps agent captures out of git in the project's repository. Never fails the run. */
+  private excludeScreenshots(p: Project, cardId?: string) {
+    const r = ensureScreenshotsExcluded(p.path);
+    if (r.ok) {
+      this.excludeFailed.delete(p.path);
+      return;
+    }
+    if (this.excludeFailed.has(p.path)) return;
+    this.excludeFailed.add(p.path);
+    const text = `nightshift-screenshots non exclu de git : ${r.reason}`;
+    if (cardId) this.log(p, cardId, "info", text);
+    else console.warn(`[nightshift] ${p.path}: ${text}`);
+  }
+
+  /**
+   * Adds the card's captures to the open PR of its branch, in the background: the card has already moved on.
+   * Chained per card, and reads the description when it starts so it uses the latest stored links.
+   */
+  private syncPrScreenshots(p: Project, cardId: string) {
+    if (!p.card(cardId)) return;
+    const k = this.key(p, cardId);
+    const next = (this.prSyncs.get(k) ?? Promise.resolve()).then(async () => {
+      const card = p.card(cardId);
+      if (!card) return;
+      await syncPrScreenshots({
+        projectPath: p.path,
+        cardId,
+        description: card.description,
+        log: (text) => this.log(p, cardId, "info", text),
+      });
+    });
+    this.prSyncs.set(k, next);
+    void next.finally(() => {
+      if (this.prSyncs.get(k) === next) this.prSyncs.delete(k);
+    });
   }
 
   // ---- test commands -------------------------------------------------------
