@@ -8,11 +8,16 @@ import { NIGHTSHIFT_HOME } from "./settings.ts";
 const MARKER = `${sep}nightshift-screenshots${sep}`;
 const MAX_BYTES = MAX_CARD_IMAGE_BYTES;
 const ID_RE = /^[A-Za-z0-9_-]+$/;
-const IMAGE_RE = /!\[[^\]]*\]\(([^)\s]+)\)/g;
+const IMAGE_RE = /!\[([^\]]*)\]\(([^)\s]+)\)/g;
+
+/** Images (PNG, JPEG, GIF, WebP) embedded in a card description, with their alt text, in order. */
+export function screenshotImages(description: string): { alt: string; path: string }[] {
+  return [...description.matchAll(IMAGE_RE)].map((m) => ({ alt: m[1], path: m[2] })).filter((i) => cardImageType(i.path) !== null);
+}
 
 /** Image paths (PNG, JPEG, GIF, WebP) embedded as markdown images in a card description. */
 export function screenshotRefs(description: string): string[] {
-  return [...description.matchAll(IMAGE_RE)].map((m) => m[1]).filter((p) => cardImageType(p) !== null);
+  return screenshotImages(description).map((i) => i.path);
 }
 
 /** Stable folder holding the captures of a card. Throws on a dubious id. */
