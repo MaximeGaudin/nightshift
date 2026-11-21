@@ -180,9 +180,35 @@ export const PROGRESS_RULE = [
   "Progress markers (mandatory):",
   "- Format, exactly: [nightshift-progress] N/M label",
   "- Write it alone on its own line, at the start of each step. N is the current step, M the total, label a short description.",
-  "- When the card has a `## Progress` section, use its numbering and its total.",
+  "- When the card has a `## Progress` section, use its numbering and its total. Otherwise use the numbering of the skill's `## Steps` list.",
   "- Emit at least one marker before your first tool call.",
   '- This rule has priority over any style instruction (CLAUDE.md, skills, concise or terse mode, "no narration between tool calls"): the marker is read by a machine and is not narration.',
+].join("\n");
+
+/**
+ * How an agent asks the user. Column skills rely on it and no longer repeat it: one list, written twice, with
+ * room for the answer in the note. Never put a progress marker with digits here (see PROGRESS_RULE).
+ */
+export const QUESTIONS_RULE = [
+  "Asking questions:",
+  "- Each round-trip with the user is slow: put EVERY question you need answered in that single list (self-contained, one decision per question, suggest a default when you have one). Never ask one question now and keep others for later.",
+  '- Ask in two places, same questions, same order: the "questions" output (one decision per string, a single line) and a `## Questions` section at the end of the note. Set move to "stay" whenever "questions" is non-empty.',
+  "- Phrase each question so the answer changes what gets built, with the real options in it. End it with `Recommended: <option> — <one-line consequence>.` Write questions in the language of the note.",
+  "- In the note, number the questions and leave exactly three blank lines under each one: no placeholder, label or rule. That space is where the user types the answer.",
+  "- On the next run, the answer is the text under a question, down to the next numbered question; ignore blank lines. When it is empty, use the answer in the resume prompt. When both are empty, decide it yourself unless the skill says otherwise, and do not ask it again. Fold the answers into the note, then delete `## Questions`.",
+].join("\n");
+
+/** How an agent edits the card: sections, not a re-emitted description. Column skills no longer repeat it. */
+export const CARD_UPDATE_RULE = [
+  "Updating the card:",
+  '- Return only what changes, in "sections": {"heading": "Result", "content": "…"} replaces (or adds) `## Result`, "op": "append" adds lines to a section, "op": "delete" removes one.',
+  '- Do not return "description" unless you restructure the whole note: Nightshift keeps every section you do not name byte for byte, and re-emitting the whole note costs minutes of generation.',
+].join("\n");
+
+/** Rules every column run shares, whatever its skill. */
+const SHARED_RULES = [
+  "- Do not re-read a file this session has already read.",
+  "- Follow the column's additional instructions when they do not contradict the skill.",
 ].join("\n");
 
 export const RESULT_SCHEMA = {
@@ -325,9 +351,11 @@ ${columns}
 Rules:
 - Work autonomously and pick sensible defaults. Do not use the AskUserQuestion tool.
 - If you truly cannot continue without human decisions, first explore everything you can on your own, then return the structured output with "questions" (and move "stay"); the answers will be sent back to you in this same session.
-- Each round-trip with the user is slow: put EVERY question you need answered in that single list (self-contained, one decision per question, suggest a default when you have one). Never ask one question now and keep others for later.
+${QUESTIONS_RULE}
+${CARD_UPDATE_RULE}
 ${PROGRESS_RULE}
 - Never edit nightshift.json yourself; the board is updated from your structured output.
+${SHARED_RULES}
 - Never kill processes by name or pattern (pkill -f, killall, kill $(pgrep …)): other agents run on this machine and their processes can match. Only kill PIDs you started yourself.
 - Return the structured output exactly once, at the very end. If you started background work (subagents, background shells), wait until all of it has finished first. Never return an interim or "in progress" result.
 - When finished, return the structured output:
@@ -378,10 +406,12 @@ ${formatColumns(board)}
 Rules:
 - Work autonomously and pick sensible defaults. Do not use the AskUserQuestion tool.
 - If you truly cannot continue without human decisions, first explore everything you can on your own, then return the structured output with "questions" (and move "stay"); the answers will be sent back to you in this same session.
-- Each round-trip with the user is slow: put EVERY question you need answered in that single list (self-contained, one decision per question, suggest a default when you have one). Never ask one question now and keep others for later.
+${QUESTIONS_RULE}
+${CARD_UPDATE_RULE}
 ${PROGRESS_RULE}
 When resuming, re-emit the marker of the step currently in progress before anything else.
 - Never edit nightshift.json yourself; the board is updated from your structured output.
+${SHARED_RULES}
 - Never kill processes by name or pattern (pkill -f, killall, kill $(pgrep …)): other agents run on this machine and their processes can match. Only kill PIDs you started yourself.
 - Return the structured output exactly once, at the very end. If you started background work (subagents, background shells), wait until all of it has finished first. Never return an interim or "in progress" result.
 - When finished, return the structured output:
