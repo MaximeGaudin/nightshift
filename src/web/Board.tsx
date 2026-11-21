@@ -314,6 +314,7 @@ export function Board({
       ),
     );
   };
+  const runningIn = (list: Card[]) => list.filter((c) => snap.live[c.id] === "running").length;
   const tile = (card: Card, extra: TileExtra = {}) => {
     const next = resolveNextColumn(columns, card);
     return (
@@ -380,22 +381,27 @@ export function Board({
                 <CompactColumnBand col={col} onAdd={() => setExpanded(col.id)} />
               ) : (
                 <>
-                  <header className="column-head group/head relative flex min-w-0 items-center gap-2 px-1.5 pt-0.5 pb-2">
-                    <div className="column-title flex max-w-[60%] min-w-0 shrink-0 items-center gap-2">
+                  <header className="column-head group/head relative flex min-w-0 flex-col gap-1.5 px-1.5 pt-1 pb-2.5">
+                    <div className="column-title flex min-w-0 items-center gap-2">
                       <ColumnGlyph col={col} />
-                      <h2 className="truncate text-[13px] font-medium">{col.name}</h2>
-                      <span className="count text-xs text-muted-foreground tabular-nums">{colCards.length}</span>
+                      <h2 className="truncate text-[13px] font-semibold tracking-tight">{col.name}</h2>
+                      <span className="count rounded-full bg-secondary px-1.5 text-[11px] leading-4 text-muted-foreground tabular-nums">
+                        {colCards.length}
+                      </span>
                       {col.type === "skill" && (
                         <span
-                          className="column-parallel rounded-full border px-1.5 text-[11px] leading-4 text-muted-foreground tabular-nums"
+                          className={cn(
+                            "column-parallel ml-auto shrink-0 rounded-full border px-1.5 text-[11px] leading-4 text-muted-foreground tabular-nums",
+                            runningIn(colCards) > 0 && "is-running",
+                          )}
                           title={t("board.column.parallelTitle")}
                         >
-                          {colCards.filter((c) => snap.live[c.id] === "running").length} / {columnMaxParallel(col)}
+                          {runningIn(colCards)} / {columnMaxParallel(col)}
                         </span>
                       )}
                     </div>
                     {col.type === "skill" ? (
-                      <div className="column-badges ml-auto flex min-w-0 gap-1">
+                      <div className="column-badges flex min-w-0 gap-1">
                         <Badge
                           variant="default"
                           dot="primary"
@@ -416,7 +422,7 @@ export function Board({
                         )}
                       </div>
                     ) : (
-                      <Badge variant="secondary" className="badge inert ml-auto">
+                      <Badge variant="secondary" className="badge inert">
                         {t("board.column.inert")}
                       </Badge>
                     )}
@@ -459,7 +465,7 @@ export function Board({
         })}
       </main>
       <DragOverlay dropAnimation={reduced ? null : undefined}>
-        {activeCard ? <div className="cursor-grabbing rotate-1 shadow-xs">{tile(activeCard)}</div> : null}
+        {activeCard ? <div className="drag-ghost cursor-grabbing">{tile(activeCard)}</div> : null}
       </DragOverlay>
     </DndContext>
   );

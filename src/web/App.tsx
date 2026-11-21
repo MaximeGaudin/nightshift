@@ -1,7 +1,8 @@
 import { Columns3, FastForward, Info, Pause, Play, Settings as SettingsIcon, Sparkles, TriangleAlert } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { type ProjectSnapshot, type SkillInfo, worktreePolicyOf } from "../shared/types.ts";
+import { AgentSky } from "./AgentSky.tsx";
 import { api, useServerEvents, useSettings } from "./api.ts";
 import { Board } from "./Board.tsx";
 import { CardModal } from "./CardModal.tsx";
@@ -278,11 +279,12 @@ export function App() {
     }
   };
 
-  const tabBar = (onAdd?: () => void) => (
+  const tabBar = (onAdd?: () => void, trailing?: ReactNode) => (
     <ProjectTabs
       state={tabsState}
       active={project}
       leading={<Logo size={16} className="mx-1.5 shrink-0" />}
+      trailing={trailing}
       onSelect={activate}
       onClose={closeProjectTab}
       onAdd={onAdd}
@@ -322,23 +324,24 @@ export function App() {
 
   return (
     <div className="flex h-full flex-col bg-background">
-      {tabBar(() => setModal("projects"))}
-      <div className={PANEL}>
-        <header className="flex min-h-11 shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-b px-4 py-1.5">
-          <div className="flex min-w-0 items-baseline gap-2">
-            <h1 className="truncate text-[14px] font-semibold tracking-tight">{snap.board.name}</h1>
-            <span className="board-card-count shrink-0 text-xs text-muted-foreground tabular-nums">
+      {/* One top bar: the project tabs on the left, the counters and actions of the open board on the right. */}
+      {tabBar(
+        () => setModal("projects"),
+        <>
+          <h1 className="sr-only">{snap.board.name}</h1>
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground" aria-live="polite">
+            <span className="board-card-count mr-1 shrink-0 tabular-nums max-lg:hidden">
               {tn("board.app.cardCount", snap.board.cards.length)}
             </span>
-          </div>
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground" aria-live="polite">
-            <span className={`size-1.5 rounded-full ${running ? "bg-ok" : "bg-muted-foreground/40"}`} aria-hidden="true" />
-            {t("board.app.agentsActive", { running, max })}
-            {queued > 0 && <span> · {t("board.app.queued", { count: queued })}</span>}
-            {questions > 0 && <span className="font-medium text-warn">· {tn("board.app.questions", questions)}</span>}
+            <span className={cn("agents-pill", running > 0 && "is-running")}>
+              <span className={cn("agents-dot size-1.5 rounded-full", running ? "bg-ok" : "bg-muted-foreground/40")} aria-hidden="true" />
+              {t("board.app.agentsActive", { running, max })}
+              {queued > 0 && <span> · {t("board.app.queued", { count: queued })}</span>}
+            </span>
+            {questions > 0 && <span className="questions-pill">{tn("board.app.questions", questions)}</span>}
           </div>
           <QuotaIndicator />
-          <nav className="ml-auto flex items-center gap-0.5">
+          <nav className="flex items-center gap-0.5">
             <FlowButtons snap={snap} guard={guard} />
             <IconButton label={t("board.app.columns")} onClick={() => setModal("columns")}>
               <Columns3 aria-hidden="true" />
@@ -353,7 +356,10 @@ export function App() {
               {t("board.app.search")} <Kbd>⌘K</Kbd>
             </Button>
           </nav>
-        </header>
+        </>,
+      )}
+      <div className={PANEL}>
+        <AgentSky activity={running} />
         {(snap.agentsDisabled || snap.lockedBy) && (
           <div className="flex shrink-0 flex-col gap-1.5 px-4 pt-3">
             {snap.agentsDisabled && (
