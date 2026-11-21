@@ -62,3 +62,13 @@ test("template-skills-on-demand: implement and review stay small and point at th
     for (const text of references(dir)) expect(text.includes("nightshift-review`'s"), dir).toBe(false);
   }
 });
+
+test("template-skills-merge-cap: nightshift-merge stays under 6 KB and points at its full procedure", () => {
+  const md = read("nightshift-merge");
+  expect(Buffer.byteLength(md)).toBeLessThanOrEqual(6_144);
+  expect(md.includes("references/full-merge.md")).toBe(true);
+  expect(existsSync(join(SKILLS, "nightshift-merge", "references", "full-merge.md"))).toBe(true);
+  for (const f of ["pull-requests.md", "references/no-worktree.md"]) expect(md.includes(f), f).toBe(true);
+  for (const line of ["- Into:", "- Test environment:", "- Merge commit:", "- Pushed:", "- Worktree removed:", "- Card branch deleted:"])
+    expect(md.includes(line), line).toBe(true);
+});

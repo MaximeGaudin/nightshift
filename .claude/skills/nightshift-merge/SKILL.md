@@ -29,7 +29,7 @@ The lock is released and no merge is in progress. Read `Command`, `Error` and `S
 - `merge-base-into-card` (conflict) or `test` (failure): in the card worktree, `git merge --no-edit <target>` if no merge is in progress, then follow Conflicts. A merge commit of the base left on the card branch means only the tests and the fast-forward remain.
 - `State left` says a local merge is kept on the target and not pushed: the card is already in it, only the push remains.
 - `check-card`, `base-checkout`, `moved-base`, `upstream`, `push`, `read-result`, `check-commits`, `stop-test`, `lock`: a dirty checkout, a moved or diverged target, a rejected push or a missing field. Fix what the error names if it is safe (a push rejected because the remote moved: `git fetch`, merge it into the card branch, re-run the tests, push again once). Otherwise set `move` to `stay`, leave `questions` empty, write the command and the error under `## Merge`, and stop. A missing or unknown target: ask once (see Asking questions); refuse `nightshift/*`.
-- References/full-merge.md has the detail of any step you must do yourself.
+- references/full-merge.md has the detail of any step you must do yourself.
 
 Then finish: tests on the combined code, `git merge --ff-only nightshift/<card-id>` from the target checkout, `git push <remote> <target>` (never `--force` or `--no-verify`; a target without upstream: `Pushed: skipped, no upstream`), then the cleanup: stop the card's test environment (`POST http://localhost:4545/api/cards/<card-id>/test/stop` with `{"project": "<board project>"}`, then only processes whose command line holds the worktree's name), `git worktree remove <path>`, `git branch -d nightshift/<card-id>`. Refuse the merge when the card changes `nightshift.json`.
 
