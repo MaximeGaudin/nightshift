@@ -16,18 +16,14 @@ Other implementation cards may run on this repository at the same time. By defau
 ## Prerequisites
 
 - The Nightshift worker prompt contains the card (`<title>`, `<description>`, `id`) and the board columns. The description is the specification.
-- Return work only as Nightshift's structured result (`title`, `sections`, `move`, `summary`, `questions`, `test`). Return `description` only to restructure the whole note. Do not edit `nightshift.json`.
-- Do not call `AskUserQuestion`.
 - The process starts in the board project, and that directory is a git repository. Check with `git rev-parse --is-inside-work-tree`. If that fails, set `move` to `stay`, leave `questions` empty, write the git error under `## Result`, and stop.
 - Do not push. Do not create a pull request. Unless the worktree policy lets you work in the shared checkout (step 3), do not commit, stage, checkout, or edit it. Another implementation may be using it.
 
 ## Steps
 
-Progress marker: at the start of each step, write `[nightshift-progress] N/M label` alone on its own line, where N is the current step number, M is the total, and label is a few words naming the step. Use the numbering of the card's `## Progress` list; when the card has none, use the numbering of this `## Steps` list. A machine reads this line, so it overrides any concise or no-narration style.
-
 1. Read the card. List the tasks in order (`Files`, `Context`, `Hard part`, `Done when`).
    - If the prompt has no card: set `move` to `stay`, ask one question for the specification, and stop.
-2. If `## Tasks` is missing and the card does not say `Route: implement`, do not implement. Ask every blocker at once. See Asking questions.
+2. If `## Tasks` is missing and the card does not say `Route: implement`, do not implement. Ask every blocker at once (see Asking questions).
    - When `## Tasks` is missing and the card says `Route: implement`, the card skipped `nightshift-plan`: plan it yourself, briefly, without asking. Add to the description `## Plan` (the approach in a few lines, the files you expect to touch, the risk to watch), `## Progress` with one line `- [ ] 1. <card title>`, and `## Definition of done` built from `## Acceptance` (plus "affected tests pass" and "full suite: deferred to review"). Then implement it as one task, in this run's worktree: no task branch, no task worktree, no merge.
 3. Read the worktree policy: the `Worktree policy:` line of the `<environment>` block in the prompt (`required`, `auto` or `forbidden`; no block or no line means `required`). It decides where this run works. Call that place the work directory.
    - `required`: create the worktree below. The work directory is the worktree.
@@ -48,12 +44,6 @@ Progress marker: at the start of each step, write `[nightshift-progress] N/M lab
 10. Set `test` so a human can try the card from the Nightshift card with one click. See Test command.
 11. Capture screenshots of the running result so the human can check them while testing. See Capturing screenshots. On a stop before step 9, skip this step.
 
-Follow extra column instructions in the worker prompt when they do not contradict the steps above.
-
-## Updating the card
-
-Return only what changes, in the structured output's `sections` list: `{"heading": "Result", "content": "…"}` replaces (or adds) the `## Result` section, `"op": "append"` adds lines to a section, `"op": "delete"` removes one. Do not return `description`: Nightshift keeps every section you do not name, byte for byte, and re-emitting the whole note costs minutes of generation. Use `description` only to restructure the whole note.
-
 ## Use the context you were given
 
 The card already holds the research: grill and plan read the code and wrote what matters, with `file:line` references, the contracts, the commands and the decisions. Start from it.
@@ -61,7 +51,6 @@ The card already holds the research: grill and plan read the code and wrote what
 - Trust the card's `Context`, `Architecture` and task sections. Do not re-derive what they state, and do not re-check a decision the card records.
 - Read only what a task touches: the referenced lines (`sed -n '<from>,<to>p'`, or Read with an offset), not whole files; the functions you change and their tests. Line numbers may have drifted a little since the card was written: search near them, not across the repository.
 - No broad exploration: no repository-wide `grep`/`rg` sweeps, no directory listings, no Explore agent, no reading of docs the card does not point to. Search only when the card leaves a gap you must fill, and then only for that symbol.
-- What you read stays in this session: do not read the same file twice.
 
 ## Implementation rules
 
@@ -133,18 +122,7 @@ npx --yes playwright screenshot --browser chromium --full-page --viewport-size=1
 
 ## Asking questions
 
-Use this only in step 2. Ask in two places, same questions, same order. Under each question in the note, leave exactly three blank lines.
-
-```markdown
-## Questions
-
-1. The card has no `## Tasks` section. Which tasks should be implemented, and in what order? Recommended: move the card back to plan.
-
-
-
-```
-
-On the next run, the answer is the text under that question. Ignore blank lines. When that text is empty and the resume prompt has an answer, use it. When both are empty, do not guess: set `move` to `stay` and stop.
+Use this only in step 2, for example: "The card has no `## Tasks` section. Which tasks should be implemented, and in what order? Recommended: move the card back to plan." When an answer is empty in the note and in the resume prompt, do not guess: set `move` to `stay` and stop.
 
 ## Writing the result
 
@@ -169,19 +147,7 @@ Append this to the specification. Do not delete `## Progress`, `## Architecture`
 
 ## Output
 
-Blocked or failed (`questions` empty unless step 2 asked):
-
-```json
-{
-  "title": "current title",
-  "sections": [{"heading": "Progress", "content": "…only the done lines checked…"}, {"heading": "Result", "content": "…"}],
-  "move": "stay",
-  "summary": "Stopped: task 2 failed its test twice.",
-  "questions": []
-}
-```
-
-Done:
+Done (on a stop: `move` is `stay`, only the finished `## Progress` lines are checked, no `test`):
 
 ```json
 {

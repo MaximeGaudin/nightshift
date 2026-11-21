@@ -12,13 +12,9 @@ The worktree is the one implementation left: the `Worktree` line under `## Resul
 ## Prerequisites
 
 - The Nightshift worker prompt contains the card (`<title>`, `<description>`, `id`). The description is the specification plus `## Result`.
-- Return work only as Nightshift's structured result (`title`, `sections`, `move`, `summary`, `questions`, `test`). Return `description` only to restructure the whole note. Do not edit `nightshift.json`.
-- Do not call `AskUserQuestion`.
 - The process starts in the board project, a git repository. Check with `git rev-parse --is-inside-work-tree`. If that fails, set `move` to `stay`, leave `questions` empty, write the error under `## Review`, and stop.
 
 ## Steps
-
-Progress marker: at the start of each step, write `[nightshift-progress] N/M label` alone on its own line, where N is the current step number, M is the total number of steps, and label is a few words naming the step. Use the numbering of this `## Steps` list. A machine reads this line, so it overrides any concise or no-narration style.
 
 1. Read the card. Branch is `nightshift/<card-id>`. Worktree path is the `Worktree` line under `## Result`. If that line is missing, find the path with `git worktree list`.
    - If the prompt has no card: set `move` to `stay`, ask one question for the card id, and stop.
@@ -27,7 +23,7 @@ Progress marker: at the start of each step, write `[nightshift-progress] N/M lab
    - If the worktree directory is gone, recreate it with `git worktree add <dir> nightshift/<card-id>` (`mktemp -d` for `<dir>`). On failure: write the error under `## Review`, set `move` to `stay`, and stop.
 2. From here, every command runs in that worktree. Read the grilled note (the top of the description), `## Architecture`, `## Tasks`, `## Tests`, and `## Definition of done`; a card that skipped `nightshift-plan` has `## Plan`, `## Acceptance` and the `## Definition of done` the implement agent wrote instead: review against those. Read the diff of this branch against `git merge-base HEAD <base>`. When `Base` says `detached`, use its SHA. When the line is missing, use the branch checked out in the board project. When none of these exists, read `git log` and the files this branch added.
 3. List every finding. A finding is a defect: behavior that contradicts the spec, a failing check, a stub (`TODO`, `FIXME`, skipped test, empty body that only throws), or a security hole. A rename or a formatting note is not a finding. Do not change those.
-4. Fix every finding in the worktree. One commit per fix, message `fix: <what>`, only the files that fix needs. Do not use `--no-verify` and do not amend. Do not stage `.env`, credential files, `nightshift.json`, or `nightshift-screenshots`. If a fix needs a product decision the spec does not answer, do not guess. Ask every such decision at once. See Asking questions. Set `move` to `stay` and stop.
+4. Fix every finding in the worktree. One commit per fix, message `fix: <what>`, only the files that fix needs. Do not use `--no-verify` and do not amend. Do not stage `.env`, credential files, `nightshift.json`, or `nightshift-screenshots`. If a fix needs a product decision the spec does not answer, do not guess. Ask every such decision at once (see Asking questions). Set `move` to `stay` and stop.
 5. Run the full test suite here, once, after the last fix of step 4: this is the only place in the Nightshift flow where it runs (`nightshift-implement` runs only the affected tests). Use the suite command of `## Definition of done` when it names one, else the project's whole check: lint, types and all tests (a `check` or `test` script, or what the README names), for every part of the project the card changed. Then run the items of `## Definition of done` and the tests of `## Tests` the suite does not cover, including those `## Result` marks "deferred to review". While fixing in step 4, run only the affected tests (the affected-tests command written under `## Result`, see `nightshift-implement`'s Tests), never the full suite after each fix.
    - Tests already failing on the base (the `Baseline` line of `## Result`) are not findings of this card; any other failure is.
    - When a later run of this skill finds no fix to make and `git rev-parse HEAD^{tree}` equals the tree of the latest `Suite` line under `## Review`, do not re-run the suite: write `Suite: reused, tree <sha>`.
@@ -46,12 +42,6 @@ npx --yes playwright screenshot --browser chromium --full-page --viewport-size=1
 
    Retry a file once on failure. Stop the stack after (see Run the app). Leave the ports free. Do not stage the PNGs. Keep the same absolute paths in `## Screenshots`. When there is no `test.url`, leave screenshots unchanged.
 8. Append `## Review`, with the line `- Test: <test.command>` when the card has a `test`. Set `move` to `next` and `questions` to an empty array. Keep the worktree.
-
-Follow extra column instructions in the worker prompt when they do not contradict the steps above.
-
-## Updating the card
-
-Return only what changes, in the structured output's `sections` list: `{"heading": "Result", "content": "…"}` replaces (or adds) the `## Result` section, `"op": "append"` adds lines to a section, `"op": "delete"` removes one. Do not return `description`: Nightshift keeps every section you do not name, byte for byte, and re-emitting the whole note costs minutes of generation. Use `description` only to restructure the whole note.
 
 ## Use the context you were given
 
@@ -74,18 +64,7 @@ A screen usually needs more than its front end: a backend, a database, other ser
 
 ## Asking questions
 
-Use this only in step 4, when a fix needs a product decision. Ask in two places, same questions, same order. Under each question in the note, leave exactly three blank lines.
-
-```markdown
-## Questions
-
-1. The spec does not say what happens when save fails: keep the draft, or discard it? Recommended: keep the draft — discarding loses the user's text.
-
-
-
-```
-
-On the next run, the answer is the text under that question. Ignore blank lines. When that text is empty and the resume prompt has an answer, use it. When both are empty, set `move` to `stay` and stop. Do not invent the product rule. Fix the other findings before stopping.
+Use this only in step 4, when a fix needs a product decision, for example: "The spec does not say what happens when save fails: keep the draft, or discard it? Recommended: keep the draft — discarding loses the user's text." When an answer is empty in the note and in the resume prompt, set `move` to `stay` and stop: do not invent the product rule. Fix the other findings before stopping.
 
 ## Writing the review
 
@@ -102,19 +81,7 @@ Append this to the note. Do not delete `## Progress`, `## Result`, `## Tests`, `
 
 ## Output
 
-Blocked:
-
-```json
-{
-  "title": "current title",
-  "sections": [{"heading": "Review", "content": "…"}, {"heading": "Questions", "content": "…three blank lines under each question…"}],
-  "move": "stay",
-  "summary": "Stopped: suite still fails after one fix.",
-  "questions": []
-}
-```
-
-Done:
+Done (when blocked: `move` is `stay`, with `## Review` and the questions):
 
 ```json
 {
