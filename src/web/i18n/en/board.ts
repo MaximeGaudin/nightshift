@@ -117,6 +117,8 @@ export const board = {
   "board.tabs.waiting": "Cards waiting in an inert column",
   "board.card.timerTotalTitle": "Total time since leaving Backlog",
   "board.card.timerStepTitle": "Time in {column}",
+  "board.card.timerEstimateTitle": "Remaining time estimated by the agent for {column}",
+  "board.card.timerOverrun": "over",
   "time.unit.second": "s",
   "time.unit.minute": "min",
   "time.unit.hour": "h",

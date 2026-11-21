@@ -1,5 +1,12 @@
 import { expect, test } from "bun:test";
-import { buildAnswerPrompt, buildFeedbackPrompt, buildPrompt, ESTIMATE_RULE, formatRunDurations, RECOVER_PROMPT } from "../src/server/orchestrator.ts";
+import {
+  buildAnswerPrompt,
+  buildFeedbackPrompt,
+  buildPrompt,
+  ESTIMATE_RULE,
+  formatRunDurations,
+  RECOVER_PROMPT,
+} from "../src/server/orchestrator.ts";
 import { parseEstimateMarker } from "../src/server/progress.ts";
 import { defaultBoard } from "../src/server/store.ts";
 import type { Card, Column, HistoryEntry } from "../src/shared/types.ts";
@@ -17,7 +24,16 @@ function past(id: string, start: number, runS: number): Card {
     { at: at(start + 1), kind: "started", text: "Agent started in Grill", columnId: "grill" },
     { at: at(start + 1 + runS), kind: "moved", text: "Agent: Grill → Plan", columnId: "plan" },
   ];
-  return { id, number: 1, title: "t", description: "d", columnId: "plan", createdAt: at(start), updatedAt: at(start + 1 + runS), history } as unknown as Card;
+  return {
+    id,
+    number: 1,
+    title: "t",
+    description: "d",
+    columnId: "plan",
+    createdAt: at(start),
+    updatedAt: at(start + 1 + runS),
+    history,
+  } as unknown as Card;
 }
 const current = { id: "cur", number: 2, title: "t", description: "d", columnId: "grill", history: [] } as unknown as Card;
 

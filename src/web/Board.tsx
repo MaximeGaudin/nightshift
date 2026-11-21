@@ -323,6 +323,7 @@ export function Board({
         card={card}
         live={snap.live[card.id]}
         progress={snap.progress?.[card.id]}
+        estimate={snap.estimates?.[card.id]}
         next={next ? { name: next.name } : undefined}
         skipped={skippedColumns(columns, card).map((c) => c.name)}
         waitingFor={isHeld(card) ? unmetDependencies(snap.board, card).map(cardRef) : undefined}
