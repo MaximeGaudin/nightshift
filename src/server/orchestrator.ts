@@ -531,7 +531,8 @@ export class Orchestrator {
     }
     return {
       path: p.path,
-      board: p.board,
+      // The description a session saw stays on the server: several KB per card, of no use to the UI.
+      board: { ...p.board, cards: p.board.cards.map(({ seenDescription: _seen, ...card }) => card) },
       maxParallel: this.projectMaxParallel(p),
       live,
       testing,

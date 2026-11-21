@@ -117,6 +117,8 @@ export interface Card {
   models?: Record<string, string>;
   /** The card's Claude session: a column continues it unless it has `freshSession` (the default for new skill columns). */
   sessionId?: string;
+  /** The description as session `sessionId` last saw it: a run resuming that session only gets what changed since. Server-only. */
+  seenDescription?: { sessionId: string; text: string };
   history: HistoryEntry[];
   /** Time checkpoint of the history entries dropped by the history cap. */
   timeBase?: TimeState;
