@@ -33,14 +33,18 @@ test("retry-pause-same-ms-move: a retried card moved in the same millisecond wai
   const p = orch.open(dir);
   orch.flow.setPaused(p, true);
   expect(orch.snapshot(p).live.card_a).toBe("paused");
-  // No await between the calls: the scheduler only runs once the card sits in an inert column.
+  // No await between the calls: the scheduler only runs once the card sits in an inert column, even when an
+  // assertion fails (a retried card left in a skill column would start a real agent run).
   setSystemTime(new Date("2026-06-01T12:00:00.000Z"));
-  orch.retry(p, "card_a");
-  expect(orch.snapshot(p).live.card_a).toBe("queued");
-  p.mutate((board) => p.moveCard(board, "card_a", "col_b", undefined, "Moved by user"));
-  expect(p.card("card_a")?.enteredColumnAt).toBe("2026-06-01T12:00:00.000Z");
-  expect(orch.snapshot(p).live.card_a).toBe("paused");
-  p.mutate((board) => p.moveCard(board, "card_a", "col_done", undefined, "Moved by user"));
-  setSystemTime();
+  try {
+    orch.retry(p, "card_a");
+    expect(orch.snapshot(p).live.card_a).toBe("queued");
+    p.mutate((board) => p.moveCard(board, "card_a", "col_b", undefined, "Moved by user"));
+    expect(p.card("card_a")?.enteredColumnAt).toBe("2026-06-01T12:00:00.000Z");
+    expect(orch.snapshot(p).live.card_a).toBe("paused");
+  } finally {
+    p.mutate((board) => p.moveCard(board, "card_a", "col_done", undefined, "Moved by user"));
+    setSystemTime();
+  }
   await orch.shutdown();
 });
