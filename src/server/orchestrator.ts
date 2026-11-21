@@ -18,6 +18,7 @@ import {
 import { fastForwardSkipIds } from "../shared/flow.ts";
 import { describeModelChanges, formatDropped, type ModelSource, mergeModels, resolveModel } from "../shared/models.ts";
 import { resolveNextColumn } from "../shared/skip.ts";
+import { formatSmartChoice, formatSmartCost, type SmartChoice, type SmartEntry, smartEnabled, smartNeeded } from "../shared/smart.ts";
 import type {
   AttentionKind,
   Board,
@@ -53,6 +54,7 @@ import { applySections, diffSections, parseSections } from "./sections.ts";
 import { contextTokensOf, decideCarry } from "./sessionCarry.ts";
 import { getSettings, legacyMaxParallel, NIGHTSHIFT_HOME, onSettingsChange, rememberProject } from "./settings.ts";
 import { findSkill } from "./skills.ts";
+import { buildSmartPrompt, readMcpServerNames, runSmart, smartFingerprint } from "./smart.ts";
 import { isRaw, needsRun, newId, Project, type Raw } from "./store.ts";
 import { applyProxyEnv, ProxyGate, prepareProxyEnv, QUOTA_POLL_MS, TeamclaudeQuotaPoller } from "./teamclaude.ts";
 import { copyTemplateSkills } from "./templates.ts";
@@ -184,9 +186,35 @@ export const PROGRESS_RULE = [
   "Progress markers (mandatory):",
   "- Format, exactly: [nightshift-progress] N/M label",
   "- Write it alone on its own line, at the start of each step. N is the current step, M the total, label a short description.",
-  "- When the card has a `## Progress` section, use its numbering and its total.",
+  "- When the card has a `## Progress` section, use its numbering and its total. Otherwise use the numbering of the skill's `## Steps` list.",
   "- Emit at least one marker before your first tool call.",
   '- This rule has priority over any style instruction (CLAUDE.md, skills, concise or terse mode, "no narration between tool calls"): the marker is read by a machine and is not narration.',
+].join("\n");
+
+/**
+ * How an agent asks the user. Column skills rely on it and no longer repeat it: one list, written twice, with
+ * room for the answer in the note. Never put a progress marker with digits here (see PROGRESS_RULE).
+ */
+export const QUESTIONS_RULE = [
+  "Asking questions:",
+  "- Each round-trip with the user is slow: put EVERY question you need answered in that single list (self-contained, one decision per question, suggest a default when you have one). Never ask one question now and keep others for later.",
+  '- Ask in two places, same questions, same order: the "questions" output (one decision per string, a single line) and a `## Questions` section at the end of the note. Set move to "stay" whenever "questions" is non-empty.',
+  "- Phrase each question so the answer changes what gets built, with the real options in it. End it with `Recommended: <option> — <one-line consequence>.` Write questions in the language of the note.",
+  "- In the note, number the questions and leave exactly three blank lines under each one: no placeholder, label or rule. That space is where the user types the answer.",
+  "- On the next run, the answer is the text under a question, down to the next numbered question; ignore blank lines. When it is empty, use the answer in the resume prompt. When both are empty, decide it yourself unless the skill says otherwise, and do not ask it again. Fold the answers into the note, then delete `## Questions`.",
+].join("\n");
+
+/** How an agent edits the card: sections, not a re-emitted description. Column skills no longer repeat it. */
+export const CARD_UPDATE_RULE = [
+  "Updating the card:",
+  '- Return only what changes, in "sections": {"heading": "Result", "content": "…"} replaces (or adds) `## Result`, "op": "append" adds lines to a section, "op": "delete" removes one.',
+  '- Do not return "description" unless you restructure the whole note: Nightshift keeps every section you do not name byte for byte, and re-emitting the whole note costs minutes of generation.',
+].join("\n");
+
+/** Rules every column run shares, whatever its skill. */
+const SHARED_RULES = [
+  "- Do not re-read a file this session has already read.",
+  "- Follow the column's additional instructions when they do not contradict the skill.",
 ].join("\n");
 
 export const RESULT_SCHEMA = {
@@ -330,9 +358,11 @@ ${columns}
 Rules:
 - Work autonomously and pick sensible defaults. Do not use the AskUserQuestion tool.
 - If you truly cannot continue without human decisions, first explore everything you can on your own, then return the structured output with "questions" (and move "stay"); the answers will be sent back to you in this same session.
-- Each round-trip with the user is slow: put EVERY question you need answered in that single list (self-contained, one decision per question, suggest a default when you have one). Never ask one question now and keep others for later.
+${QUESTIONS_RULE}
+${CARD_UPDATE_RULE}
 ${PROGRESS_RULE}
 - Never edit nightshift.json yourself; the board is updated from your structured output.
+${SHARED_RULES}
 - Never kill processes by name or pattern (pkill -f, killall, kill $(pgrep …)): other agents run on this machine and their processes can match. Only kill PIDs you started yourself.
 - Return the structured output exactly once, at the very end. If you started background work (subagents, background shells), wait until all of it has finished first. Never return an interim or "in progress" result.
 - When finished, return the structured output:
@@ -384,10 +414,12 @@ ${formatColumns(board)}
 Rules:
 - Work autonomously and pick sensible defaults. Do not use the AskUserQuestion tool.
 - If you truly cannot continue without human decisions, first explore everything you can on your own, then return the structured output with "questions" (and move "stay"); the answers will be sent back to you in this same session.
-- Each round-trip with the user is slow: put EVERY question you need answered in that single list (self-contained, one decision per question, suggest a default when you have one). Never ask one question now and keep others for later.
+${QUESTIONS_RULE}
+${CARD_UPDATE_RULE}
 ${PROGRESS_RULE}
 When resuming, re-emit the marker of the step currently in progress before anything else.
 - Never edit nightshift.json yourself; the board is updated from your structured output.
+${SHARED_RULES}
 - Never kill processes by name or pattern (pkill -f, killall, kill $(pgrep …)): other agents run on this machine and their processes can match. Only kill PIDs you started yourself.
 - Return the structured output exactly once, at the very end. If you started background work (subagents, background shells), wait until all of it has finished first. Never return an interim or "in progress" result.
 - When finished, return the structured output:
@@ -472,8 +504,11 @@ export class Orchestrator {
     onState: (p) => this.broadcast({ type: "board", project: p.path, snapshot: this.snapshot(p) }),
     onResume: () => this.scheduleTick(),
   });
-  /** Cards retried by the user while paused may start anyway: job key -> the enteredColumnAt the retry wrote. */
-  private explicitRetries = new Map<string, string>();
+  /**
+   * Cards retried by the user while paused may start anyway: job key -> the column and the enteredColumnAt the retry
+   * wrote. The column is part of the match because a move in the same millisecond keeps the same timestamp.
+   */
+  private explicitRetries = new Map<string, { columnId: string; enteredColumnAt: string }>();
   private tests = new Map<string, { project: Project; cardId: string; proc: ChildProcess; lines: LogLine[] }>();
   private lastTestLines = new Map<string, LogLine[]>();
 
@@ -668,7 +703,7 @@ export class Orchestrator {
     const key = this.key(p, card.id);
     const retried = this.explicitRetries.get(key);
     if (retried === undefined) return true;
-    if (retried === card.enteredColumnAt) return false;
+    if (retried.columnId === card.columnId && retried.enteredColumnAt === card.enteredColumnAt) return false;
     this.explicitRetries.delete(key);
     return true;
   }
@@ -1070,7 +1105,7 @@ export class Orchestrator {
       if (!card) throw new HttpError(404, "Unknown card");
       card.enteredColumnAt = new Date().toISOString();
       // Explicit action: starts even while the project is paused (set before the change schedules a tick).
-      this.explicitRetries.set(this.key(p, card.id), card.enteredColumnAt);
+      this.explicitRetries.set(this.key(p, card.id), { columnId: card.columnId, enteredColumnAt: card.enteredColumnAt });
       delete card.lastRun;
       delete card.pendingAnswer;
       p.addHistory(card, "edited", "Retry requested by user");
@@ -1294,7 +1329,10 @@ export class Orchestrator {
           ? buildFeedbackPrompt(p.board, card, column, job.skill, skill?.path, this.liveStatuses(p), seen, prLine)
           : buildAnswerPrompt(card.title, skillRef, answer.text);
     if (carried) prompt = `${CONTINUE_PREFIX}\n\n${prompt}`;
-    let costUsd = 0;
+    // Smart mode: resolved once per run, before the first spawn. A recovery or a fresh restart below reuses it.
+    const smart = await this.resolveSmart(job, card, column, !!answer);
+    let costUsd = smart.costUsd;
+    if (job.cancelled) return this.finish(job, "cancelled", costUsd ? { costUsd } : {});
 
     // One automatic recovery: an agent that stops without its structured result (interrupted, or it
     // returned only interim results while background work was running) is resumed once to collect it.
@@ -1302,9 +1340,9 @@ export class Orchestrator {
       const verb = attempt > 0 ? "Recovering" : carried ? "Continuing the card's session with" : !answer ? "Starting" : "Resuming";
       job.sessionId = undefined;
       job.contextTokens = undefined;
-      const r = await this.spawnAgent(job, this.cardTarget(job, card, column, verb), prompt, resumeId);
-      if ("startError" in r) return this.finish(job, "error", { error: r.startError });
-      if (job.cancelled) return this.finish(job, "cancelled", {});
+      const r = await this.spawnAgent(job, this.cardTarget(job, card, column, verb, smart.choice), prompt, resumeId);
+      if ("startError" in r) return this.finish(job, "error", { error: r.startError, ...(costUsd ? { costUsd } : {}) });
+      if (job.cancelled) return this.finish(job, "cancelled", costUsd ? { costUsd } : {});
       const result = r.result;
       // The card's session could not be resumed (deleted, or from another machine): start this step fresh, once.
       if (carried && !job.sessionId && (!result || result.is_error)) {
@@ -1361,18 +1399,105 @@ export class Orchestrator {
     }
   }
 
-  private cardTarget(job: Job, card: Card, column: Column, verb: string): RunTarget {
+  /**
+   * The smart choice of this run. A new run calls haiku (or reads the card's cache for this column); a resumed session
+   * (answer, feedback, resume) never calls: it reuses the choice cached for the column its session ran in.
+   * Never fails the run: any failure resolves without smart.
+   */
+  private async resolveSmart(job: Job, card: Card, column: Column, resumed: boolean): Promise<{ choice?: SmartChoice; costUsd: number }> {
+    const p = job.project;
+    const settings = getSettings();
+    const fresh = p.card(job.cardId) ?? card;
+    if (resumed) {
+      const sessionColumnId = fresh.lastRun?.columnId ?? column.id;
+      const sessionColumn = p.column(sessionColumnId) ?? column;
+      if (!smartEnabled(sessionColumn, settings)) return { costUsd: 0 };
+      const entry = fresh.smartChoices?.[sessionColumnId];
+      return entry ? { choice: entry, costUsd: 0 } : { costUsd: 0 };
+    }
+    if (!smartEnabled(column, settings)) {
+      if (column.type === "skill") this.log(p, card.id, "info", "Smart off for this column.");
+      return { costUsd: 0 };
+    }
+    if (!smartNeeded(fresh, column)) {
+      this.log(p, card.id, "info", "Smart skipped: the card and column set every feature and the effort.");
+      return { costUsd: 0 };
+    }
+    const fingerprint = smartFingerprint(fresh.title, fresh.description, column.skill);
+    const cached = fresh.smartChoices?.[column.id];
+    if (cached && cached.fingerprint === fingerprint) {
+      this.log(p, card.id, "info", `Smart (cached): ${formatSmartChoice(cached)} — ${cached.reason}`);
+      return { choice: cached, costUsd: 0 };
+    }
+    const unavailable = (reason: string, costUsd: number) => {
+      this.log(p, card.id, "info", `Smart unavailable (${reason}): resolving without smart.`);
+      // A stale entry would hand an answer or feedback on this session a configuration it never ran with.
+      if (cached) {
+        p.mutate(() => {
+          const c = p.card(job.cardId);
+          if (!c?.smartChoices?.[column.id]) return;
+          const { [column.id]: _stale, ...rest } = c.smartChoices;
+          if (Object.keys(rest).length > 0) c.smartChoices = rest;
+          else delete c.smartChoices;
+        });
+      }
+      return { costUsd };
+    };
+    let env: Record<string, string | undefined> = process.env;
+    if (settings.teamclaudeEnabled) {
+      // Never wait in the teamclaude gate for the smart call: the run itself handles an unreachable proxy.
+      const proxy = await prepareProxyEnv(settings.teamclaudeUrl);
+      if (!proxy.ok) return unavailable("teamclaude unreachable", 0);
+      env = applyProxyEnv(process.env, proxy.env);
+    }
+    if (job.cancelled) return { costUsd: 0 };
+    const r = await runSmart({
+      claudePath: settings.claudePath,
+      cwd: p.path,
+      env,
+      prompt: buildSmartPrompt({
+        title: fresh.title,
+        description: fresh.description,
+        columnName: column.name,
+        skill: column.skill,
+        mcpServers: readMcpServerNames(p.path),
+      }),
+      onSpawn: (proc) => {
+        job.proc = proc;
+        if (job.cancelled) proc.kill();
+      },
+    });
+    job.proc = undefined;
+    if (job.cancelled) return { costUsd: r.costUsd };
+    if (!r.ok) return unavailable(r.reason, r.costUsd);
+    const entry: SmartEntry = { ...r.choice, fingerprint, costUsd: r.costUsd, durationMs: r.durationMs, at: new Date().toISOString() };
+    p.mutate(() => {
+      const c = p.card(job.cardId);
+      // Only the run still current for this card and column writes the cache.
+      if (!c || c.columnId !== job.columnId || c.enteredColumnAt !== job.enteredAt) return;
+      c.smartChoices = { ...c.smartChoices, [column.id]: entry };
+    });
+    this.log(
+      p,
+      card.id,
+      "info",
+      `Smart: ${formatSmartChoice(r.choice)} — ${r.choice.reason} (haiku, ${formatSmartCost(r.costUsd)}, ${(r.durationMs / 1000).toFixed(1)} s).`,
+    );
+    return { choice: r.choice, costUsd: r.costUsd };
+  }
+
+  private cardTarget(job: Job, card: Card, column: Column, verb: string, smart?: SmartChoice): RunTarget {
     const p = job.project;
     // Read the card again at each spawn: the previous column's run may have set its models.
     const fresh = p.card(job.cardId) ?? card;
     const resolved = resolveModel(column, getSettings(), fresh);
-    const effort = resolveEffort(column, getSettings(), fresh);
+    const effort = resolveEffort(column, getSettings(), fresh, smart?.effort);
     return {
       name: `nightshift: ${card.title}`.slice(0, 80),
       schema: RESULT_SCHEMA,
       model: resolved.model,
       modelSource: resolved.source,
-      features: resolveAgentFeatures({ card: fresh, column, settings: getSettings() }),
+      features: resolveAgentFeatures({ card: fresh, column, settings: getSettings(), smart: smart?.features }),
       effort: effort.effort,
       effortSource: effort.source,
       log: (kind, text) => this.log(p, card.id, kind, text),

@@ -2,12 +2,13 @@ import { expect, test } from "bun:test";
 
 // Guards against file-order dependence: on Linux progress-prompts.test.ts runs before nightshift.test.ts and loads
 // settings.ts and skills.ts first, which then capture the preload's home and user skills directories.
+// order-guard.test.ts reproduces the pattern nightshift.test.ts relies on, at a fraction of its cost.
 // The child must not inherit NIGHTSHIFT_HOME / NIGHTSHIFT_USER_SKILLS, or preload.ts (`??=`) would reuse ours.
-test("test-order-progress-prompts-first: nightshift.test.ts passes after progress-prompts.test.ts", async () => {
-  const env: Record<string, string | undefined> = { ...process.env };
+test("test-order-progress-prompts-first: order-guard.test.ts passes after progress-prompts.test.ts", async () => {
+  const env: Record<string, string | undefined> = { ...process.env, ORDER_GUARD_CHILD: "1" };
   delete env.NIGHTSHIFT_HOME;
   delete env.NIGHTSHIFT_USER_SKILLS;
-  const proc = Bun.spawn([process.execPath, "test", "./test/progress-prompts.test.ts", "./test/nightshift.test.ts"], {
+  const proc = Bun.spawn([process.execPath, "test", "./test/progress-prompts.test.ts", "./test/order-guard.test.ts"], {
     env,
     stdout: "pipe",
     stderr: "pipe",
@@ -17,4 +18,6 @@ test("test-order-progress-prompts-first: nightshift.test.ts passes after progres
   if (code !== 0 || !all.includes(" 0 fail")) console.error(all);
   expect(code).toBe(0);
   expect(all).toContain(" 0 fail");
-}, 120000);
+  // An empty guard would pass too: the scenario must have run.
+  expect(all).toContain("(pass) order-guard-paths");
+}, 30000);

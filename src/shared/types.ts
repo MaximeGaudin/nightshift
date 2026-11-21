@@ -4,6 +4,7 @@ import type { AgentFeaturesOverride } from "./agentFeatures.ts";
 import type { FlowState } from "./flow.ts";
 import type { CardExternal, IssueSource, IssueSourceStatus } from "./issues.ts";
 import type { MergeMethod, PullRequestsSetting } from "./pullRequests.ts";
+import type { SmartEntry } from "./smart.ts";
 import type { QuotaSnapshot } from "./usage.ts";
 
 export type ColumnType = "inert" | "skill";
@@ -24,6 +25,8 @@ export interface Column {
   agentFeatures?: AgentFeaturesOverride;
   /** Skill columns only: niveau d'effort (`--effort`) des runs de cette colonne ; absent = réglage global. */
   effort?: "low" | "medium" | "high" | "xhigh" | "max";
+  /** Skill columns only: smart mode for this column's runs; absent = the global setting. */
+  smartMode?: boolean;
   /** Max agents running at once in this column; absent = 1. The global setting still caps the total. */
   maxParallel?: number;
   /** Single grapheme shown instead of the type icon; absent = type icon. */
@@ -132,6 +135,8 @@ export interface Card {
   agentFeatures?: AgentFeaturesOverride;
   /** Per-skill effort overrides (skill name -> low|medium|high|xhigh|max). Never `{}`; "default" is never stored. */
   efforts?: Record<string, "low" | "medium" | "high" | "xhigh" | "max">;
+  /** Smart choices cached per column id (see shared/smart.ts). Written by the server only. Never `{}`. */
+  smartChoices?: Record<string, SmartEntry>;
   /** The card's Claude session: a column continues it unless it has `freshSession` (the default for new skill columns). */
   sessionId?: string;
   /** Link to the external issue this card was imported from. Absent on manual cards. */
@@ -334,6 +339,8 @@ export interface Settings {
   extraArgs: string;
   /** Agent features set globally; a missing key inherits the economical default. `{}` when none. */
   agentFeatures: AgentFeaturesOverride;
+  /** Smart mode: a quick haiku call picks the agent features and effort of each new column run. */
+  smartMode: boolean;
   recentProjects: string[];
   /** Play a sound when a card needs human attention. */
   soundNotifications: boolean;

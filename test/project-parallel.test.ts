@@ -6,12 +6,14 @@ import { type ChildServer, startChildServer, waitFor } from "./helpers.ts";
 
 // Own child process and NIGHTSHIFT_HOME: see helpers.ts. Each scenario opens its own projects.
 let srv: ChildServer;
+const SLOW_MS = 1500;
 
 beforeAll(async () => {
   srv = await startChildServer({
     agents: true,
     settings: { claudePath: join(import.meta.dir, "fake-claude.ts") },
-    env: { FAKE_DELAY_MS: "600" },
+    // "slow" cards run SLOW_MS; every check made while one runs waits at most half of it.
+    env: { FAKE_DELAY_MS: "300", FAKE_SLOW_MS: String(SLOW_MS) },
   });
   mkdirSync(join(srv.skills, "enrich"), { recursive: true });
   writeFileSync(join(srv.skills, "enrich", "SKILL.md"), "---\nname: enrich\ndescription: test\n---\n");
@@ -76,8 +78,8 @@ test("project-cap-raise-starts-queued: raising the cap starts the waiting card a
     return s.live[first] === "running" && s.live[second] === "queued";
   });
   await setCap(dir, 2);
-  // Well before the first card's ~5 s run ends.
-  await waitFor(async () => (await snapshot(dir)).live[second] === "running", 2000);
+  // Well before the first card's run ends.
+  await waitFor(async () => (await snapshot(dir)).live[second] === "running", SLOW_MS / 2);
   await peak(dir);
 }, 30000);
 

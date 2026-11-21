@@ -8,6 +8,7 @@ import { sanitizeModels } from "../shared/models.ts";
 import { needsRun } from "../shared/needs-run.ts";
 import { DEFAULT_MERGE_METHOD, MERGE_METHODS, type MergeMethod } from "../shared/pullRequests.ts";
 import { normalizeSkipColumnIds, resolveNextColumn } from "../shared/skip.ts";
+import { sanitizeSmartChoices } from "../shared/smart.ts";
 import { replayHistory } from "../shared/timeline.ts";
 import {
   BACKLOG_COLUMN_ID,
@@ -122,6 +123,7 @@ export const COLUMN_KEYS = [
   "lockModel",
   "agentFeatures",
   "effort",
+  "smartMode",
   "maxParallel",
   "emoji",
   "freshSession",
@@ -164,6 +166,7 @@ const CARD_KEYS = [
   "models",
   "agentFeatures",
   "efforts",
+  "smartChoices",
   "external",
 ];
 const BOARD_KEYS = [
@@ -284,6 +287,7 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
             ...(type === "skill" && typeof c.effort === "string" && isValidEffort(c.effort)
               ? { effort: c.effort.trim() as EffortLevel }
               : {}),
+            ...(type === "skill" && typeof c.smartMode === "boolean" ? { smartMode: c.smartMode } : {}),
             ...(type === "skill" && (c.freshSession === true || c.freshSession === "auto") ? { freshSession: c.freshSession } : {}),
             ...(maxParallel !== undefined ? { maxParallel } : {}),
             ...(emoji !== undefined ? { emoji } : {}),
@@ -314,6 +318,7 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
     const { models } = sanitizeModels(c.models);
     const agentFeatures = sanitizeAgentFeatures(c.agentFeatures);
     const { efforts } = sanitizeEfforts(c.efforts);
+    const smartChoices = sanitizeSmartChoices(c.smartChoices);
     const columnId = typeof c.columnId === "string" && colIds.has(c.columnId) ? c.columnId : columns[0]?.id;
     const external = normalizeCardExternal(c.external);
     return {
@@ -337,6 +342,7 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
       ...(models ? { models } : {}),
       ...(agentFeatures ? { agentFeatures } : {}),
       ...(efforts ? { efforts } : {}),
+      ...(smartChoices ? { smartChoices } : {}),
       ...(typeof c.sessionId === "string" && c.sessionId ? { sessionId: c.sessionId } : {}),
       ...(external ? { external } : {}),
       ...(isRaw(c.seenDescription) &&

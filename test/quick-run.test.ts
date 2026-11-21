@@ -39,6 +39,8 @@ if (!CHILD) {
   process.env.NIGHTSHIFT_HOME = home;
   process.env.NIGHTSHIFT_USER_SKILLS = userSkills;
   process.env.FAKE_DELAY_MS = "300";
+  // FAKE_QUICK_SLOW runs and "slow" cards: long enough for every check made while one runs.
+  process.env.FAKE_SLOW_MS = "2000";
   process.env.FAKE_ARGS_LOG = argsLog;
 
   const { Orchestrator } = await import("../src/server/orchestrator.ts");

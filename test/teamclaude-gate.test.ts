@@ -35,7 +35,7 @@ let srv: ChildServer;
 beforeAll(async () => {
   srv = await startChildServer({
     agents: true,
-    settings: { claudePath: join(import.meta.dir, "fake-claude.ts") },
+    settings: { claudePath: join(import.meta.dir, "fake-claude.ts"), smartMode: false },
     env: {
       FAKE_DELAY_MS: "50",
       FAKE_ENV_LOG: envLog,
@@ -221,7 +221,7 @@ test("teamclaude-decision: an unknown action is refused, no wait answers null", 
 test("teamclaude-not-found: no teamclaude binary on PATH is reported", async () => {
   const other = await startChildServer({
     agents: true,
-    settings: { claudePath: join(import.meta.dir, "fake-claude.ts"), teamclaudeEnabled: true, teamclaudeUrl: proxyUrl },
+    settings: { claudePath: join(import.meta.dir, "fake-claude.ts"), teamclaudeEnabled: true, teamclaudeUrl: proxyUrl, smartMode: false },
     env: {
       FAKE_DELAY_MS: "50",
       PATH: (process.env.PATH ?? "")

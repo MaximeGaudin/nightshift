@@ -32,6 +32,13 @@ export const columns: Record<keyof typeof enColumns, string> = {
   "columns.session.continue": "Continuer",
   "columns.session.fresh": "Vierge",
   "columns.session.auto": "Auto",
+  "columns.smartMode": "Smart",
+  "columns.smartModeHint":
+    "Mode smart : un appel rapide à haiku choisit les fonctionnalités et l'effort de chaque nouveau run de cette colonne.",
+  "columns.smart.inheritOn": "Hériter (activé)",
+  "columns.smart.inheritOff": "Hériter (coupé)",
+  "columns.smart.on": "Activé",
+  "columns.smart.off": "Coupé",
   "columns.fastMerge": "Merge rapide sans agent",
   "columns.fastMergeHint":
     "Avant de lancer l'agent, Nightshift fusionne la fiche lui-même (verrou, arrêt du test, fast-forward, push, suppression du worktree). Au moindre conflit ou erreur, l'agent est lancé comme d'habitude, avec ce qui a été tenté.",

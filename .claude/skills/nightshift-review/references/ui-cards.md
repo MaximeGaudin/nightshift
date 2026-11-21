@@ -1,0 +1,25 @@
+# Cards that change a screen
+
+Read this only when the card changes a screen: `git diff --name-only <base>` lists UI code, or the brief names a page.
+
+## Run the app
+
+A screen usually needs more than its front end: a backend, a database, other services. Start everything it needs from the worktree, backends first, the front end last.
+
+- Use the start command the column instructions give. Otherwise the project's own: a `dev` or `start` script, a compose file, or the run command of the README.
+- The worktree has none of the files git ignores: `.env`, local secrets, virtualenvs, `node_modules`. Link env, secret and virtualenv files from the board project (`ln -s`, only when missing). Never copy, print or stage them. Install missing dependencies with the project's installer.
+- Pick free ports (`lsof -nP -iTCP:<port> -sTCP:LISTEN` prints nothing), never the project's default ones: the human's own servers may hold them. Point the front end at the backend's port.
+- Start backends in the background and wait until each answers its health or base URL (10 tries, one second apart). Keep the front end in the foreground, so stopping the command stops the whole stack.
+- When the app asks for a key or a login, the human has it. Do not write it in the note.
+- To stop: end the command, then any background process it started from the worktree. Leave the ports free.
+
+## Check `test`
+
+- `test.command` must `cd` into this run's worktree. Rewrite the path when the worktree changed.
+- It must start everything the screen needs (see above). A front-end dev server without its backend is wrong, whatever an earlier run wrote: replace it, with free ports, and set `test.url` to the page.
+- Start the command and check that it works: the url answers (`curl -sf -o /dev/null`, 10 tries, one second apart), and so does each backend it started. Keep the stack running for the screenshots.
+- Return the checked `test` in the output, changed or not. A `test` that only starts a front-end dev server without its backend is never returned.
+
+## Refresh screenshots
+
+With the stack running, capture each screen already listed under `## Screenshots` with `npx --yes playwright screenshot --browser chromium --full-page --viewport-size=1280,800 "<url>" "<png>"`. Retry a file once on failure. Stop the stack after and leave the ports free. Do not stage the PNGs. Keep the same absolute paths in `## Screenshots`. When there is no `test.url`, leave screenshots unchanged.

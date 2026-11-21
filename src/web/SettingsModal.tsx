@@ -124,6 +124,8 @@ export function SettingsContent({
   const s = value;
   const { t } = useT();
   const languages = languageOptions();
+  // With smart mode on, the global features and effort are only the fallback.
+  const withSmartFallback = (help: string) => (s.smartMode !== false ? `${help} ${t("settings.smart.fallback")}` : help);
   return (
     <div className="flex flex-col gap-6">
       <Section title={t("settings.interface.title")} description={t("settings.interface.description")}>
@@ -282,7 +284,10 @@ export function SettingsContent({
             onChange={(e) => onChange({ ...s, model: e.target.value })}
           />
         </Row>
-        <Row id="set-agent-features" label={t("agentFeatures.title")} help={t("agentFeatures.help")}>
+        <Row id="set-smart-mode" label={t("settings.smart.label")} help={t("settings.smart.help")}>
+          <Switch id="set-smart-mode" checked={s.smartMode !== false} onCheckedChange={(v) => onChange({ ...s, smartMode: v })} />
+        </Row>
+        <Row id="set-agent-features" label={t("agentFeatures.title")} help={withSmartFallback(t("agentFeatures.help"))}>
           <AgentFeaturesFields
             idPrefix="set-agent-features"
             value={s.agentFeatures}
@@ -290,7 +295,7 @@ export function SettingsContent({
             onChange={(next) => onChange({ ...s, agentFeatures: next ?? {} })}
           />
         </Row>
-        <Row id="set-effort" label={t("settings.effort.label")} help={t("settings.effort.help")}>
+        <Row id="set-effort" label={t("settings.effort.label")} help={withSmartFallback(t("settings.effort.help"))}>
           <select
             id="set-effort"
             className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
@@ -366,6 +371,7 @@ const EDITABLE = [
   "effort",
   "extraArgs",
   "soundNotifications",
+  "smartMode",
   "language",
   "carryMaxTokens",
   "carryMaxAgeMinutes",
