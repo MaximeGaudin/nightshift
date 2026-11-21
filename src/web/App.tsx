@@ -395,6 +395,7 @@ export function App() {
           currentProject={snap.path}
           projectMaxParallel={snap.maxParallel}
           worktreePolicy={worktreePolicyOf(snap.board)}
+          issues={{ sources: snap.board.issueSources ?? [], status: snap.issueSources, canSync: !snap.agentsDisabled && !snap.lockedBy }}
           onOpenProject={(p) => {
             setModal(null);
             setProject(p);

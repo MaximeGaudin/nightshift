@@ -1,5 +1,6 @@
 import { TriangleAlert } from "lucide-react";
 import { type ReactNode, useState } from "react";
+import type { IssueSource, IssueSourceStatus } from "../shared/issues.ts";
 import { type LanguageSetting, MAX_PARALLEL, type Settings, WORKTREE_POLICIES, type WorktreePolicy } from "../shared/types.ts";
 import { api } from "./api.ts";
 import { AppDialog } from "./components/app-dialog.tsx";
@@ -10,6 +11,7 @@ import { Input } from "./components/ui/input.tsx";
 import { Label } from "./components/ui/label.tsx";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./components/ui/select.tsx";
 import { Switch } from "./components/ui/switch.tsx";
+import { IssueSourcesEditor } from "./IssueSourcesEditor.tsx";
 import { type MessageKey, t, useT } from "./i18n/index.ts";
 import { notifyError } from "./notify.ts";
 
@@ -59,6 +61,13 @@ function Row({ id, label, help, children }: { id?: string; label: string; help?:
   );
 }
 
+/** Live issue sources of the open project, passed from its snapshot. */
+export interface IssuesProps {
+  sources: IssueSource[];
+  status?: Record<string, IssueSourceStatus>;
+  canSync: boolean;
+}
+
 /** Settings form; rendered separately from the dialog so it can be tested without a browser. */
 export function SettingsContent({
   value,
@@ -69,6 +78,7 @@ export function SettingsContent({
   onProjectMaxParallelChange,
   worktreePolicy,
   onWorktreePolicyChange,
+  issues,
 }: {
   value: Settings;
   onChange: (s: Settings) => void;
@@ -80,6 +90,8 @@ export function SettingsContent({
   /** Worktree policy of the open project (draft value); its row shows in the "This project" section when given. */
   worktreePolicy?: WorktreePolicy;
   onWorktreePolicyChange?: (policy: WorktreePolicy) => void;
+  /** Issue sources of the open project, live from its snapshot; the editor saves on its own. */
+  issues?: IssuesProps;
 }) {
   const s = value;
   const { t } = useT();
@@ -136,6 +148,9 @@ export function SettingsContent({
                 </SelectContent>
               </Select>
             </Row>
+          )}
+          {issues && (
+            <IssueSourcesEditor project={currentProject} sources={issues.sources} status={issues.status} canSync={issues.canSync} />
           )}
         </Section>
       )}
@@ -277,6 +292,7 @@ export function SettingsModal({
   onOpenProject,
   projectMaxParallel,
   worktreePolicy,
+  issues,
 }: {
   settings: Settings;
   onClose: () => void;
@@ -287,6 +303,7 @@ export function SettingsModal({
   projectMaxParallel?: number;
   /** Saved worktree policy of the open project. */
   worktreePolicy?: WorktreePolicy;
+  issues?: IssuesProps;
 }) {
   const { t } = useT();
   const [s, setS] = useState(settings);
@@ -332,6 +349,7 @@ export function SettingsModal({
         onProjectMaxParallelChange={setCap}
         worktreePolicy={policy}
         onWorktreePolicyChange={setPolicy}
+        issues={issues}
         onOpenProject={
           onOpenProject &&
           ((path) => {
