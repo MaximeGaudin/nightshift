@@ -128,6 +128,9 @@ export const api = {
     call<{ count: number }>("POST", "/api/issue-sources/test", { project, source, ...(token ? { token } : {}) }),
   syncIssues: (project: string, sourceId?: string) =>
     call<ProjectSnapshot>("POST", "/api/issue-sources/sync", { project, ...(sourceId ? { sourceId } : {}) }),
+  /** Resync: a sync of one source that also deletes its Backlog cards that no longer match its filters. */
+  resyncIssues: (project: string, sourceId: string) =>
+    call<ProjectSnapshot>("POST", "/api/issue-sources/sync", { project, sourceId, prune: true }),
   detectIssueSource: (project: string) =>
     call<{ provider?: string; baseUrl?: string; repo?: string }>("GET", `/api/issue-sources/detect?${q(project)}`),
 };

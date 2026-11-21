@@ -2,7 +2,16 @@ import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { IssueSource } from "../src/shared/issues.ts";
 import type { Settings } from "../src/shared/types.ts";
-import { draftFromDetect, draftFromSource, draftToInput, IssueSourcesEditor, saveDraft, toInput } from "../src/web/IssueSourcesEditor.tsx";
+import {
+  confirmResync,
+  draftFromDetect,
+  draftFromSource,
+  draftToInput,
+  IssueSourcesEditor,
+  resyncChanged,
+  saveDraft,
+  toInput,
+} from "../src/web/IssueSourcesEditor.tsx";
 import { SettingsContent } from "../src/web/SettingsModal.tsx";
 
 const src: IssueSource = {
@@ -125,4 +134,49 @@ test("ui-query-field", () => {
   expect(draftToInput({ ...draftFromSource(q), provider: "gitea", baseUrl: "https://g.example.com" })).not.toHaveProperty("query");
   const html = renderToStaticMarkup(<IssueSourcesEditor project="/p" sources={[q]} status={{}} canSync />);
   expect(html).toContain("issue-source-query");
+});
+
+test("ui-resync", async () => {
+  const input = (d: Partial<ReturnType<typeof draftFromSource>>) => draftToInput({ ...draftFromSource(src), ...d });
+  // New source, or nothing that changes what is imported: no prompt.
+  expect(resyncChanged(undefined, input({}))).toBe(false);
+  expect(resyncChanged(src, input({}))).toBe(false);
+  expect(resyncChanged(src, input({ enabled: false }))).toBe(false);
+  expect(resyncChanged({ ...src, labels: ["bug", "ui"] }, input({ labels: " UI , Bug " }))).toBe(false);
+  expect(resyncChanged(src, input({ query: "   " }))).toBe(false);
+  expect(resyncChanged(src, input({ baseUrl: "https://api.github.com/" }))).toBe(false);
+  // Labels, query or target changed: prompt.
+  expect(resyncChanged(src, input({ labels: "ui" }))).toBe(true);
+  expect(resyncChanged(src, input({ labels: "" }))).toBe(true);
+  expect(resyncChanged(src, input({ query: "is:issue" }))).toBe(true);
+  expect(resyncChanged(src, input({ repo: "o/other" }))).toBe(true);
+  expect(resyncChanged(src, input({ provider: "gitea", baseUrl: "https://g.example.com" }))).toBe(true);
+
+  const calls: string[] = [];
+  const client = {
+    resyncIssues: async (project: string, id: string) => {
+      calls.push(`${project} ${id}`);
+      return {} as never;
+    },
+  };
+  const asked: string[] = [];
+  expect(
+    await confirmResync(
+      client,
+      "/p",
+      "src_a",
+      (m) => {
+        asked.push(m);
+        return false;
+      },
+      "sure?",
+    ),
+  ).toBe(false);
+  expect(calls).toEqual([]);
+  expect(await confirmResync(client, "/p", "src_a", () => true, "sure?")).toBe(true);
+  expect(calls).toEqual(["/p src_a"]);
+  expect(asked).toEqual(["sure?"]);
+
+  const html = renderToStaticMarkup(<IssueSourcesEditor project="/p" sources={[src]} status={{}} canSync />);
+  expect(html).toContain("issue-source-resync");
 });

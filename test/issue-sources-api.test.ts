@@ -181,3 +181,36 @@ test("api-query-validation-and-change", async () => {
   expect(gt.board.issueSources?.[0]).not.toHaveProperty("query");
   await put([]);
 });
+
+test("api-resync", async () => {
+  issues = [{ number: 1, title: "First", body: "b", state: "open", labels: [{ name: "bug" }] }];
+  const board = {
+    version: 1,
+    name: "b",
+    columns: [],
+    cards: [],
+    nextCardNumber: 1,
+    issueSources: [{ id: "src_r", ...source, importedIds: [] }],
+  };
+  const resync = (s: ChildServer, d: string, body: Record<string, unknown>) =>
+    s.call("/api/issue-sources/sync", { body: { project: d, ...body } });
+
+  const idleDir = await openProject(idle, board);
+  expect((await resync(idle, idleDir, { sourceId: "src_r", prune: true })).status).toBe(409);
+
+  const d = await openProject(agents, board);
+  await waitFor(async () => (await snap(agents, d)).board.cards.length === 1);
+  expect((await resync(agents, d, { prune: true })).status).toBe(400);
+  expect((await resync(agents, d, { sourceId: "src_r", prune: "yes" })).status).toBe(400);
+  expect((await resync(agents, d, { sourceId: "nope", prune: true })).status).toBe(404);
+
+  // The filter now excludes #1: a normal sync keeps its card, a resync deletes it.
+  await agents.call("/api/issue-sources", { method: "PUT", body: { project: d, sources: [{ ...source, id: "src_r", labels: ["ui"] }] } });
+  const kept = (await (await resync(agents, d, { sourceId: "src_r" })).json()) as ProjectSnapshot;
+  expect(kept.board.cards.length).toBe(1);
+  const r = await resync(agents, d, { sourceId: "src_r", prune: true });
+  expect(r.status).toBe(200);
+  const s = (await r.json()) as ProjectSnapshot;
+  expect(s.board.cards.length).toBe(0);
+  expect(s.board.issueSources?.[0]?.importedIds).toEqual([]);
+});

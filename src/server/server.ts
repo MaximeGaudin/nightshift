@@ -693,9 +693,13 @@ export function startServer({ port, development, agents = true }: { port: number
           const p = project(b, url);
           if (!orch.canRunAgents(p)) throw new HttpError(409, "This instance does not run this project's agents");
           const sourceId = optString(b, "sourceId");
+          // prune (resync): also deletes the source's Backlog cards that no longer match its filters.
+          if (b.prune != null && typeof b.prune !== "boolean") throw new Error("prune must be a boolean");
+          const prune = b.prune === true;
+          if (prune && !sourceId) throw new Error("prune needs a sourceId");
           if (sourceId) {
             if (!p.board.issueSources?.some((s) => s.id === sourceId)) throw new HttpError(404, "Unknown issue source");
-            await orch.issues.syncSource(p, sourceId);
+            await orch.issues.syncSource(p, sourceId, { prune });
           } else await orch.issues.syncAll(p);
           return orch.snapshot(p);
         }),

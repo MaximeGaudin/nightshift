@@ -3,9 +3,12 @@
 
 import { useState } from "react";
 import {
+  effectiveBaseUrl,
   type IssueSource,
   type IssueSourceInput,
   type IssueSourceStatus,
+  normalizeLabels,
+  normalizeQuery,
   PROVIDERS,
   providerInfo,
   providerLabel,
@@ -93,6 +96,41 @@ const tokenBaseUrl = (d: Pick<SourceDraft, "provider" | "baseUrl">) => d.baseUrl
 
 type Client = Pick<typeof api, "saveIssueSources" | "saveIssueToken">;
 
+/** Labels as the server stores them, compared case-insensitively and in any order. */
+const labelKey = (labels: string[] | undefined) => JSON.stringify((normalizeLabels(labels) ?? []).map((l) => l.toLowerCase()).sort());
+
+/**
+ * True when saving `input` over the existing source `old` changes what the source imports: its target (provider,
+ * base URL, repo), labels or query. Differences that only come from normalization (label order or case, blank query,
+ * trailing slash, empty base URL meaning the provider default) do not count. False for a new source.
+ */
+export function resyncChanged(old: IssueSource | undefined, input: IssueSourceInput): boolean {
+  if (!old) return false;
+  const info = providerInfo(input.provider);
+  const baseUrl = info ? effectiveBaseUrl(info, input.baseUrl) : input.baseUrl;
+  const query = info?.supportsQuery ? normalizeQuery(input.query) : undefined;
+  return (
+    old.provider !== input.provider ||
+    old.baseUrl !== baseUrl ||
+    old.repo !== input.repo.trim() ||
+    labelKey(old.labels) !== labelKey(input.labels) ||
+    (old.query ?? "") !== (query ?? "")
+  );
+}
+
+/** Asks with `message`, then resyncs the source only when the user confirms. Returns whether it resynced. */
+export async function confirmResync(
+  client: Pick<typeof api, "resyncIssues">,
+  project: string,
+  sourceId: string,
+  ask: (message: string) => boolean,
+  message: string,
+): Promise<boolean> {
+  if (!ask(message)) return false;
+  await client.resyncIssues(project, sourceId);
+  return true;
+}
+
 /**
  * Saves a draft: its token first (only when one was typed, so an empty field never clears the saved token), then the
  * whole source list with the draft replacing its source (or appended when new).
@@ -153,6 +191,12 @@ export function IssueSourcesEditor({
       await saveDraft(api, project, sources, draft);
       setDraft(null);
       setTestResult(null);
+      const old = draft.id ? sources.find((s) => s.id === draft.id) : undefined;
+      // Changed filters or target: offer to drop the Backlog cards that no longer match (else the normal sync runs).
+      if (old && canSync && draft.enabled && resyncChanged(old, draftToInput(draft))) {
+        const repo = draft.repo.trim();
+        await confirmResync(api, project, old.id, confirm, t("settings.issues.resyncAfterSave", { repo }));
+      }
     });
 
   const test = () =>
@@ -230,6 +274,18 @@ export function IssueSourcesEditor({
                   onClick={() => run(() => api.syncIssues(project, s.id))}
                 >
                   {st?.syncing ? t("settings.issues.syncing") : t("settings.issues.sync")}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="issue-source-resync"
+                  disabled={!canSync || busy || !s.enabled}
+                  onClick={() =>
+                    run(() => confirmResync(api, project, s.id, confirm, t("settings.issues.resyncConfirm", { repo: s.repo })))
+                  }
+                >
+                  {t("settings.issues.resync")}
                 </Button>
                 <Button
                   type="button"
