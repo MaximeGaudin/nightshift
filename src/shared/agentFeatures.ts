@@ -1,5 +1,5 @@
 // Agent features: what a `claude -p` run loads of the user's setup. Each one is on or off, resolved
-// one by one: card > column > settings > default. Pure, no I/O.
+// one by one: card > column > smart > settings > default. Pure, no I/O.
 
 import { type LayerSource, resolveLayered } from "./layers.ts";
 import type { Card, Column, Settings } from "./types.ts";
@@ -21,6 +21,8 @@ export function resolveAgentFeatures(layers: {
   card?: Pick<Card, "agentFeatures">;
   column?: Pick<Column, "agentFeatures">;
   settings: Pick<Settings, "agentFeatures">;
+  /** The smart choice of this run, between the column and the settings. */
+  smart?: Record<AgentFeature, boolean>;
 }): ResolvedAgentFeatures {
   const out = {} as ResolvedAgentFeatures;
   for (const f of AGENT_FEATURES) {
@@ -28,6 +30,7 @@ export function resolveAgentFeatures(layers: {
       [
         { source: "card", value: layers.card?.agentFeatures?.[f] },
         { source: "column", value: layers.column?.agentFeatures?.[f] },
+        { source: "smart", value: layers.smart?.[f] },
         { source: "settings", value: layers.settings.agentFeatures?.[f] },
       ],
       DEFAULT_AGENT_FEATURES[f],
