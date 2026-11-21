@@ -214,3 +214,46 @@ test("api-resync", async () => {
   expect(s.board.cards.length).toBe(0);
   expect(s.board.issueSources?.[0]?.importedIds).toEqual([]);
 });
+
+test("api-sync-results-and-preview", async () => {
+  issues = [
+    { number: 1, title: "First", body: "b", state: "open", labels: [{ name: "bug" }] },
+    { number: 2, title: "Second", body: "b", state: "open", labels: [{ name: "ui" }] },
+  ];
+  const board = {
+    version: 1,
+    name: "b",
+    columns: [],
+    cards: [],
+    nextCardNumber: 1,
+    issueSources: [{ id: "src_p", ...source, labels: ["bug"], importedIds: [] }],
+  };
+  const post = (s: ChildServer, path: string, d: string, body: Record<string, unknown>) =>
+    s.call(path, { body: { project: d, ...body } });
+
+  const idleDir = await openProject(idle, board);
+  expect((await post(idle, "/api/issue-sources/preview", idleDir, { sourceId: "src_p" })).status).toBe(409);
+
+  const d = await openProject(agents, board);
+  await waitFor(async () => (await snap(agents, d)).board.cards.length === 1);
+  expect((await post(agents, "/api/issue-sources/preview", d, { sourceId: "nope" })).status).toBe(404);
+  expect((await post(agents, "/api/issue-sources/preview", d, {})).status).toBe(400);
+
+  await agents.call("/api/issue-sources", { method: "PUT", body: { project: d, sources: [{ ...source, id: "src_p", labels: ["ui"] }] } });
+  // The save triggers a background sync that imports #2 next to #1.
+  await waitFor(async () => (await snap(agents, d)).board.cards.length === 2);
+  const pre = await post(agents, "/api/issue-sources/preview", d, { sourceId: "src_p" });
+  expect(pre.status).toBe(200);
+  const counts = (await pre.json()) as Record<string, number>;
+  expect(counts.matching).toBe(1);
+  expect(counts.toPrune).toBe(1);
+  expect(counts.backlogNow).toBe(2);
+  expect((await snap(agents, d)).board.cards.length).toBe(2);
+
+  const r = await post(agents, "/api/issue-sources/sync", d, { sourceId: "src_p", prune: true });
+  const body = (await r.json()) as ProjectSnapshot & { results: { sourceId: string; ok: boolean; pruned: number; imported: number }[] };
+  expect(body.board.cards.length).toBe(1);
+  expect(body.results.map((x) => [x.sourceId, x.ok, x.pruned, x.imported])).toEqual([["src_p", true, counts.toPrune, counts.toImport]]);
+  const all = (await (await post(agents, "/api/issue-sources/sync", d, {})).json()) as { results: unknown[] };
+  expect(all.results.length).toBe(1);
+});
