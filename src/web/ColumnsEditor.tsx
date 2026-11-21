@@ -77,6 +77,19 @@ export function sessionModePatch(mode: SessionMode): Partial<Column> {
   return { freshSession: mode === "auto" ? "auto" : mode === "fresh" ? true : undefined };
 }
 
+/** Smart mode of a skill column: inherit the global setting, or force it on or off. */
+export const SMART_MODES = ["inherit", "on", "off"] as const;
+export type SmartModeChoice = (typeof SMART_MODES)[number];
+
+export function smartModeOf(col: Pick<Column, "smartMode">): SmartModeChoice {
+  return col.smartMode === true ? "on" : col.smartMode === false ? "off" : "inherit";
+}
+
+/** Select choice → column patch: Inherit removes the key. */
+export function smartModePatch(mode: SmartModeChoice): Partial<Column> {
+  return { smartMode: mode === "on" ? true : mode === "off" ? false : undefined };
+}
+
 /** Column type change → patch: a column turned into a skill column decides its session per run (the user can change it). */
 export function typePatch(type: Column["type"]): Partial<Column> {
   return type === "skill" ? { type, freshSession: "auto" } : { type };
@@ -162,6 +175,8 @@ function SortableColumnRow({ col, skills, skillsLoading, cardCount, reducedMotio
   const [open, setOpen] = useState(false);
   const isSkill = col.type === "skill";
   const skill = skills.find((s) => s.name === col.skill);
+  const smartLabel = (m: SmartModeChoice) =>
+    m === "inherit" ? t(settings?.smartMode === false ? "columns.smart.inheritOff" : "columns.smart.inheritOn") : t(`columns.smart.${m}`);
   const style = {
     transform: CSS.Transform.toString(transform),
     transition: reducedMotion ? undefined : transition,
@@ -312,6 +327,21 @@ function SortableColumnRow({ col, skills, skillsLoading, cardCount, reducedMotio
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+              <div className="smart-mode flex items-center gap-2 text-xs" title={t("columns.smartModeHint")}>
+                <Label htmlFor={`smart-${col.key}`}>{t("columns.smartMode")}</Label>
+                <Select value={smartModeOf(col)} onValueChange={(v) => onPatch(smartModePatch(v as SmartModeChoice))}>
+                  <SelectTrigger id={`smart-${col.key}`} className="w-40">
+                    <SelectValue>{smartLabel(smartModeOf(col))}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SMART_MODES.map((m) => (
+                      <SelectItem key={m} value={m}>
+                        {smartLabel(m)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <FastMergeControls col={col} onPatch={onPatch} />
               <div className="grid gap-1.5 sm:col-span-2">

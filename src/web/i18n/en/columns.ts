@@ -29,6 +29,12 @@ export const columns = {
   "columns.session.continue": "Continue",
   "columns.session.fresh": "Fresh",
   "columns.session.auto": "Auto",
+  "columns.smartMode": "Smart",
+  "columns.smartModeHint": "Smart mode: a quick haiku call picks the features and the effort of each new run in this column.",
+  "columns.smart.inheritOn": "Inherit (on)",
+  "columns.smart.inheritOff": "Inherit (off)",
+  "columns.smart.on": "On",
+  "columns.smart.off": "Off",
   "columns.fastMerge": "Merge without an agent when possible",
   "columns.fastMergeHint":
     "Before starting the agent, Nightshift merges the card itself (lock, stop the test, fast-forward, push, remove the worktree). Any conflict or error starts the agent as usual, with what was tried.",

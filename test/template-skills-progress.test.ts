@@ -15,13 +15,14 @@ function stepsSection(md: string): string {
   return next < 0 ? rest : rest.slice(0, next);
 }
 
-test("template-skills-emit-marker: every nightshift skill tells the agent to write the progress marker in its Steps", () => {
+test("template-skills-steps: every column skill has numbered Steps, leaves the marker rule to the prompt, and holds no real marker", () => {
   expect(dirs.length).toBeGreaterThan(0);
   for (const dir of dirs) {
     const md = readFileSync(join(SKILLS, dir, "SKILL.md"), "utf8");
-    expect(md, dir).toContain("[nightshift-progress]");
-    expect(stepsSection(md), dir).toContain("[nightshift-progress] N/M");
-    // The template must not itself contain a real marker (digits), or it would be parsed as progress.
+    expect(/^1\. /m.test(stepsSection(md)), dir).toBe(true);
+    // The marker rule lives in PROGRESS_RULE (src/server/orchestrator.ts), which every column prompt carries.
+    expect(md, dir).not.toContain("[nightshift-progress] N/M");
+    // A real marker (digits) would be parsed as progress.
     expect(/^\s*\[nightshift-progress\]\s+\d+\/\d+/m.test(md), dir).toBe(false);
   }
 });

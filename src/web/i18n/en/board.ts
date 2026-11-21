@@ -107,7 +107,7 @@ export const board = {
   "board.quota.duration.dh": "{d}d {h}h",
   "board.app.queued": "{count} queued",
   "board.flow.fastForwardOn": "Fast forward: on (click to turn off)",
-  "board.flow.fastForwardOff": "Fast forward: off (click to move every ready Backlog card out)",
+  "board.flow.fastForwardOff": "Fast forward: off (click to move every ready Backlog card out and rerun cancelled runs)",
   "board.flow.playing": "Playing: click to pause",
   "board.flow.paused_one": "Paused: {count} card waiting (click to resume)",
   "board.flow.paused_other": "Paused: {count} cards waiting (click to resume)",

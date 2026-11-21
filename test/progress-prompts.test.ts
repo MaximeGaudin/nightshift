@@ -1,5 +1,13 @@
 import { expect, test } from "bun:test";
-import { buildAnswerPrompt, buildFeedbackPrompt, buildPrompt, PROGRESS_RULE, RECOVER_PROMPT } from "../src/server/orchestrator.ts";
+import {
+  buildAnswerPrompt,
+  buildFeedbackPrompt,
+  buildPrompt,
+  CARD_UPDATE_RULE,
+  PROGRESS_RULE,
+  QUESTIONS_RULE,
+  RECOVER_PROMPT,
+} from "../src/server/orchestrator.ts";
 import { parseProgressMarker } from "../src/server/progress.ts";
 import { defaultBoard } from "../src/server/store.ts";
 import type { Card, Column } from "../src/shared/types.ts";
@@ -29,5 +37,19 @@ test("prompts-carry-progress-rule: the rule names the marker and the style prior
 });
 
 test("progress-marker-rejects-prose: the rule text never matches a marker", () => {
-  expect(parseProgressMarker(PROGRESS_RULE)).toBeUndefined();
+  for (const rule of [PROGRESS_RULE, QUESTIONS_RULE, CARD_UPDATE_RULE]) expect(parseProgressMarker(rule)).toBeUndefined();
+});
+
+test("prompts-carry-common-rules: run and feedback prompts hold each shared rule exactly once", () => {
+  const prompts = { new: buildPrompt(board, card, col, undefined), feedback: buildFeedbackPrompt(board, card, col, "enrich", undefined) };
+  const count = (p: string, s: string) => p.split(s).length - 1;
+  for (const [name, p] of Object.entries(prompts)) {
+    for (const rule of [PROGRESS_RULE, QUESTIONS_RULE, CARD_UPDATE_RULE]) expect(count(p, rule), name).toBe(1);
+    expect(count(p, "Do not re-read a file"), name).toBe(1);
+    expect(count(p, "do not contradict the skill"), name).toBe(1);
+  }
+  expect(PROGRESS_RULE).toContain("`## Steps`");
+  expect(QUESTIONS_RULE).toContain("three blank lines");
+  expect(QUESTIONS_RULE).toContain("Recommended:");
+  expect(CARD_UPDATE_RULE).toContain("byte for byte");
 });

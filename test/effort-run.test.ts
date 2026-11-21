@@ -21,7 +21,7 @@ let srv: ReturnType<typeof startServer>;
 let base = "";
 
 beforeAll(() => {
-  updateSettings({ claudePath: join(import.meta.dir, "fake-claude.ts"), model: "", effort: "", extraArgs: "" });
+  updateSettings({ claudePath: join(import.meta.dir, "fake-claude.ts"), model: "", effort: "", extraArgs: "", smartMode: false });
   srv = startServer({ port: 0 });
   base = `http://localhost:${srv.server.port}`;
   for (const s of ["nightshift-merge", "nightshift-review"]) {

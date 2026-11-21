@@ -80,3 +80,44 @@ test("setters refuse an instance that does not run agents", () => {
   expect(() => ctl.setPaused(p, true)).toThrow("This instance does not run agents for this project");
   expect(ctl.get(p)).toEqual({ fastForward: false, paused: false });
 });
+
+test("turning fast forward on requeues cancelled runs in their own skill column only", async () => {
+  const { p, ctl, card, settle } = setup(["A", "B", "C", "D"]);
+  const at = new Date(Date.now() + 1000).toISOString();
+  p.mutate(() => {
+    const set = (id: string, columnId: string, status: "cancelled" | "error", lrCol: string) => {
+      const c = card(id);
+      c.columnId = columnId;
+      c.lastRun = { columnId: lrCol, status, at };
+    };
+    set("A", "c_grill", "cancelled", "c_grill");
+    set("B", "c_grill", "error", "c_grill");
+    set("C", "c_totest", "cancelled", "c_totest");
+    set("D", "c_grill", "cancelled", "c_totest");
+  });
+  ctl.setFastForward(p, true);
+  await settle();
+  expect(card("A").lastRun).toBeUndefined();
+  expect(card("A").history.some((h) => h.text === "Fast forward: retry of cancelled run")).toBe(true);
+  expect(card("B").lastRun?.status).toBe("error");
+  expect(card("C").lastRun?.status).toBe("cancelled");
+  expect(card("D").lastRun?.status).toBe("cancelled");
+});
+
+test("a second fast forward on does not retry again, and paused still requeues", async () => {
+  const { p, ctl, card, settle } = setup(["A"]);
+  p.mutate(() => {
+    card("A").columnId = "c_grill";
+    card("A").lastRun = { columnId: "c_grill", status: "cancelled", at: new Date().toISOString() };
+  });
+  ctl.setPaused(p, true);
+  ctl.setFastForward(p, true);
+  await settle();
+  expect(card("A").lastRun).toBeUndefined();
+  p.mutate(() => {
+    card("A").lastRun = { columnId: "c_grill", status: "cancelled", at: new Date().toISOString() };
+  });
+  ctl.setFastForward(p, true);
+  await settle();
+  expect(card("A").lastRun?.status).toBe("cancelled");
+});

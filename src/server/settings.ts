@@ -21,6 +21,7 @@ export const DEFAULT_SETTINGS: Settings = {
   effort: "",
   extraArgs: "",
   agentFeatures: {},
+  smartMode: true,
   recentProjects: [],
   soundNotifications: true,
   language: "auto",
@@ -86,6 +87,7 @@ function checkField(key: keyof Settings, value: unknown): string | null {
     case "effort":
       return isValidEffortSetting(value) ? null : `Unknown effort: ${String(value)}`;
     case "soundNotifications":
+    case "smartMode":
     case "teamclaudeEnabled":
       return typeof value === "boolean" ? null : `${key} must be a boolean`;
     case "teamclaudeUrl":

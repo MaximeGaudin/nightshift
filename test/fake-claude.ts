@@ -15,6 +15,9 @@
 // A card titled "rate-limit" emits a rate_limit_event (5 h 38 %, 7 d 88 %); "rate-limit-bad" emits a malformed one.
 // A card titled "tokens-<n>" reports n context tokens in its assistant usage; "usage-multi" reports several (see usageOf).
 // FAKE_UNKNOWN_SESSION in the prompt of a continuing run answers like claude for a session it does not have.
+// Smart calls (prompt starting with <nightshift-smart>) never write FAKE_ARGS_LOG: they write { title, argv, prompt } to
+// FAKE_SMART_LOG and answer in --output-format json. The card title drives them: "smart-fail" (error result),
+// "smart-slow" (sleeps 10 s), "smart-invalid" (effort max); otherwise mcp on, effort high, cost 0.0012.
 // A card title containing FAKE_KEEP_DESC leaves the description alone; FAKE_SECTIONS adds a "Result" section instead.
 import { appendFileSync } from "node:fs";
 
@@ -23,6 +26,29 @@ const prompt = await new Response(Bun.stdin.stream()).text();
 const title = prompt.match(/<title>([\s\S]*?)<\/title>/)?.[1] ?? "";
 const delay = Number(process.env.FAKE_DELAY_MS ?? 200);
 const slowDelay = Number(process.env.FAKE_SLOW_MS ?? 5000);
+if (prompt.startsWith("<nightshift-smart>")) {
+  if (process.env.FAKE_SMART_LOG) {
+    appendFileSync(process.env.FAKE_SMART_LOG, `${JSON.stringify({ title, argv: process.argv.slice(2), prompt })}\n`);
+  }
+  if (title.includes("smart-slow")) await Bun.sleep(10_000);
+  const result = title.includes("smart-fail")
+    ? { type: "result", is_error: true, result: "smart boom", total_cost_usd: 0.0005 }
+    : {
+        type: "result",
+        is_error: false,
+        total_cost_usd: 0.0012,
+        structured_output: {
+          mcp: true,
+          chrome: false,
+          hooks: false,
+          userSettings: true,
+          effort: title.includes("smart-invalid") ? "max" : "high",
+          reason: "fake smart",
+        },
+      };
+  console.log(JSON.stringify(result));
+  process.exit(0);
+}
 // Quick runs (no card): the prompt carries an instruction block or "no instruction", and the instruction drives the behaviour.
 const quick = prompt.includes("<instruction>") || prompt.includes("no instruction");
 const instruction = prompt.match(/<instruction>\n([\s\S]*?)\n<\/instruction>/)?.[1] ?? "";
