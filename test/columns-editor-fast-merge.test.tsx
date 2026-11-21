@@ -2,9 +2,11 @@ import { afterAll, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { Column } from "../src/shared/types.ts";
 import { FastMergeControls, fastMergePatch, movedBasePatch } from "../src/web/ColumnsEditor.tsx";
-import { setLocale } from "../src/web/i18n/index.ts";
+import { getLocale, setLocale } from "../src/web/i18n/index.ts";
 
-afterAll(() => setLocale("en"));
+// Restore the locale other test files of the same process rely on.
+const previousLocale = getLocale();
+afterAll(() => setLocale(previousLocale));
 
 const render = (col: Column) => renderToStaticMarkup(<FastMergeControls col={{ ...col, key: col.id }} onPatch={() => {}} />);
 
