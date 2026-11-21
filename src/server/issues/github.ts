@@ -12,6 +12,7 @@ interface GhIssue {
   updated_at: string;
   labels?: (string | { name?: string })[];
   pull_request?: unknown;
+  repository_url?: string;
 }
 
 const MAX_PAGES = 50;
@@ -48,9 +49,26 @@ function nextLink(link: string | null): string | undefined {
 
 const issueUrl = (src: IssueSource, n: number) => `${src.baseUrl}/repos/${repoPath(src.repo)}/issues/${n}`;
 
+/** True when a search hit belongs to the source's repository (several `repo:` qualifiers are OR-ed by GitHub). */
+const inRepo = (i: GhIssue, repo: string) => !!i.repository_url?.toLowerCase().endsWith(`/repos/${repo.toLowerCase()}`);
+
 export const github: IssueProvider = {
   async listOpenIssues(src, token) {
     const out: ExternalIssue[] = [];
+    if (src.query) {
+      const q = encodeURIComponent(`repo:${src.repo} ${src.query}`);
+      let next: string | undefined = `${src.baseUrl}/search/issues?q=${q}&per_page=100`;
+      for (let page = 0; next && page < MAX_PAGES; page++) {
+        const res: { data: { items?: GhIssue[] } | null; headers: Headers } = await requestJson<{ items?: GhIssue[] }>(
+          next,
+          opts(token),
+        );
+        for (const i of res.data?.items ?? [])
+          if (!i.pull_request && i.state === "open" && inRepo(i, src.repo)) out.push(toIssue(i));
+        next = nextLink(res.headers.get("link"));
+      }
+      return out;
+    }
     let url: string | undefined = `${src.baseUrl}/repos/${repoPath(src.repo)}/issues?state=open&per_page=100`;
     for (let page = 0; url && page < MAX_PAGES; page++) {
       const res: { data: GhIssue[]; headers: Headers } = await requestJson<GhIssue[]>(url, opts(token));

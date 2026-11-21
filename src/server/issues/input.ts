@@ -1,6 +1,14 @@
 // Validation of the issue sources sent by the client, and their merge into the board.
 
-import { effectiveBaseUrl, type IssueSource, normalizeLabels, providerInfo, validRepo } from "../../shared/issues.ts";
+import {
+  effectiveBaseUrl,
+  type IssueSource,
+  normalizeLabels,
+  normalizeQuery,
+  providerInfo,
+  QUERY_MAX_LENGTH,
+  validRepo,
+} from "../../shared/issues.ts";
 import type { Board } from "../../shared/types.ts";
 import { isRaw, newId } from "../store.ts";
 
@@ -23,6 +31,9 @@ export function checkSourceInput(raw: unknown): CheckedSource {
     throw new Error("labels must be an array of strings");
   if (raw.enabled != null && typeof raw.enabled !== "boolean") throw new Error("enabled must be a boolean");
   if (raw.id != null && typeof raw.id !== "string") throw new Error("id must be a string");
+  if (raw.query != null && typeof raw.query !== "string") throw new Error("query must be a string");
+  const query = info.supportsQuery ? normalizeQuery(raw.query) : undefined;
+  if (query && query.length > QUERY_MAX_LENGTH) throw new Error("query is too long");
   const labels = normalizeLabels(raw.labels);
   return {
     ...(typeof raw.id === "string" && raw.id ? { id: raw.id } : {}),
@@ -30,6 +41,7 @@ export function checkSourceInput(raw: unknown): CheckedSource {
     baseUrl,
     repo,
     ...(labels ? { labels } : {}),
+    ...(query ? { query } : {}),
     enabled: raw.enabled !== false,
   };
 }
@@ -53,6 +65,7 @@ export function replaceSources(board: Board, inputs: CheckedSource[]): string[] 
       baseUrl: input.baseUrl,
       repo: input.repo,
       ...(input.labels ? { labels: input.labels } : {}),
+      ...(input.query ? { query: input.query } : {}),
       enabled: input.enabled,
       importedIds: sameTarget ? old.importedIds : [],
     };

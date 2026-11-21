@@ -43,9 +43,9 @@ const newer = (a: string, b: string) => {
   return Number.isNaN(ta) || Number.isNaN(tb) ? a !== b : ta > tb;
 };
 const sameTarget = (a: IssueSource, b: IssueSource) => a.provider === b.provider && a.baseUrl === b.baseUrl && a.repo === b.repo;
-/** Same target and same label filter: a plan fetched for one source config is only applied to that config. */
+/** Same target, label filter and query: a plan fetched for one source config is only applied to that config. */
 const sameConfig = (a: IssueSource, b: IssueSource) =>
-  sameTarget(a, b) && JSON.stringify(a.labels ?? []) === JSON.stringify(b.labels ?? []);
+  sameTarget(a, b) && JSON.stringify(a.labels ?? []) === JSON.stringify(b.labels ?? []) && (a.query ?? "") === (b.query ?? "");
 
 /** Card description built from an issue: its body, then a link back to it. */
 export function issueDescription(issue: Pick<ExternalIssue, "body" | "url">): string {

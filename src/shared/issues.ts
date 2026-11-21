@@ -17,6 +17,8 @@ export interface ProviderInfo {
   remoteBaseUrl?: string;
   /** Provider assumed for an HTTPS remote whose host matches no `matchHosts`. At most one entry sets it. */
   fallbackForHttps?: true;
+  /** The provider can filter issues with a free-form search query (`IssueSource.query`). */
+  supportsQuery?: true;
 }
 
 export const PROVIDERS: ProviderInfo[] = [
@@ -28,6 +30,7 @@ export const PROVIDERS: ProviderInfo[] = [
     baseUrlHint: "https://api.github.com",
     matchHosts: ["github.com"],
     remoteBaseUrl: "https://api.github.com",
+    supportsQuery: true,
   },
   {
     id: "gitea",
@@ -57,6 +60,8 @@ export interface IssueSource {
   repo: string;
   /** Only issues with at least one of these labels (case-insensitive). Absent = every open issue. */
   labels?: string[];
+  /** Provider search query (GitHub search syntax), only for providers with `supportsQuery`. Absent = no query. */
+  query?: string;
   enabled: boolean;
   /** External ids already imported; never shrinks, so a card deleted by hand is not imported again. */
   importedIds: string[];
@@ -69,6 +74,7 @@ export interface IssueSourceInput {
   baseUrl?: string;
   repo: string;
   labels?: string[];
+  query?: string;
   enabled?: boolean;
 }
 
@@ -141,6 +147,15 @@ export function normalizeLabels(raw: unknown): string[] | undefined {
   return out.length > 0 ? out : undefined;
 }
 
+export const QUERY_MAX_LENGTH = 256;
+
+/** Trimmed query; undefined when not a string or blank. */
+export function normalizeQuery(raw: unknown): string | undefined {
+  if (typeof raw !== "string") return undefined;
+  const t = raw.trim();
+  return t || undefined;
+}
+
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
 
 /** Normalizes one stored source; undefined when malformed. Unknown provider ids are kept (newer version). */
@@ -153,6 +168,7 @@ export function normalizeIssueSource(raw: unknown): IssueSource | undefined {
   const baseUrl = normalizeBaseUrl(raw.baseUrl);
   if (!baseUrl) return undefined;
   const labels = normalizeLabels(raw.labels);
+  const query = normalizeQuery(raw.query);
   const importedIds = Array.isArray(raw.importedIds) ? [...new Set(raw.importedIds.filter((x): x is string => typeof x === "string"))] : [];
   return {
     id,
@@ -160,6 +176,7 @@ export function normalizeIssueSource(raw: unknown): IssueSource | undefined {
     baseUrl,
     repo: repo.trim(),
     ...(labels ? { labels } : {}),
+    ...(query ? { query } : {}),
     enabled: raw.enabled !== false,
     importedIds,
   };
