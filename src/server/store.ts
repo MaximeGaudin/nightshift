@@ -1,6 +1,7 @@
 import { copyFileSync, existsSync, type FSWatcher, readFileSync, statSync, watch } from "node:fs";
 import { basename, join } from "node:path";
 import { normalizeDependsOn, releaseReason, releaseTarget, unmetDependencies } from "../shared/dependencies.ts";
+import { type EffortLevel, isValidEffort, sanitizeEfforts } from "../shared/effort.ts";
 import { normalizeCardExternal, normalizeIssueSources } from "../shared/issues.ts";
 import { sanitizeModels } from "../shared/models.ts";
 import { needsRun } from "../shared/needs-run.ts";
@@ -109,7 +110,19 @@ export function systemColumnsChanged(raw: unknown, board: Board): boolean {
   return JSON.stringify(rawCols) !== JSON.stringify(board.columns);
 }
 
-export const COLUMN_KEYS = ["id", "name", "type", "skill", "instructions", "model", "lockModel", "maxParallel", "emoji", "freshSession"];
+export const COLUMN_KEYS = [
+  "id",
+  "name",
+  "type",
+  "skill",
+  "instructions",
+  "model",
+  "lockModel",
+  "effort",
+  "maxParallel",
+  "emoji",
+  "freshSession",
+];
 const CARD_KEYS = [
   "id",
   "number",
@@ -126,9 +139,11 @@ const CARD_KEYS = [
   "dependsOn",
   "draft",
   "sessionId",
+  "seenDescription",
   "history",
   "timeBase",
   "models",
+  "efforts",
   "external",
 ];
 const BOARD_KEYS = [
@@ -229,6 +244,9 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
             ...(c.instructions ? { instructions: String(c.instructions) } : {}),
             ...(typeof c.model === "string" && c.model.trim() ? { model: c.model.trim() } : {}),
             ...(type === "skill" && c.lockModel === true ? { lockModel: true as const } : {}),
+            ...(type === "skill" && typeof c.effort === "string" && isValidEffort(c.effort)
+              ? { effort: c.effort.trim() as EffortLevel }
+              : {}),
             ...(type === "skill" && (c.freshSession === true || c.freshSession === "auto") ? { freshSession: c.freshSession } : {}),
             ...(maxParallel !== undefined ? { maxParallel } : {}),
             ...(emoji !== undefined ? { emoji } : {}),
@@ -256,6 +274,7 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
     if (rawHistory.length > 50) timeBase = replayHistory(timeBase, rawHistory.slice(0, -50), asString(c.createdAt) ?? now());
     const skipColumnIds = normalizeSkipColumnIds(columns, c.skipColumnIds);
     const { models } = sanitizeModels(c.models);
+    const { efforts } = sanitizeEfforts(c.efforts);
     const columnId = typeof c.columnId === "string" && colIds.has(c.columnId) ? c.columnId : columns[0]?.id;
     const external = normalizeCardExternal(c.external);
     return {
@@ -277,8 +296,15 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
       ...(skipColumnIds ? { skipColumnIds } : {}),
       ...(c.draft === true && columnId === BACKLOG_COLUMN_ID ? { draft: true as const } : {}),
       ...(models ? { models } : {}),
+      ...(efforts ? { efforts } : {}),
       ...(typeof c.sessionId === "string" && c.sessionId ? { sessionId: c.sessionId } : {}),
       ...(external ? { external } : {}),
+      ...(isRaw(c.seenDescription) &&
+      typeof c.seenDescription.sessionId === "string" &&
+      c.seenDescription.sessionId &&
+      typeof c.seenDescription.text === "string"
+        ? { seenDescription: { sessionId: c.seenDescription.sessionId, text: c.seenDescription.text } }
+        : {}),
       history: rawHistory.slice(-50),
       ...(timeBase ? { timeBase } : {}),
     };

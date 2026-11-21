@@ -29,6 +29,7 @@ import { ShortcutsHelp } from "./ShortcutsHelp.tsx";
 import { SkillsModal } from "./SkillsModal.tsx";
 import { shortcutFor } from "./shortcuts.ts";
 import { installAudioUnlock, notifyAttention } from "./sound.ts";
+import { TeamclaudeWaitDialog } from "./TeamclaudeWaitDialog.tsx";
 
 const readProjectParam = () => new URLSearchParams(location.search).get("project");
 
@@ -390,6 +391,7 @@ export function App() {
         />
       )}
       <QuickRunToasts project={snap.path} runs={snap.quickRuns} />
+      <TeamclaudeWaitDialog />
       {modal === "columns" && <ColumnsEditor snap={snap} onClose={() => setModal(null)} />}
       {modal === "skills" && <SkillsModal project={snap.path} favorites={snap.board.favoriteSkills ?? []} onClose={() => setModal(null)} />}
       {modal === "settings" && settings && (

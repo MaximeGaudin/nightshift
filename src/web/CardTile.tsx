@@ -36,6 +36,7 @@ export function CardTile({
   card,
   live,
   progress,
+  proxyWaiting,
   dragging,
   dndProps,
   tileRef,
@@ -53,6 +54,8 @@ export function CardTile({
   card: Card;
   live?: LiveStatus;
   progress?: RunProgressData;
+  /** Its run waits for the teamclaude proxy: shown instead of the progress. */
+  proxyWaiting?: boolean;
   /** The tile is the one being dragged (its slot is dimmed while the overlay follows the pointer). */
   dragging?: boolean;
   /** Attributes and listeners of the drag and drop wrapper; the tile itself stays free of dnd-kit. */
@@ -194,7 +197,11 @@ export function CardTile({
         </div>
       )}
       {columns && !status && <CardTimers card={card} columns={columns} column={column} />}
-      <RunProgress progress={progress} live={live} />
+      {proxyWaiting ? (
+        <div className="run-progress teamclaude-waiting mt-2 text-[11px] text-warn">{t("board.teamclaude.cardWaiting")}</div>
+      ) : (
+        <RunProgress progress={progress} live={live} />
+      )}
     </article>
   );
 }

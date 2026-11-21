@@ -4,6 +4,16 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSyn
 import { join, resolve } from "node:path";
 import type { Subprocess } from "bun";
 import { isReady, releaseReason } from "../shared/dependencies.ts";
+import {
+  describeEffortChanges,
+  type EffortLevel,
+  type EffortSource,
+  effortLabel,
+  formatDroppedEffort,
+  mergeEfforts,
+  resolveEffort,
+  resolveQuickEffort,
+} from "../shared/effort.ts";
 import { fastForwardSkipIds } from "../shared/flow.ts";
 import { describeModelChanges, formatDropped, type ModelSource, mergeModels, resolveModel } from "../shared/models.ts";
 import { resolveNextColumn } from "../shared/skip.ts";
@@ -20,9 +30,13 @@ import type {
   RunProgress,
   RunStatus,
   ServerEvent,
+  TeamclaudeAction,
+  TeamclaudeWait,
+  TeamclaudeWaitEntry,
 } from "../shared/types.ts";
 import { canSendFeedback, cardRef, columnMaxParallel, isDoneColumn } from "../shared/types.ts";
 import { safeHttpUrl } from "../shared/urls.ts";
+import type { QuotaSnapshot } from "../shared/usage.ts";
 import { buildEnvironment } from "./environment.ts";
 import { FlowController } from "./flow.ts";
 import { HttpError } from "./guard.ts";
@@ -30,13 +44,14 @@ import { IssueSync } from "./issues/sync.ts";
 import { parseProgressMarker, progressFromTodos } from "./progress.ts";
 import { buildQuickRunPrompt, parseQuickOutput, QUICK_INSTRUCTION_MAX, QUICK_RESULT_SCHEMA } from "./quickrun.ts";
 import { persistScreenshots, removeScreenshots } from "./screenshots.ts";
-import { applySections, parseSections } from "./sections.ts";
+import { applySections, diffSections, parseSections } from "./sections.ts";
 import { contextTokensOf, decideCarry } from "./sessionCarry.ts";
 import { getSettings, legacyMaxParallel, NIGHTSHIFT_HOME, onSettingsChange, rememberProject } from "./settings.ts";
 import { findSkill } from "./skills.ts";
 import { isRaw, needsRun, newId, Project, type Raw } from "./store.ts";
+import { applyProxyEnv, ProxyGate, prepareProxyEnv, QUOTA_POLL_MS, TeamclaudeQuotaPoller } from "./teamclaude.ts";
 import { copyTemplateSkills } from "./templates.ts";
-import { recordRateLimit } from "./usage.ts";
+import { getUsage, recordRateLimit } from "./usage.ts";
 
 /** One block of an assistant message in `claude -p --output-format stream-json` (only what Nightshift reads). */
 interface StreamBlock {
@@ -62,7 +77,7 @@ interface StreamEvent {
 }
 
 /** Structured output of an agent (--json-schema). Untrusted: every field is checked before use; `questions` is normalized. */
-type AgentOutput = Raw & { questions: string[]; models?: unknown };
+type AgentOutput = Raw & { questions: string[]; models?: unknown; efforts?: unknown };
 
 /** What a spawned `claude -p` process needs to track, shared by card jobs and quick runs. */
 interface Runner {
@@ -79,6 +94,8 @@ interface Runner {
   markerSeen?: boolean;
   /** A TodoWrite was seen in the current process: tool activity no longer overwrites it. */
   todoSeen?: boolean;
+  /** Set while the launch waits in the teamclaude gate: removes it from there. */
+  abortWait?: () => void;
 }
 
 /** Where a run writes its log and progress, and how it is launched: the card path and the quick-run path differ only here. */
@@ -89,10 +106,20 @@ interface RunTarget {
   model: string | undefined;
   /** Where `model` comes from, shown in the start log line. */
   modelSource: ModelSource;
+  effort: EffortLevel | undefined;
+  effortSource: EffortSource;
   log(kind: LogLine["kind"], text: string): void;
   setProgress(v: { step: number; total: number; label: string }, source: RunProgress["source"]): void;
+  /** How the run is listed while it waits for the teamclaude proxy. */
+  waitEntry: TeamclaudeWaitEntry;
   /** First log line, once the model and permission mode are known. */
-  startMessage(model: string | undefined, permissionMode: string, source: ModelSource): string;
+  startMessage(
+    model: string | undefined,
+    permissionMode: string,
+    source: ModelSource,
+    effort: EffortLevel | undefined,
+    effortSource: EffortSource,
+  ): string;
 }
 
 /** A skill launched from the command palette: in memory only, never written to nightshift.json. */
@@ -116,6 +143,10 @@ interface Job extends Runner {
   skill?: string;
   /** Started in a skill column: such a job is stopped if the column stops being a skill column. */
   startedInSkillColumn: boolean;
+  /** Card description when a prompt carrying it (new run or feedback) was built: what the session saw at launch. */
+  seenAtLaunch?: string;
+  /** Session the run resumed at launch (carried, answered, fed back or recovered); undefined for a new session. */
+  resumedFrom?: string;
 }
 
 const MAX_LOG_LINES = 3000;
@@ -197,6 +228,12 @@ export const RESULT_SCHEMA = {
         'Optional: the model each later skill column should use for this card, keyed by skill name, for example {"nightshift-implement": "opus", "nightshift-review": "sonnet"}. Use "default" to remove an entry. Omit to keep the card\'s current models.',
       additionalProperties: { type: "string" },
     },
+    efforts: {
+      type: "object",
+      description:
+        'Optional: the effort level (low, medium, high, xhigh, max) each later skill column should use for this card, keyed by skill name, for example {"nightshift-implement": "medium"}. Use "default" to remove an entry. Omit to keep the card\'s current efforts.',
+      additionalProperties: { type: "string" },
+    },
     questions: {
       type: "array",
       items: { type: "string" },
@@ -223,12 +260,42 @@ function formatColumns(board: Board): string {
     .join("\n");
 }
 
+/** Said instead of the description when a resumed session already saw it as it is. */
+export const DESCRIPTION_UNCHANGED = "The card description has not changed since your last run in this session.";
+/** First line of the changes block sent instead of the description when a resumed session saw an older version. */
+export const DESCRIPTION_CHANGED =
+  "The card description changed since your last run in this session. Only the changed parts are below; every other section is unchanged.";
+
+/**
+ * The card description in a prompt. `seen` is the description as the resumed session last saw it (absent for a new
+ * session): then only what changed since is sent, unless the diff cannot be trusted (duplicate headings) or is no shorter.
+ */
+export function descriptionBlock(description: string, seen?: string): string {
+  const full = `<description>\n${description}\n</description>`;
+  if (seen === undefined) return full;
+  const diff = diffSections(seen, description);
+  if (!diff) return full;
+  if (diff.unchanged) return `<description unchanged="true">\n${DESCRIPTION_UNCHANGED}\n</description>`;
+  const parts = [
+    DESCRIPTION_CHANGED,
+    ...(diff.preamble !== undefined
+      ? [diff.preamble ? `Text before the first section:\n${diff.preamble}` : "Text before the first section: removed."]
+      : []),
+    ...diff.changed,
+    ...(diff.deleted.length > 0 ? [`Deleted sections: ${diff.deleted.join(", ")}`] : []),
+  ];
+  const changes = parts.join("\n\n");
+  if (changes.length > description.length) return full;
+  return `<description-changes>\n${changes}\n</description-changes>`;
+}
+
 export function buildPrompt(
   board: Board,
   card: Card,
   column: Column,
   skillPath: string | undefined,
   live: Record<string, LiveStatus> = {},
+  seen?: string,
 ): string {
   const next = resolveNextColumn(board.columns, { columnId: column.id, skipColumnIds: card.skipColumnIds });
   const columns = formatColumns(board);
@@ -239,9 +306,7 @@ Invoke the skill with the Skill tool (skill name: "${column.skill}")${skillPath 
 ${column.instructions ? `\nAdditional instructions for this column:\n${column.instructions}\n` : ""}
 <card id="${card.id}" ref="${cardRef(card)}">
 <title>${card.title}</title>
-<description>
-${card.description}
-</description>
+${descriptionBlock(card.description, seen)}
 </card>
 
 ${buildEnvironment(board, card, live)}
@@ -265,7 +330,8 @@ ${PROGRESS_RULE}
   - summary: a short summary of what you did.
   - questions: only when you need the user's input (see above).
   - test: optional, a command (and url) a human can run to try what you produced; the card shows a "Tester" button that runs it.
-  - models: optional, the model each later skill column should use for this card, keyed by skill name (e.g. {"nightshift-implement": "opus"}); "default" removes an entry. The plan agent should set it from the task's complexity; other agents usually omit it.`;
+  - models: optional, the model each later skill column should use for this card, keyed by skill name (e.g. {"nightshift-implement": "opus"}); "default" removes an entry. The plan agent should set it from the task's complexity; other agents usually omit it.
+  - efforts: optional, the effort level (low, medium, high, xhigh, max) each later skill column should use for this card, keyed by skill name; "default" removes an entry. The plan agent may set it from the task's complexity; other agents usually omit it.`;
 }
 
 /** Prompt resuming a session with free feedback from the user, in whatever column the card is now. */
@@ -276,6 +342,7 @@ export function buildFeedbackPrompt(
   skill: string | undefined,
   skillPath: string | undefined,
   live: Record<string, LiveStatus> = {},
+  seen?: string,
 ): string {
   const next = resolveNextColumn(board.columns, { columnId: column.id, skipColumnIds: card.skipColumnIds });
   const skillName = skill ? `the skill "${skill}"` : "the skill you applied earlier in this session";
@@ -290,9 +357,7 @@ Address this feedback on the card below. Follow ${skillName}${skill && skillPath
 
 <card id="${card.id}" ref="${cardRef(card)}">
 <title>${card.title}</title>
-<description>
-${card.description}
-</description>
+${descriptionBlock(card.description, seen)}
 </card>
 
 ${buildEnvironment(board, card, live)}
@@ -319,7 +384,8 @@ When resuming, re-emit the marker of the step currently in progress before anyth
   - summary: a short summary of what you did.
   - questions: only when you need the user's input (see above).
   - test: optional, a command (and url) a human can run to try what you produced.
-  - models: optional, the model each later skill column should use for this card, keyed by skill name (e.g. {"nightshift-implement": "opus"}); "default" removes an entry. The plan agent should set it from the task's complexity; other agents usually omit it.`;
+  - models: optional, the model each later skill column should use for this card, keyed by skill name (e.g. {"nightshift-implement": "opus"}); "default" removes an entry. The plan agent should set it from the task's complexity; other agents usually omit it.
+  - efforts: optional, the effort level (low, medium, high, xhigh, max) each later skill column should use for this card, keyed by skill name; "default" removes an entry. The plan agent may set it from the task's complexity; other agents usually omit it.`;
 }
 
 /** Prompt resuming a session with the user's answers to its questions. */
@@ -417,9 +483,30 @@ export class Orchestrator {
     return this.agents && !this.lockedBy.has(p.path);
   }
 
+  /** Agent launches held while the teamclaude proxy is unreachable, until a human chooses. */
+  private readonly gate = new ProxyGate({
+    onChange: (projects) => {
+      this.broadcast({ type: "teamclaude", wait: this.gate.state() });
+      for (const path of projects) {
+        const p = this.projects.get(path);
+        if (p) this.broadcast({ type: "board", project: p.path, snapshot: this.snapshot(p) });
+      }
+    },
+    prepare: () => prepareProxyEnv(getSettings().teamclaudeUrl),
+  });
+
+  /** Pooled quota of the teamclaude accounts, polled only while teamclaude is on. */
+  private readonly quotaPoller = new TeamclaudeQuotaPoller({
+    intervalMs: Number(process.env.NIGHTSHIFT_TEAMCLAUDE_POLL_MS) || QUOTA_POLL_MS,
+    onChange: () => this.broadcast({ type: "usage", usage: this.usage() }),
+  });
+
   constructor({ agents = true }: { agents?: boolean } = {}) {
     this.agents = agents;
     onSettingsChange((settings) => {
+      // Turning teamclaude off while launches wait for it lets them go on directly.
+      if (!settings.teamclaudeEnabled) this.gate.releaseAll({ mode: "direct" });
+      this.quotaPoller.configure(settings.teamclaudeEnabled, settings.teamclaudeUrl);
       this.broadcast({ type: "settings", settings });
       this.scheduleTick();
     });
@@ -429,6 +516,13 @@ export class Orchestrator {
       for (const p of this.projects.values()) this.acquireLock(p);
     }, LOCK_RECHECK_MS);
     this.lockTimer.unref?.();
+    const settings = getSettings();
+    this.quotaPoller.configure(settings.teamclaudeEnabled, settings.teamclaudeUrl);
+  }
+
+  /** The quota the header shows: the teamclaude pool while teamclaude is on, else the agents' own `rate_limit_info`. */
+  usage(): QuotaSnapshot | null {
+    return getSettings().teamclaudeEnabled ? this.quotaPoller.current() : getUsage();
   }
 
   // ---- cross-process lock ------------------------------------------------
@@ -555,7 +649,8 @@ export class Orchestrator {
     }
     return {
       path: p.path,
-      board: p.board,
+      // The description a session saw stays on the server: several KB per card, of no use to the UI.
+      board: { ...p.board, cards: p.board.cards.map(({ seenDescription: _seen, ...card }) => card) },
       maxParallel: this.projectMaxParallel(p),
       live,
       testing,
@@ -572,6 +667,7 @@ export class Orchestrator {
           ...(q.status === "running" && q.progress ? { progress: q.progress } : {}),
         })),
       flow: this.flow.get(p),
+      proxyWaiting: this.gate.waitingCards(p.path),
       ...(lockedBy ? { lockedBy } : {}),
       ...(this.agents ? {} : { agentsDisabled: true }),
       ...(issueSources ? { issueSources } : {}),
@@ -772,6 +868,7 @@ export class Orchestrator {
 
   private kill(job: Runner) {
     job.cancelled = true;
+    job.abortWait?.();
     try {
       job.proc?.kill("SIGTERM");
       setTimeout(() => {
@@ -865,6 +962,10 @@ export class Orchestrator {
       schema: QUICK_RESULT_SCHEMA,
       model: getSettings().model.trim() || undefined,
       modelSource: getSettings().model.trim() ? "settings" : "default",
+      ...(() => {
+        const r = resolveQuickEffort(q.skill, getSettings());
+        return { effort: r.effort, effortSource: r.source };
+      })(),
       log: (kind, text) => {
         const line: LogLine = { at: new Date().toISOString(), kind, text };
         try {
@@ -872,8 +973,9 @@ export class Orchestrator {
         } catch {}
       },
       setProgress: (v, source) => this.setProgress(q, v, source),
-      startMessage: (model, permissionMode, source) =>
-        `Starting quick run of skill "${q.skill}" (permission mode: ${permissionMode}, model: ${modelLabel(model, source)}).`,
+      waitEntry: { project: q.project.path, quickRunId: q.id, title: q.skill },
+      startMessage: (model, permissionMode, source, effort, effortSource) =>
+        `Starting quick run of skill "${q.skill}" (permission mode: ${permissionMode}, model: ${modelLabel(model, source)}, effort: ${effortLabel(effort, effortSource)}).`,
     };
   }
 
@@ -1068,17 +1170,11 @@ export class Orchestrator {
       return this.finish(job, "error", { error: `Skill "${column.skill}" not found in project or user skills.` });
     }
     const skillRef = job.skill ? `the skill "${job.skill}"` : "the skill you applied earlier in this session";
-    let prompt = !answer
-      ? buildPrompt(p.board, card, column, skill?.path, this.liveStatuses(p))
-      : answer.kind === "resume"
-        ? RECOVER_PROMPT
-        : answer.kind === "feedback"
-          ? buildFeedbackPrompt(p.board, card, column, job.skill, skill?.path, this.liveStatuses(p))
-          : buildAnswerPrompt(card.title, skillRef, answer.text);
     if (answer?.kind === "feedback") this.log(p, card.id, "info", `Retour utilisateur : ${answer.text}`);
     else if (answer && answer.kind !== "resume") this.log(p, card.id, "info", `User answer: ${answer.text}`);
     // A new run continues the card's session (the previous columns' context), unless its column asks for a fresh one
     // or, in auto mode, the carried context is too big or too old to be worth re-reading.
+    // Decided before the prompt is built: a resumed session only gets what changed in the description since it saw it.
     let carried: string | undefined;
     const previousSession = !answer ? (card.sessionId ?? card.lastRun?.sessionId) : undefined;
     if (previousSession) {
@@ -1086,8 +1182,18 @@ export class Orchestrator {
       if (decision.log) this.log(p, card.id, "info", decision.log);
       if (decision.carry) carried = previousSession;
     }
-    if (carried) prompt = `${CONTINUE_PREFIX}\n\n${prompt}`;
     let resumeId = answer?.sessionId ?? carried;
+    const seen = resumeId && card.seenDescription?.sessionId === resumeId ? card.seenDescription.text : undefined;
+    job.resumedFrom = resumeId;
+    job.seenAtLaunch = !answer || answer.kind === "feedback" ? card.description : undefined;
+    let prompt = !answer
+      ? buildPrompt(p.board, card, column, skill?.path, this.liveStatuses(p), seen)
+      : answer.kind === "resume"
+        ? RECOVER_PROMPT
+        : answer.kind === "feedback"
+          ? buildFeedbackPrompt(p.board, card, column, job.skill, skill?.path, this.liveStatuses(p), seen)
+          : buildAnswerPrompt(card.title, skillRef, answer.text);
+    if (carried) prompt = `${CONTINUE_PREFIX}\n\n${prompt}`;
     let costUsd = 0;
 
     // One automatic recovery: an agent that stops without its structured result (interrupted, or it
@@ -1105,6 +1211,9 @@ export class Orchestrator {
         this.log(p, card.id, "info", `Could not continue the card's session ${carried}: starting a new one.`);
         carried = undefined;
         resumeId = undefined;
+        // A new session has seen nothing: the whole description again.
+        job.resumedFrom = undefined;
+        job.seenAtLaunch = card.description;
         prompt = buildPrompt(p.board, card, column, skill?.path, this.liveStatuses(p));
         attempt--;
         continue;
@@ -1150,15 +1259,19 @@ export class Orchestrator {
     // Read the card again at each spawn: the previous column's run may have set its models.
     const fresh = p.card(job.cardId) ?? card;
     const resolved = resolveModel(column, getSettings(), fresh);
+    const effort = resolveEffort(column, getSettings(), fresh);
     return {
       name: `nightshift: ${card.title}`.slice(0, 80),
       schema: RESULT_SCHEMA,
       model: resolved.model,
       modelSource: resolved.source,
+      effort: effort.effort,
+      effortSource: effort.source,
       log: (kind, text) => this.log(p, card.id, kind, text),
       setProgress: (v, source) => this.setProgress(job, v, source),
-      startMessage: (model, permissionMode, source) =>
-        `${verb} ${job.skill ? `skill "${job.skill}"` : "session"} in "${column.name}" (permission mode: ${permissionMode}, model: ${modelLabel(model, source)}).`,
+      waitEntry: { project: p.path, cardId: card.id, ref: cardRef(fresh), title: fresh.title },
+      startMessage: (model, permissionMode, source, effort, effortSource) =>
+        `${verb} ${job.skill ? `skill "${job.skill}"` : "session"} in "${column.name}" (permission mode: ${permissionMode}, model: ${modelLabel(model, source)}, effort: ${effortLabel(effort, effortSource)}).`,
     };
   }
 
@@ -1193,16 +1306,28 @@ export class Orchestrator {
       "--name",
       target.name,
       ...(model ? ["--model", model] : []),
+      ...(target.effort ? ["--effort", target.effort] : []),
       ...splitArgs(settings.extraArgs),
     ];
-    target.log("info", target.startMessage(model, settings.permissionMode, target.modelSource));
+    target.log("info", target.startMessage(model, settings.permissionMode, target.modelSource, target.effort, target.effortSource));
+
+    let env: Record<string, string | undefined> = process.env;
+    if (settings.teamclaudeEnabled) {
+      const r = await this.teamclaudeEnv(job, target, settings.teamclaudeUrl);
+      if ("startError" in r || "aborted" in r) {
+        return "startError" in r ? r : { result: null, stderr: "", exit: "cancelled while waiting for teamclaude" };
+      }
+      env = r.env;
+    }
+    // The run may have been stopped while it waited: never launch claude after that.
+    if (job.cancelled) return { result: null, stderr: "", exit: "cancelled before start" };
 
     let result: StreamEvent | null = null;
     let stderr = "";
     try {
       const proc = Bun.spawn(args, {
         cwd: p.path,
-        env: process.env,
+        env,
         stdout: "pipe",
         stderr: "pipe",
         stdin: new TextEncoder().encode(prompt),
@@ -1240,6 +1365,55 @@ export class Orchestrator {
     }
   }
 
+  /**
+   * The environment of a launch through teamclaude. When the proxy cannot be reached, the launch waits in the gate
+   * until a human chooses: retry (proxy env), launch directly, or cancel (start error). A run stopped meanwhile is aborted.
+   */
+  private async teamclaudeEnv(
+    job: Runner,
+    target: RunTarget,
+    url: string,
+  ): Promise<{ env: Record<string, string | undefined> } | { startError: string } | { aborted: true }> {
+    const first = await prepareProxyEnv(url);
+    if (job.cancelled) return { aborted: true };
+    if (first.ok) {
+      target.log("info", `Running via teamclaude (${url}).`);
+      return { env: applyProxyEnv(process.env, first.env) };
+    }
+    // Turned off during the check: nothing would ever release the gate for this run, so it goes on directly.
+    if (!getSettings().teamclaudeEnabled) {
+      target.log("info", "teamclaude was turned off: running without it.");
+      return { env: process.env };
+    }
+    target.log("info", "The teamclaude proxy cannot be reached: waiting for a choice in the board.");
+    const { promise, abort } = this.gate.wait(target.waitEntry, first.failure);
+    job.abortWait = abort;
+    let outcome: Awaited<typeof promise>;
+    try {
+      outcome = await promise;
+    } finally {
+      job.abortWait = undefined;
+    }
+    if (outcome.mode === "aborted" || job.cancelled) return { aborted: true };
+    if (outcome.mode === "cancel") return { startError: `teamclaude proxy unreachable at ${getSettings().teamclaudeUrl}` };
+    if (outcome.mode === "direct") {
+      target.log("info", "Running without teamclaude (user choice).");
+      return { env: process.env };
+    }
+    target.log("info", `Running via teamclaude (${getSettings().teamclaudeUrl}).`);
+    return { env: applyProxyEnv(process.env, outcome.env) };
+  }
+
+  /** Runs held for the teamclaude proxy, or null. */
+  teamclaudeWait(): TeamclaudeWait | null {
+    return this.gate.state();
+  }
+
+  /** Applies a human choice to the runs held for the teamclaude proxy. */
+  teamclaudeDecide(action: TeamclaudeAction): Promise<TeamclaudeWait | null> {
+    return this.gate.decide(action);
+  }
+
   private handleEvent(job: Runner, target: RunTarget, ev: StreamEvent) {
     if (ev.type === "assistant") {
       // Subagent messages carry parent_tool_use_id: they are logged but never drive the card's progress.
@@ -1273,7 +1447,8 @@ export class Orchestrator {
     } else if (ev.type === "rate_limit_event") {
       // The quota belongs to the account: any agent's event counts, subagents included.
       const usage = recordRateLimit(ev.rate_limit_info);
-      if (usage) this.broadcast({ type: "usage", usage });
+      // Still recorded while teamclaude is on, but the header then shows the pool.
+      if (usage && !getSettings().teamclaudeEnabled) this.broadcast({ type: "usage", usage });
     } else if (ev.type === "system" && ev.subtype === "init") {
       if (ev.session_id) job.sessionId = ev.session_id;
       target.log("info", `Session ${ev.session_id} (model ${ev.model ?? "default"})`);
@@ -1330,15 +1505,27 @@ export class Orchestrator {
             ? `${colName}: ${out?.questions.length ?? 0} question(s) for the user`
             : `${colName}: ${status}${data.error ? ` (${data.error.slice(0, 200)})` : ""}`,
       );
-      if ((status !== "success" && status !== "question") || !out) return;
+      // The description as this session believes it is: what it saw at launch (or last time, for a resume without
+      // the description), plus its own edits. Not card.description: a human edit made during the run was never seen.
+      let seenText =
+        job.seenAtLaunch ??
+        (job.resumedFrom && card.seenDescription?.sessionId === job.resumedFrom ? card.seenDescription.text : undefined);
+      const rememberSeen = () => {
+        if (sessionId && seenText !== undefined) card.seenDescription = { sessionId, text: seenText };
+      };
+      if ((status !== "success" && status !== "question") || !out) return rememberSeen();
       if (typeof out.title === "string" && out.title.trim()) card.title = out.title.trim();
-      if (typeof out.description === "string") card.description = persistScreenshots(card.id, out.description);
+      if (typeof out.description === "string") {
+        card.description = persistScreenshots(card.id, out.description);
+        seenText = card.description;
+      }
       if (out.sections !== undefined) {
         try {
           const parsed = parseSections(out.sections);
           const edits = parsed.edits.map((e) => ({ ...e, content: persistScreenshots(card.id, e.content) }));
           const res = applySections(card.description, edits);
           card.description = res.text;
+          if (seenText !== undefined) seenText = applySections(seenText, edits).text;
           for (const l of [...parsed.logs, ...res.logs]) this.log(p, job.cardId, "info", l);
           if (res.applied.length > 0) p.addHistory(card, "edited", `sections: ${res.applied.join(", ")}`);
         } catch (e) {
@@ -1355,6 +1542,12 @@ export class Orchestrator {
       else delete card.models;
       if (merged.changes.length > 0) p.addHistory(card, "edited", describeModelChanges(merged.changes, "agent"));
       if (merged.dropped.length > 0) this.log(p, job.cardId, "info", merged.dropped.map(formatDropped).join("; "));
+      const mergedEfforts = mergeEfforts(card.efforts, out.efforts);
+      if (mergedEfforts.efforts) card.efforts = mergedEfforts.efforts;
+      else delete card.efforts;
+      if (mergedEfforts.changes.length > 0) p.addHistory(card, "edited", describeEffortChanges(mergedEfforts.changes, "agent"));
+      if (mergedEfforts.dropped.length > 0) this.log(p, job.cardId, "info", mergedEfforts.dropped.map(formatDroppedEffort).join("; "));
+      rememberSeen();
       card.updatedAt = now;
       if (status === "question") {
         out.questions.forEach((q, i) => {
@@ -1468,6 +1661,7 @@ export class Orchestrator {
   async shutdown(graceMs = SHUTDOWN_GRACE_MS) {
     clearInterval(this.lockTimer);
     this.issues.shutdown();
+    this.quotaPoller.stop();
     const groups = [...this.tests.values()].map((t) => t.proc.pid).filter((pid): pid is number => !!pid);
     // Queued quick runs are dropped; the running ones are stopped like jobs.
     for (const q of [...this.quickRuns.values()]) if (q.status === "queued") this.quickRuns.delete(q.id);

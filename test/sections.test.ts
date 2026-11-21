@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { applySections, MAX_SECTION_CONTENT, parseSections } from "../src/server/sections.ts";
+import { applySections, diffSections, MAX_SECTION_CONTENT, parseSections, splitSections } from "../src/server/sections.ts";
 
 const edit = (heading: string, content = "", op: "replace" | "append" | "delete" = "replace") => ({ heading, content, op });
 
@@ -133,5 +133,43 @@ describe("parseSections", () => {
     expect(parseSections("nope").edits).toEqual([]);
     expect(parseSections("nope").logs).toHaveLength(1);
     expect(parseSections(undefined)).toEqual({ edits: [], logs: [] });
+  });
+});
+
+describe("diffSections", () => {
+  const note = "Intro\n\n## A\n\nbody a\n\n## B\n\nbody b\n\n## C\n\nbody c\n";
+
+  test("diff-unchanged: same text, CRLF, trailing blank lines or a reorder are no change", () => {
+    expect(diffSections(note, note)).toEqual({ unchanged: true });
+    expect(diffSections(note, `${note.replace(/\n/g, "\r\n")}\r\n\r\n`)).toEqual({ unchanged: true });
+    expect(diffSections(note, "Intro\n\n## C\n\nbody c\n\n## A\n\nbody a\n\n## B\n\nbody b")).toEqual({ unchanged: true });
+  });
+
+  test("diff-changed-added-deleted: changed then added sections in note order, deleted titles", () => {
+    const after = "Intro\n\n## A\n\nbody a2\n\n## C\n\nbody c\n\n## D\n\nnew d\n";
+    expect(diffSections(note, after)).toEqual({ unchanged: false, changed: ["## A\n\nbody a2", "## D\n\nnew d"], deleted: ["B"] });
+  });
+
+  test("diff-preamble-and-fence: a changed preamble is returned; a heading inside fenced code is not a section", () => {
+    expect(diffSections(note, note.replace("Intro", "Intro 2"))).toEqual({
+      unchanged: false,
+      preamble: "Intro 2",
+      changed: [],
+      deleted: [],
+    });
+    const fenced = "## A\n\n```\n## Not a heading\n```\n";
+    expect(splitSections(fenced)?.sections.map((s) => s.title)).toEqual(["A"]);
+    expect(diffSections(fenced, fenced.replace("Not a heading", "Still not"))).toEqual({
+      unchanged: false,
+      changed: ["## A\n\n```\n## Still not\n```"],
+      deleted: [],
+    });
+  });
+
+  test("diff-duplicate: a duplicate heading on either side gives null", () => {
+    const dup = "## A\n\nx\n\n## A\n\ny\n";
+    expect(splitSections(dup)).toBeNull();
+    expect(diffSections(dup, note)).toBeNull();
+    expect(diffSections(note, dup)).toBeNull();
   });
 });

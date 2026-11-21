@@ -34,8 +34,18 @@ export const settings = {
   "settings.model.label": "Default model",
   "settings.model.help": "Applies to columns without their own model. Empty = the claude CLI default.",
   "settings.model.placeholder": "e.g. sonnet, opus",
+  "settings.effort.label": "Effort",
+  "settings.effort.help":
+    'Applies to columns and cards without their own effort. Economic default: grill, implement, review medium; plan high; merge low; other skills medium. "Inherit from Claude" passes no --effort.',
+  "settings.effort.economic": "Economic (default)",
+  "settings.effort.inherit": "Inherit from Claude",
   "settings.claudePath.label": "claude command",
   "settings.extraArgs.label": "Extra arguments",
+  "settings.teamclaude.label": "Run agents through teamclaude",
+  "settings.teamclaude.help":
+    "Launches claude with the variables of 'teamclaude env', so the agents use your pool of accounts. Start 'teamclaude server' yourself. The header then shows the pooled quota.",
+  "settings.teamclaudeUrl.label": "teamclaude proxy URL",
+  "settings.teamclaudeUrl.help": "Used to check the proxy before each agent and to read the pooled quota.",
   "settings.extraArgs.placeholder": 'e.g. --allowedTools "Bash(git *)" --max-budget-usd 2',
   "settings.worktree.label": "Git worktrees",
   "settings.worktree.help":

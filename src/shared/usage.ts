@@ -13,6 +13,12 @@ export interface QuotaSnapshot {
   status?: string;
   isUsingOverage?: boolean;
   at: string;
+  /** "teamclaude": pooled quota of every account, read from the teamclaude proxy. */
+  source?: "teamclaude";
+  /** teamclaude only: accounts in the pool that are not disabled. */
+  accounts?: number;
+  /** teamclaude only: the last poll failed; the windows are the last ones read. */
+  unreachable?: boolean;
 }
 
 export type QuotaLevel = "normal" | "warn" | "danger";
@@ -69,6 +75,9 @@ export function parseSnapshot(v: unknown): QuotaSnapshot | null {
   if (s) snap.sevenDay = s;
   if (typeof v.status === "string") snap.status = v.status;
   if (typeof v.isUsingOverage === "boolean") snap.isUsingOverage = v.isUsingOverage;
+  if (v.source === "teamclaude") snap.source = "teamclaude";
+  if (Number.isInteger(v.accounts) && (v.accounts as number) >= 0) snap.accounts = v.accounts as number;
+  if (v.unreachable === true) snap.unreachable = true;
   return snap.fiveHour || snap.sevenDay ? snap : null;
 }
 

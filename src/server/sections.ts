@@ -151,3 +151,54 @@ export function applySections(text: string, edits: SectionEdit[]): SectionsResul
   if (crlf && last.endsWith("\r") && !text.endsWith("\r")) lines[lines.length - 1] = last.slice(0, -1);
   return { text: lines.join("\n"), applied, logs };
 }
+
+/** A note split on its level-2 headings: the text before the first one, then each section (heading line + body). */
+export interface SplitNote {
+  preamble: string;
+  sections: { title: string; text: string }[];
+}
+
+/** Line breaks as `\n`, trailing blank lines dropped. */
+function tidy(lines: string[]): string {
+  const out = lines.map((l) => (l.endsWith("\r") ? l.slice(0, -1) : l));
+  while (out.length > 0 && (out[out.length - 1] as string).trim() === "") out.pop();
+  return out.join("\n");
+}
+
+/** Comparison key: also ignores trailing spaces, so an editor's whitespace does not count as a change. */
+const sameText = (a: string, b: string) => a.replace(/[ \t]+$/gm, "") === b.replace(/[ \t]+$/gm, "");
+
+/**
+ * Splits a note on its level-2 headings, with the same rules as the section editor (fenced code respected).
+ * Null when a heading appears twice: sections can no longer be told apart by title.
+ */
+export function splitSections(text: string): SplitNote | null {
+  const lines = text.split("\n");
+  const found = findSections(lines);
+  if (new Set(found.map((s) => s.title)).size !== found.length) return null;
+  return {
+    preamble: tidy(lines.slice(0, found[0]?.start ?? lines.length)),
+    sections: found.map((s) => ({ title: s.title, text: tidy(lines.slice(s.start, s.end)) })),
+  };
+}
+
+export type SectionsDiff = { unchanged: true } | { unchanged: false; preamble?: string; changed: string[]; deleted: string[] };
+
+/**
+ * What changed between two versions of a note, section by section (matched by exact title): the full text of each
+ * changed or added section in the order of `after`, the titles of deleted ones, and the preamble when it changed.
+ * Line endings, trailing spaces and trailing blank lines are ignored; a reorder alone is no change.
+ * Null when either version has a duplicate heading (the caller then sends the whole note).
+ */
+export function diffSections(before: string, after: string): SectionsDiff | null {
+  const a = splitSections(before);
+  const b = splitSections(after);
+  if (!a || !b) return null;
+  const old = new Map(a.sections.map((s) => [s.title, s.text]));
+  const titles = new Set(b.sections.map((s) => s.title));
+  const changed = b.sections.filter((s) => !sameText(old.get(s.title) ?? "\0", s.text)).map((s) => s.text);
+  const deleted = a.sections.filter((s) => !titles.has(s.title)).map((s) => s.title);
+  const preambleChanged = !sameText(a.preamble, b.preamble);
+  if (!preambleChanged && changed.length === 0 && deleted.length === 0) return { unchanged: true };
+  return { unchanged: false, ...(preambleChanged ? { preamble: b.preamble } : {}), changed, deleted };
+}
