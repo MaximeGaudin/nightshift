@@ -26,6 +26,7 @@ import type {
 } from "../shared/types.ts";
 import { canSendFeedback, cardRef, columnMaxParallel, isDoneColumn } from "../shared/types.ts";
 import { safeHttpUrl } from "../shared/urls.ts";
+import type { QuotaSnapshot } from "../shared/usage.ts";
 import { buildEnvironment } from "./environment.ts";
 import { FlowController } from "./flow.ts";
 import { HttpError } from "./guard.ts";
@@ -37,9 +38,9 @@ import { contextTokensOf, decideCarry } from "./sessionCarry.ts";
 import { getSettings, legacyMaxParallel, NIGHTSHIFT_HOME, onSettingsChange, rememberProject } from "./settings.ts";
 import { findSkill } from "./skills.ts";
 import { isRaw, needsRun, newId, Project, type Raw } from "./store.ts";
-import { applyProxyEnv, ProxyGate, prepareProxyEnv } from "./teamclaude.ts";
+import { applyProxyEnv, ProxyGate, prepareProxyEnv, QUOTA_POLL_MS, TeamclaudeQuotaPoller } from "./teamclaude.ts";
 import { copyTemplateSkills } from "./templates.ts";
-import { recordRateLimit } from "./usage.ts";
+import { getUsage, recordRateLimit } from "./usage.ts";
 
 /** One block of an assistant message in `claude -p --output-format stream-json` (only what Nightshift reads). */
 interface StreamBlock {
@@ -419,11 +420,18 @@ export class Orchestrator {
     prepare: () => prepareProxyEnv(getSettings().teamclaudeUrl),
   });
 
+  /** Pooled quota of the teamclaude accounts, polled only while teamclaude is on. */
+  private readonly quotaPoller = new TeamclaudeQuotaPoller({
+    intervalMs: Number(process.env.NIGHTSHIFT_TEAMCLAUDE_POLL_MS) || QUOTA_POLL_MS,
+    onChange: () => this.broadcast({ type: "usage", usage: this.usage() }),
+  });
+
   constructor({ agents = true }: { agents?: boolean } = {}) {
     this.agents = agents;
     onSettingsChange((settings) => {
       // Turning teamclaude off while launches wait for it lets them go on directly.
       if (!settings.teamclaudeEnabled) this.gate.releaseAll({ mode: "direct" });
+      this.quotaPoller.configure(settings.teamclaudeEnabled, settings.teamclaudeUrl);
       this.broadcast({ type: "settings", settings });
       this.scheduleTick();
     });
@@ -433,6 +441,13 @@ export class Orchestrator {
       for (const p of this.projects.values()) this.acquireLock(p);
     }, LOCK_RECHECK_MS);
     this.lockTimer.unref?.();
+    const settings = getSettings();
+    this.quotaPoller.configure(settings.teamclaudeEnabled, settings.teamclaudeUrl);
+  }
+
+  /** The quota the header shows: the teamclaude pool while teamclaude is on, else the agents' own `rate_limit_info`. */
+  usage(): QuotaSnapshot | null {
+    return getSettings().teamclaudeEnabled ? this.quotaPoller.current() : getUsage();
   }
 
   // ---- cross-process lock ------------------------------------------------
@@ -1328,7 +1343,8 @@ export class Orchestrator {
     } else if (ev.type === "rate_limit_event") {
       // The quota belongs to the account: any agent's event counts, subagents included.
       const usage = recordRateLimit(ev.rate_limit_info);
-      if (usage) this.broadcast({ type: "usage", usage });
+      // Still recorded while teamclaude is on, but the header then shows the pool.
+      if (usage && !getSettings().teamclaudeEnabled) this.broadcast({ type: "usage", usage });
     } else if (ev.type === "system" && ev.subtype === "init") {
       if (ev.session_id) job.sessionId = ev.session_id;
       target.log("info", `Session ${ev.session_id} (model ${ev.model ?? "default"})`);
@@ -1522,6 +1538,7 @@ export class Orchestrator {
    */
   async shutdown(graceMs = SHUTDOWN_GRACE_MS) {
     clearInterval(this.lockTimer);
+    this.quotaPoller.stop();
     const groups = [...this.tests.values()].map((t) => t.proc.pid).filter((pid): pid is number => !!pid);
     // Queued quick runs are dropped; the running ones are stopped like jobs.
     for (const q of [...this.quickRuns.values()]) if (q.status === "queued") this.quickRuns.delete(q.id);

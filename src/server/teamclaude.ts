@@ -264,3 +264,69 @@ export class ProxyGate {
     for (const p of taken) p.resolve(outcome);
   }
 }
+
+export const QUOTA_POLL_MS = 60_000;
+
+/**
+ * Polls `GET <url>/teamclaude/quota` while teamclaude is on: at once on each (re)configuration, then every interval.
+ * A failed poll keeps the last pooled snapshot, marked `unreachable` (null when none was ever read).
+ */
+export class TeamclaudeQuotaPoller {
+  private timer: ReturnType<typeof setInterval> | null = null;
+  private url: string | null = null;
+  private snap: QuotaSnapshot | null = null;
+  /** Bumped on every (re)configuration: a poll started before it is dropped. */
+  private generation = 0;
+
+  constructor(private readonly opts: { intervalMs: number; onChange: () => void; timeoutMs?: number }) {}
+
+  current(): QuotaSnapshot | null {
+    return this.snap;
+  }
+
+  /** Follows the settings: starts, restarts on a new URL, or stops and forgets the snapshot when turned off. */
+  configure(enabled: boolean, url: string) {
+    if (!enabled) {
+      if (this.url === null) return;
+      this.stop();
+      this.url = null;
+      const had = this.snap !== null;
+      this.snap = null;
+      if (had) this.opts.onChange();
+      return;
+    }
+    if (this.url === url && this.timer) return;
+    this.stop();
+    if (this.url !== url) this.snap = null;
+    this.url = url;
+    const gen = this.generation;
+    this.timer = setInterval(() => void this.poll(gen), this.opts.intervalMs);
+    this.timer.unref?.();
+    void this.poll(gen);
+  }
+
+  stop() {
+    this.generation++;
+    if (this.timer) clearInterval(this.timer);
+    this.timer = null;
+  }
+
+  private async poll(gen: number) {
+    const url = this.url;
+    if (url === null) return;
+    let next: QuotaSnapshot | null = null;
+    try {
+      const res = await fetch(`${url}/teamclaude/quota`, { signal: AbortSignal.timeout(this.opts.timeoutMs ?? PROBE_TIMEOUT_MS) });
+      if (res.ok) next = quotaFromSummary(await res.json(), new Date().toISOString());
+      else await res.body?.cancel().catch(() => {});
+    } catch {
+      next = null;
+    }
+    if (gen !== this.generation) return;
+    const prev = this.snap;
+    if (next) this.snap = next;
+    else if (prev && !prev.unreachable) this.snap = { ...prev, unreachable: true };
+    else return;
+    this.opts.onChange();
+  }
+}

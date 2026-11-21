@@ -34,7 +34,6 @@ import { removeScreenshots, resolveScreenshot, storeCardImage } from "./screensh
 import { getSettings, updateSettings } from "./settings.ts";
 import { createSkill, listSkills, readSkill, saveSkill } from "./skills.ts";
 import { BOARD_FILE, COLUMN_KEYS, isRaw, newId, type Project, type Raw, remapColumnId, unknownFields } from "./store.ts";
-import { getUsage } from "./usage.ts";
 
 export function startServer({ port, development, agents = true }: { port: number; development?: boolean; agents?: boolean }) {
   // `bun --hot` re-runs this module on every change. Reuse the orchestrator from the previous run:
@@ -239,7 +238,7 @@ export function startServer({ port, development, agents = true }: { port: number
       },
 
       "/api/usage": {
-        GET: h(() => ({ usage: getUsage() })),
+        GET: h(() => ({ usage: orch.usage() })),
       },
 
       "/api/teamclaude/wait": {
@@ -643,7 +642,7 @@ export function startServer({ port, development, agents = true }: { port: number
       open(ws) {
         sockets.add(ws);
         ws.send(JSON.stringify({ type: "settings", settings: getSettings() } satisfies ServerEvent));
-        ws.send(JSON.stringify({ type: "usage", usage: getUsage() } satisfies ServerEvent));
+        ws.send(JSON.stringify({ type: "usage", usage: orch.usage() } satisfies ServerEvent));
         ws.send(JSON.stringify({ type: "teamclaude", wait: orch.teamclaudeWait() } satisfies ServerEvent));
       },
       close(ws) {
