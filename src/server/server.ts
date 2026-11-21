@@ -31,7 +31,17 @@ import { Orchestrator } from "./orchestrator.ts";
 import { removeScreenshots, resolveScreenshot, storeCardImage } from "./screenshots.ts";
 import { getSettings, updateSettings } from "./settings.ts";
 import { createSkill, listSkills, readSkill, saveSkill } from "./skills.ts";
-import { BOARD_FILE, COLUMN_KEYS, isRaw, newId, type Project, type Raw, remapColumnId, unknownFields } from "./store.ts";
+import {
+  BOARD_FILE,
+  COLUMN_KEYS,
+  isRaw,
+  newId,
+  normalizeFastMerge,
+  type Project,
+  type Raw,
+  remapColumnId,
+  unknownFields,
+} from "./store.ts";
 import { getUsage } from "./usage.ts";
 
 export function startServer({ port, development, agents = true }: { port: number; development?: boolean; agents?: boolean }) {
@@ -315,6 +325,7 @@ export function startServer({ port, development, agents = true }: { port: number
                   ...(type === "skill" && (c.freshSession === true || c.freshSession === "auto") ? { freshSession: c.freshSession } : {}),
                   ...(maxParallel !== undefined ? { maxParallel } : {}),
                   ...(emoji !== undefined ? { emoji } : {}),
+                  ...normalizeFastMerge(type, c),
                 };
               });
               const seen = new Set<string>();

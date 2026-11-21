@@ -26,6 +26,12 @@ export interface Column {
    * `"auto"`: decide per run from the carried context size and age. Never stored as false.
    */
   freshSession?: true | "auto";
+  /** Skill columns only, read for `nightshift-merge`: `false` turns off the deterministic merge tried before the agent. */
+  fastMerge?: false;
+  /** Fast merge when the base moved since the card started: absent = "test" (merge, run the test command, then fast-forward). */
+  fastMergeMovedBase?: "merge" | "agent";
+  /** Fast merge: command run in the card worktree after merging a moved base (mode "test"). Absent = fall back to the agent. */
+  fastMergeTestCommand?: string;
 }
 
 export type RunStatus = "success" | "error" | "cancelled" | "question";

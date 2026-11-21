@@ -107,7 +107,34 @@ export function systemColumnsChanged(raw: unknown, board: Board): boolean {
   return JSON.stringify(rawCols) !== JSON.stringify(board.columns);
 }
 
-export const COLUMN_KEYS = ["id", "name", "type", "skill", "instructions", "model", "lockModel", "maxParallel", "emoji", "freshSession"];
+export const COLUMN_KEYS = [
+  "id",
+  "name",
+  "type",
+  "skill",
+  "instructions",
+  "model",
+  "lockModel",
+  "maxParallel",
+  "emoji",
+  "freshSession",
+  "fastMerge",
+  "fastMergeMovedBase",
+  "fastMergeTestCommand",
+];
+
+export const FAST_MERGE_COMMAND_MAX = 2000;
+
+/** Fast-merge fields of a column, stored only on skill columns and only when they differ from their defaults. */
+export function normalizeFastMerge(type: ColumnType, raw: Raw): Pick<Column, "fastMerge" | "fastMergeMovedBase" | "fastMergeTestCommand"> {
+  if (type !== "skill") return {};
+  const command = typeof raw.fastMergeTestCommand === "string" ? raw.fastMergeTestCommand.trim().slice(0, FAST_MERGE_COMMAND_MAX) : "";
+  return {
+    ...(raw.fastMerge === false ? { fastMerge: false as const } : {}),
+    ...(raw.fastMergeMovedBase === "merge" || raw.fastMergeMovedBase === "agent" ? { fastMergeMovedBase: raw.fastMergeMovedBase } : {}),
+    ...(command ? { fastMergeTestCommand: command } : {}),
+  };
+}
 const CARD_KEYS = [
   "id",
   "number",
@@ -219,6 +246,7 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
             ...(type === "skill" && (c.freshSession === true || c.freshSession === "auto") ? { freshSession: c.freshSession } : {}),
             ...(maxParallel !== undefined ? { maxParallel } : {}),
             ...(emoji !== undefined ? { emoji } : {}),
+            ...normalizeFastMerge(type, c),
           };
         })
     : [];
