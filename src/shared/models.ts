@@ -46,21 +46,26 @@ function render(v: unknown): string {
 }
 
 /** Lenient (load): keeps valid entries, reports the others. undefined when nothing is left. */
-export function sanitizeModels(raw: unknown): { models: Models | undefined; dropped: Dropped[] } {
+export function sanitizeMap(raw: unknown, isValid: (v: string) => boolean): { models: Models | undefined; dropped: Dropped[] } {
   const dropped: Dropped[] = [];
   if (!isPlainObject(raw)) return { models: undefined, dropped };
   const models: Models = {};
   for (const [key, value] of Object.entries(raw)) {
-    if (SKILL_KEY_RE.test(key) && typeof value === "string" && isValidModelValue(value)) models[key] = value.trim();
+    if (SKILL_KEY_RE.test(key) && typeof value === "string" && isValid(value)) models[key] = value.trim();
     else dropped.push({ key, value: render(value) });
   }
   return { models: Object.keys(models).length > 0 ? models : undefined, dropped };
 }
 
-/** Applies an agent's patch on the current models. "default" removes an entry. */
-export function mergeModels(
+export function sanitizeModels(raw: unknown): { models: Models | undefined; dropped: Dropped[] } {
+  return sanitizeMap(raw, isValidModelValue);
+}
+
+/** Applies an agent's patch on the current map. "default" removes an entry. */
+export function mergeMap(
   current: Models | undefined,
   patch: unknown,
+  isValid: (v: string) => boolean,
 ): { models: Models | undefined; changes: string[]; dropped: Dropped[] } {
   const changes: string[] = [];
   const dropped: Dropped[] = [];
@@ -68,7 +73,7 @@ export function mergeModels(
   const out: Models = { ...(current ?? {}) };
   for (const [key, value] of Object.entries(patch)) {
     const v = typeof value === "string" ? value.trim() : undefined;
-    if (!SKILL_KEY_RE.test(key) || v === undefined || (v !== "default" && !isValidModelValue(v))) {
+    if (!SKILL_KEY_RE.test(key) || v === undefined || (v !== "default" && !isValid(v))) {
       dropped.push({ key, value: render(value) });
     } else if (v === "default") {
       if (key in out) {
@@ -83,18 +88,30 @@ export function mergeModels(
   return { models: Object.keys(out).length > 0 ? out : undefined, changes, dropped };
 }
 
+export function mergeModels(current: Models | undefined, patch: unknown) {
+  return mergeMap(current, patch, isValidModelValue);
+}
+
 /** Strict (PATCH): null or {} clears; any invalid entry, "default" included, rejects the whole value. */
-export function validateModelsStrict(raw: unknown): { ok: true; models: Models | undefined } | { ok: false; error: string } {
+export function validateMapStrict(
+  raw: unknown,
+  isValid: (v: string) => boolean,
+  label: string,
+  plural: string,
+): { ok: true; models: Models | undefined } | { ok: false; error: string } {
   if (raw === null || raw === undefined) return { ok: true, models: undefined };
-  if (!isPlainObject(raw)) return { ok: false, error: "models must be an object" };
+  if (!isPlainObject(raw)) return { ok: false, error: `${plural} must be an object` };
   const models: Models = {};
   for (const [key, value] of Object.entries(raw)) {
     if (!SKILL_KEY_RE.test(key)) return { ok: false, error: `Invalid skill name "${key}"` };
-    if (typeof value !== "string" || !isValidModelValue(value))
-      return { ok: false, error: `Invalid model ${JSON.stringify(render(value))} for ${key}` };
+    if (typeof value !== "string" || !isValid(value)) return { ok: false, error: `Invalid ${label} ${JSON.stringify(render(value))} for ${key}` };
     models[key] = value.trim();
   }
   return { ok: true, models: Object.keys(models).length > 0 ? models : undefined };
+}
+
+export function validateModelsStrict(raw: unknown): { ok: true; models: Models | undefined } | { ok: false; error: string } {
+  return validateMapStrict(raw, isValidModelValue, "model", "models");
 }
 
 export function describeModelChanges(changes: string[], by: "agent" | "user"): string {
