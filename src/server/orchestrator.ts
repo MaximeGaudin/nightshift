@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { Subprocess } from "bun";
+import { agentFeatureArgs, formatAgentFeatures, type ResolvedAgentFeatures, resolveAgentFeatures } from "../shared/agentFeatures.ts";
 import { isReady, releaseReason } from "../shared/dependencies.ts";
 import {
   describeEffortChanges,
@@ -38,6 +39,7 @@ import { canSendFeedback, cardRef, columnMaxParallel, isDoneColumn } from "../sh
 import { safeHttpUrl } from "../shared/urls.ts";
 import type { QuotaSnapshot } from "../shared/usage.ts";
 import { buildEnvironment } from "./environment.ts";
+import { fallbackBlock, tryFastMerge } from "./fastMerge.ts";
 import { FlowController } from "./flow.ts";
 import { HttpError } from "./guard.ts";
 import { IssueSync } from "./issues/sync.ts";
@@ -52,6 +54,9 @@ import { isRaw, needsRun, newId, Project, type Raw } from "./store.ts";
 import { applyProxyEnv, ProxyGate, prepareProxyEnv, QUOTA_POLL_MS, TeamclaudeQuotaPoller } from "./teamclaude.ts";
 import { copyTemplateSkills } from "./templates.ts";
 import { getUsage, recordRateLimit } from "./usage.ts";
+
+/** Skill whose columns try the deterministic merge before starting the agent. */
+const FAST_MERGE_SKILL = "nightshift-merge";
 
 /** One block of an assistant message in `claude -p --output-format stream-json` (only what Nightshift reads). */
 interface StreamBlock {
@@ -106,6 +111,8 @@ interface RunTarget {
   model: string | undefined;
   /** Where `model` comes from, shown in the start log line. */
   modelSource: ModelSource;
+  /** Agent features resolved for this run: they decide the flags that keep the user's setup out of the context. */
+  features: ResolvedAgentFeatures;
   effort: EffortLevel | undefined;
   effortSource: EffortSource;
   log(kind: LogLine["kind"], text: string): void;
@@ -119,6 +126,7 @@ interface RunTarget {
     source: ModelSource,
     effort: EffortLevel | undefined,
     effortSource: EffortSource,
+    features: string,
   ): string;
 }
 
@@ -962,6 +970,8 @@ export class Orchestrator {
       schema: QUICK_RESULT_SCHEMA,
       model: getSettings().model.trim() || undefined,
       modelSource: getSettings().model.trim() ? "settings" : "default",
+      // No card and no column: global > default.
+      features: resolveAgentFeatures({ settings: getSettings() }),
       ...(() => {
         const r = resolveQuickEffort(q.skill, getSettings());
         return { effort: r.effort, effortSource: r.source };
@@ -974,8 +984,8 @@ export class Orchestrator {
       },
       setProgress: (v, source) => this.setProgress(q, v, source),
       waitEntry: { project: q.project.path, quickRunId: q.id, title: q.skill },
-      startMessage: (model, permissionMode, source, effort, effortSource) =>
-        `Starting quick run of skill "${q.skill}" (permission mode: ${permissionMode}, model: ${modelLabel(model, source)}, effort: ${effortLabel(effort, effortSource)}).`,
+      startMessage: (model, permissionMode, source, effort, effortSource, features) =>
+        `Starting quick run of skill "${q.skill}" (permission mode: ${permissionMode}, model: ${modelLabel(model, source)}, effort: ${effortLabel(effort, effortSource)}, ${features}).`,
     };
   }
 
@@ -1164,6 +1174,32 @@ export class Orchestrator {
       });
     }
     const answer = card.pendingAnswer;
+    // Merge column: try the deterministic merge first; the agent only runs when it stops (fallback).
+    let fastMergeNote = "";
+    if (!answer && column.skill === FAST_MERGE_SKILL && column.fastMerge !== false) {
+      const o = await tryFastMerge({
+        projectPath: p.path,
+        cardId: card.id,
+        description: p.card(card.id)?.description ?? card.description,
+        column,
+        stopTest: () => this.stopTest(p, card.id),
+        isCancelled: () => job.cancelled,
+      });
+      if (o.kind === "cancelled") return this.finish(job, "cancelled", {});
+      if (o.kind === "merged" || o.kind === "busy") {
+        this.log(p, card.id, "info", o.kind === "merged" ? o.summary : `merge rapide abandonné : verrou tenu par ${o.owner}`);
+        return this.finish(job, "success", {
+          output: {
+            summary: o.summary,
+            move: o.kind === "merged" ? "next" : "stay",
+            questions: [],
+            sections: [{ heading: "Merge", content: o.merge }],
+          },
+        });
+      }
+      this.log(p, card.id, "info", `merge rapide abandonné : ${o.step} — ${o.error.replace(/\s+/g, " ").slice(0, 300)}`);
+      fastMergeNote = `\n\n${fallbackBlock(o)}`;
+    }
     // A new run needs its column's skill; a resumed session only uses it to tell the agent where the definition lives.
     const skill = job.skill ? findSkill(p.path, job.skill) : undefined;
     if (!answer && !skill) {
@@ -1187,7 +1223,7 @@ export class Orchestrator {
     job.resumedFrom = resumeId;
     job.seenAtLaunch = !answer || answer.kind === "feedback" ? card.description : undefined;
     let prompt = !answer
-      ? buildPrompt(p.board, card, column, skill?.path, this.liveStatuses(p), seen)
+      ? buildPrompt(p.board, card, column, skill?.path, this.liveStatuses(p), seen) + fastMergeNote
       : answer.kind === "resume"
         ? RECOVER_PROMPT
         : answer.kind === "feedback"
@@ -1214,7 +1250,7 @@ export class Orchestrator {
         // A new session has seen nothing: the whole description again.
         job.resumedFrom = undefined;
         job.seenAtLaunch = card.description;
-        prompt = buildPrompt(p.board, card, column, skill?.path, this.liveStatuses(p));
+        prompt = buildPrompt(p.board, card, column, skill?.path, this.liveStatuses(p)) + fastMergeNote;
         attempt--;
         continue;
       }
@@ -1265,13 +1301,14 @@ export class Orchestrator {
       schema: RESULT_SCHEMA,
       model: resolved.model,
       modelSource: resolved.source,
+      features: resolveAgentFeatures({ card: fresh, column, settings: getSettings() }),
       effort: effort.effort,
       effortSource: effort.source,
       log: (kind, text) => this.log(p, card.id, kind, text),
       setProgress: (v, source) => this.setProgress(job, v, source),
       waitEntry: { project: p.path, cardId: card.id, ref: cardRef(fresh), title: fresh.title },
-      startMessage: (model, permissionMode, source, effort, effortSource) =>
-        `${verb} ${job.skill ? `skill "${job.skill}"` : "session"} in "${column.name}" (permission mode: ${permissionMode}, model: ${modelLabel(model, source)}, effort: ${effortLabel(effort, effortSource)}).`,
+      startMessage: (model, permissionMode, source, effort, effortSource, features) =>
+        `${verb} ${job.skill ? `skill "${job.skill}"` : "session"} in "${column.name}" (permission mode: ${permissionMode}, model: ${modelLabel(model, source)}, effort: ${effortLabel(effort, effortSource)}, ${features}).`,
     };
   }
 
@@ -1306,10 +1343,21 @@ export class Orchestrator {
       "--name",
       target.name,
       ...(model ? ["--model", model] : []),
+      ...agentFeatureArgs(target.features),
       ...(target.effort ? ["--effort", target.effort] : []),
       ...splitArgs(settings.extraArgs),
     ];
-    target.log("info", target.startMessage(model, settings.permissionMode, target.modelSource, target.effort, target.effortSource));
+    target.log(
+      "info",
+      target.startMessage(
+        model,
+        settings.permissionMode,
+        target.modelSource,
+        target.effort,
+        target.effortSource,
+        formatAgentFeatures(target.features),
+      ),
+    );
 
     let env: Record<string, string | undefined> = process.env;
     if (settings.teamclaudeEnabled) {

@@ -11,13 +11,34 @@ The worktree and the branch come from `nightshift-implement`: branch `nightshift
 
 A card implemented with no worktree (the project's worktree policy was `forbidden`, or `auto` chose the shared checkout) has `Worktree: none` under `## Result`. Its commits are already on the base branch, so there is nothing to merge: this skill only pushes the base. Decide from `## Result`, not from the current policy, since the policy may have changed after the card was implemented.
 
+## Fast path
+
+Before starting this skill, Nightshift tries the merge itself, without an agent, when the merge column has "Merge without an agent when possible" checked (the default). It follows this skill: same lock, same test stop, same guards, base merged into the card branch then `--ff-only` of the base, push without force, worktree and branch removed, the same `## Merge` lines. When the base moved since the card started, the column decides: merge then run the column's test command (the default), merge without tests, or hand over to you.
+
+You run only when that fast path stopped. Your prompt then ends with a block:
+
+```
+<fast-merge>
+Step: <the step that stopped: read-result, lock, stop-test, check-card, check-commits, upstream, base-checkout, moved-base, merge-base-into-card, test, ff-base, push>
+Command: <the command it ran>
+Error: <its error, or the last 50 lines of the test output>
+State left: <what it left behind>
+</fast-merge>
+```
+
+The lock is released and no merge is in progress. Start from step 1 and take the block into account:
+
+- `State left` says the merge commit of the base stays on the card branch: the card branch already holds the base, so step 7 has nothing new to merge, and the tests must still pass there before the fast-forward.
+- `State left` says a local merge is kept on the base and not pushed: the card branch is already in the target, so step 4's "already contained" bullet applies and only the push (step 8) remains.
+- Step `test`: the error holds the failing output. Fix the merge on the card branch as in step 7; a second failure follows Conflicts step 4.
+
 ## Prerequisites
 
 - The Nightshift worker prompt contains the card (`<title>`, `<description>`, `id`).
-- Return work only as Nightshift's structured result (`title`, `description`, `move`, `summary`, `questions`). Do not edit `nightshift.json`.
+- Return work only as Nightshift's structured result (`title`, `sections`, `move`, `summary`, `questions`). Return `description` only to restructure the whole note. Do not edit `nightshift.json`.
 - Do not call `AskUserQuestion`.
 - The process starts in the board project, a git repository. Check with `git rev-parse --is-inside-work-tree`. If that fails, set `move` to `stay`, leave `questions` empty, write the error under `## Merge`, and stop.
-- Another merge may be running. Take the lock in step 2 before touching the target. Set the merge column's "Agents en parallèle dans cette colonne" to 1 in Nightshift so merges run one at a time; the lock stays as a guard.
+- Another merge may be running. Take the lock in step 2 before touching the target.
 
 ## Steps
 
@@ -26,7 +47,7 @@ Progress marker: at the start of each step, write `[nightshift-progress] N/M lab
 1. Read the card. Branch is `nightshift/<card-id>`. Worktree path is the `Worktree` line under `## Result`. If that line is missing, find the path with `git worktree list`.
    - If the prompt has no card: set `move` to `stay`, ask one question for the card id, and stop.
    - When `## Result` has `Worktree: none`: the card has no branch and no worktree. Take the lock (step 2), stop the card's test environment (step 3), then do the no-worktree merge below instead of the next bullet and steps 4 to 9 (there is no branch to look for), and remove the lock.
-     1. The base is the `Base` line under `## Result` (a retried run keeps the `Into:` of an earlier `## Merge`). Without a usable branch name, ask once (see Questions).
+     1. The base is the `Base` line under `## Result` (a retried run keeps the `Into:` of an earlier `## Merge`). Without a usable branch name, ask once (see Asking questions).
      2. Check the card's commits are on it: the `Commits` line under `## Result` lists them, and each must satisfy `git merge-base --is-ancestor <sha> <base>`. A missing one: set `move` to `stay`, write which under `## Merge`, and stop. Do not cherry-pick.
      3. Push the base as in step 8: `git push <remote> <base>` to the remote of its upstream, never `--force`, never `--no-verify`; no upstream means `Pushed: skipped, no upstream`. A rejection or error follows step 8 (no step 7 to go back to: fetch, and if the remote moved, fast-forward the base to it when the checkout is clean, then push once more).
      4. Append `## Merge` with `Into: <base>`, `Merge commit: none (committed on <base>)`, the `Test environment` and `Pushed` lines, `Worktree removed: none` and `Card branch deleted: none`. Set `move` to `next`.
@@ -47,7 +68,7 @@ Progress marker: at the start of each step, write `[nightshift-progress] N/M lab
    - the `Into:` line of an earlier `## Merge` in this note (a retried run keeps its first target);
    - the branch on the `Base` line under `## Result`;
    - for a card implemented before the `Base` line existed: the branch checked out in the board project (`git symbolic-ref --short HEAD`).
-   - If none names a branch (`Base` says `detached` and the board project is on a detached `HEAD`), or the named branch no longer exists, ask once. See Questions. Do not guess a branch.
+   - If none names a branch (`Base` says `detached` and the board project is on a detached `HEAD`), or the named branch no longer exists, ask once. See Asking questions. Do not guess a branch.
    - Refuse a target named `nightshift/*`: set `move` to `stay`, write that under `## Merge`, and stop.
    - If the card branch is already contained in the target (`git merge-base --is-ancestor nightshift/<card-id> <target>`): push the target (step 8), remove the worktree if it is still listed, delete the branch with `git branch -d`, append `## Merge`, set `move` to `next`, remove the lock, and stop. A failed push follows step 8.
 5. Refuse the merge when `git diff --name-only <target>...nightshift/<card-id> -- nightshift.json` prints a path. Set `move` to `stay`, leave `questions` empty, write that path under `## Merge`, and stop.
@@ -79,9 +100,9 @@ When `git merge` stops with conflicts, fix them before aborting.
 1. Resolve each file. Keep both sides when they add different code. Keep the card branch when the target only moved the same lines. Never drop a test. Never take `nightshift.json` from the card branch. If the note already answers a file under `## Questions`, apply that answer and do not ask again.
 2. Stage the resolved files. Run the project's test suite in that checkout. If it fails, fix the resolution once and run the suite again.
 3. When the suite passes, or the repo has no test command, finish with `git commit`. Do not use `--no-verify` and do not amend. Then continue step 7 at the fast-forward of the target, and step 8.
-4. A conflict needs a human when the two sides contradict, a resolution would drop a test, or the suite still fails. Run `git merge --abort` in the card worktree so the branch is not left conflicted. Ask every unresolved file in one list. Set `move` to `stay`. See Questions.
+4. A conflict needs a human when the two sides contradict, a resolution would drop a test, or the suite still fails. Run `git merge --abort` in the card worktree so the branch is not left conflicted. Ask every unresolved file in one list. Set `move` to `stay`. See Asking questions.
 
-## Questions
+## Asking questions
 
 Use this in step 4, and in Conflicts when a human must decide. Ask in two places, same questions, same order. Under each question in the note, leave exactly three blank lines.
 
@@ -100,7 +121,7 @@ Use this in step 4, and in Conflicts when a human must decide. Ask in two places
 
 On the next run, the answer is the text under that question. Ignore blank lines. When that text is empty and the resume prompt has an answer, use it. When both are empty, set `move` to `stay` and stop. Do not invent a branch name, and do not guess a conflict you could not fix.
 
-## Merge
+## Writing the merge note
 
 Append this to the note. Do not delete `## Result`.
 

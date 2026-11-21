@@ -3,6 +3,7 @@ import { type ReactNode, useState } from "react";
 import { EFFORT_LEVELS } from "../shared/effort.ts";
 import type { IssueSource, IssueSourceStatus } from "../shared/issues.ts";
 import { type LanguageSetting, MAX_PARALLEL, type Settings, WORKTREE_POLICIES, type WorktreePolicy } from "../shared/types.ts";
+import { AgentFeaturesFields, inheritedFeatures } from "./AgentFeaturesFields.tsx";
 import { api } from "./api.ts";
 import { AppDialog } from "./components/app-dialog.tsx";
 import { Alert } from "./components/ui/alert.tsx";
@@ -206,6 +207,14 @@ export function SettingsContent({
             onChange={(e) => onChange({ ...s, model: e.target.value })}
           />
         </Row>
+        <Row id="set-agent-features" label={t("agentFeatures.title")} help={t("agentFeatures.help")}>
+          <AgentFeaturesFields
+            idPrefix="set-agent-features"
+            value={s.agentFeatures}
+            inherited={inheritedFeatures({})}
+            onChange={(next) => onChange({ ...s, agentFeatures: next ?? {} })}
+          />
+        </Row>
         <Row id="set-effort" label={t("settings.effort.label")} help={t("settings.effort.help")}>
           <select
             id="set-effort"
@@ -298,7 +307,12 @@ export function settingsDirty(
   savedPolicy?: WorktreePolicy,
   draftPolicy?: WorktreePolicy,
 ): boolean {
-  return EDITABLE.some((k) => saved[k] !== draft[k]) || savedCap !== draftCap || savedPolicy !== draftPolicy;
+  return (
+    EDITABLE.some((k) => saved[k] !== draft[k]) ||
+    JSON.stringify(saved.agentFeatures ?? {}) !== JSON.stringify(draft.agentFeatures ?? {}) ||
+    savedCap !== draftCap ||
+    savedPolicy !== draftPolicy
+  );
 }
 
 /**
@@ -310,7 +324,10 @@ export async function saveSettingsAndProject(
   draft: Settings,
   project?: { path: string; saved: number; draft: number; policy?: { saved: WorktreePolicy; draft: WorktreePolicy } },
 ): Promise<void> {
-  await client.saveSettings(Object.fromEntries(EDITABLE.map((k) => [k, draft[k]])) as Partial<Settings>);
+  await client.saveSettings({
+    ...(Object.fromEntries(EDITABLE.map((k) => [k, draft[k]])) as Partial<Settings>),
+    agentFeatures: draft.agentFeatures ?? {},
+  });
   if (!project) return;
   if (project.draft !== project.saved) await client.saveBoard(project.path, { maxParallel: project.draft });
   if (project.policy && project.policy.draft !== project.policy.saved) await client.setWorktreePolicy?.(project.path, project.policy.draft);

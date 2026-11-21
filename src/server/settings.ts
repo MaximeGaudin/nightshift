@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { validateAgentFeaturesStrict } from "../shared/agentFeatures.ts";
 import { isValidEffortSetting } from "../shared/effort.ts";
 import { DEFAULT_PROJECT_PARALLEL, LANGUAGE_SETTINGS, normalizeProjectParallel, PERMISSION_MODES, type Settings } from "../shared/types.ts";
 import { writeFileAtomic } from "./fsutil.ts";
@@ -19,6 +20,7 @@ export const DEFAULT_SETTINGS: Settings = {
   model: "",
   effort: "",
   extraArgs: "",
+  agentFeatures: {},
   recentProjects: [],
   soundNotifications: true,
   language: "auto",
@@ -76,6 +78,11 @@ function checkField(key: keyof Settings, value: unknown): string | null {
     case "model":
     case "extraArgs":
       return typeof value === "string" ? null : `${key} must be a string`;
+    case "agentFeatures": {
+      const r = validateAgentFeaturesStrict(value);
+      // null means "clear" in the card API; settings always hold an object.
+      return value === null ? "agentFeatures must be an object" : r.ok ? null : r.error;
+    }
     case "effort":
       return isValidEffortSetting(value) ? null : `Unknown effort: ${String(value)}`;
     case "soundNotifications":

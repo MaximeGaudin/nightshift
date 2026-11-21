@@ -12,10 +12,10 @@ The specification is the card description. Do not create `docs/02 - Specs/`. Do 
 ## Prerequisites
 
 - The Nightshift worker prompt contains the card (`<title>`, `<description>`) and the board columns. The description is the grilled brief.
-- Return work only as Nightshift's structured result (`title`, `description`, `move`, `summary`, `questions`). Nightshift updates the board from that result.
+- Return work only as Nightshift's structured result (`title`, `sections`, `move`, `summary`, `questions`, `models`). Return `description` only to restructure the whole note. Nightshift updates the board from that result.
 - Do not call `AskUserQuestion`. Do not edit `nightshift.json`.
 - The working directory is the board project.
-- Project context files are optional. Happy path, when present: `README.md`, `docs/Stack.md`, and the code the brief names. If a path is missing, skip it and continue from the brief. Do not ask for a different tree.
+- Project context files are optional. Happy path, when present: `README.md`, `docs/Stack.md`, and the code the brief names. If a path is missing, skip it and continue from the brief. Do not ask for a different tree. Do not re-read a file this session has already read (for example when grill ran earlier in the same session). Do not re-read a file this session has already read (for example when grill ran earlier in the same session). Do not re-read a file this session has already read (for example when grill ran earlier in the same session).
 
 ## Steps
 
@@ -25,9 +25,9 @@ Progress marker: at the start of each step, write `[nightshift-progress] N/M lab
    - If the prompt has no card: set `move` to `stay`, put one question asking for the brief, and stop.
 2. Read the optional project context from Prerequisites so the plan matches the stack and the code that already exists.
    - On a missing file: skip it and continue from the brief.
-3. If the brief still needs a product decision (an undefined noun, a behavior with no unhappy path, a missing boundary, or an untestable claim), do not plan. Ask every gap at once, set `move` to `stay`, and stop. See Questions.
-4. On the next run, read answers the same way as Questions. Fold them into the brief. Delete `## Questions`. Repeat from step 3.
-5. Write the specification into the description, using the template below, as `sections` (Updating the card): add `## Progress`, `## Architecture`, `## Tasks`, `## Tests`, `## Definition of done` and `## Models`. The grilled brief stays as it is: do not return it. Sections are added at the end of the note, so the order is Brief (the grilled note), then the new sections.
+3. If the brief still needs a product decision (an undefined noun, a behavior with no unhappy path, a missing boundary, or an untestable claim), do not plan. Ask every gap at once, set `move` to `stay`, and stop. See Asking questions.
+4. On the next run, read answers the same way as in Asking questions. Fold them into the brief. Delete `## Questions`. Repeat from step 3.
+5. Write the specification into the description, using the template below, as `sections` (Updating the card): add `## Progress`, `## Architecture`, `## Tasks`, `## Tests`, `## Definition of done` and `## Models`. The grilled note stays as it is: do not return it. Sections are added at the end of the note, after the grilled note.
 6. Set `move` to `next` and return `questions` as an empty array. Stop.
 
 Follow extra column instructions in the worker prompt when they do not contradict the steps above.
@@ -58,10 +58,6 @@ Do not fill a gap with "the implement agent chooses" when the choice is hard. De
 Section headings stay in English. Prose matches the language of the brief.
 
 ```markdown
-## Brief
-
-The grilled brief, user sentences kept.
-
 ## Progress
 
 - [ ] 1. Shared contract
@@ -110,9 +106,9 @@ Rules for Tasks:
 - `Context` carries the research, so the implement agent reads only what it touches: the `file:line` ranges, the existing pattern to follow, the command that runs the relevant tests. Copy facts you verified in the code, not guesses.
 - One task, one hard part. Split a task that contains two unrelated hard parts; merge tasks that are too small to be worth a checkbox.
 
-## Progress
+## Progress list
 
-`## Progress` is the list a person reads to see how far implementation got. Write it immediately after `## Brief`.
+`## Progress` is the list a person reads to see how far implementation got. Write it at the end of the note, with the other sections of the plan.
 
 - One checkbox per task. Number from 1 with no gaps, in task order.
 - Line shape: `- [ ] N. <task name>`. Leave every box unchecked.
@@ -125,12 +121,12 @@ Rules for Tests and Definition of done:
 - Definition of done is observable. Use the project's existing test command when one exists. When none exists, state the outcome without inventing a test runner.
 - Every task's "Done when" line is a subset of Definition of done, not a new goal.
 
-## Questions
+## Asking questions
 
 Use this only in step 3. Ask in two places, same questions, same order:
 
 - `questions`: one decision per string, a single line.
-- The note: a `## Questions` section at the end of the brief. Under each question, leave exactly three blank lines. Do not put a placeholder in those lines.
+- The note: a `## Questions` section at the end of the note. Under each question, leave exactly three blank lines. Do not put a placeholder in those lines.
 
 Phrase each question so the answer changes the product. End with `Recommended: <option> — <one-line consequence>.` Write questions in the language of the brief. Ask every gap in that one list. Do not hold any back.
 
@@ -145,7 +141,7 @@ On the next run, the answer is the text under that question, down to the next nu
 
 ```
 
-## Models
+## Choosing models
 
 One implement session runs every task on one model, so pick the card's models from its hardest task. A model that is too weak costs a repair loop; one that is too strong costs time and money on every line.
 
@@ -200,10 +196,10 @@ Plan ready (`questions` empty, `move` is `next`):
 
 ## Done when
 
-- [ ] The description contains `## Brief`, `## Progress`, `## Architecture`, `## Tasks`, `## Tests`, and `## Definition of done`
+- [ ] The description gains `## Progress`, `## Architecture`, `## Tasks`, `## Tests`, and `## Definition of done`
 - [ ] `## Progress` has one unchecked numbered line per task, from 1, in task order
 - [ ] Every task has `Files`, `Context` with `file:line` references, `Hard part` and `Done when`
 - [ ] Tests cover the hard behavior, and Definition of done is observable
-- [ ] `## Models` names the card's models, chosen from the hardest task (see Models)
+- [ ] `## Models` names the card's models, chosen from the hardest task (see Choosing models)
 - [ ] The specification does not contain function bodies or routine implementation steps
 - [ ] `move` is `next` and `questions` is empty, or `move` is `stay` because product questions are still open

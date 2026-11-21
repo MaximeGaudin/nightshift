@@ -44,6 +44,7 @@ if (process.env.FAKE_ARGS_LOG) {
       argvHasCard: process.argv.some((a) => a.includes("<card")),
       argv: process.argv.slice(2),
       promptHasQuick: quick,
+      fastMerge: prompt.includes("<fast-merge>"),
       prompt,
     })}\n`,
   );

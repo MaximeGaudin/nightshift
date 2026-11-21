@@ -1,5 +1,6 @@
 import { copyFileSync, existsSync, type FSWatcher, readFileSync, statSync, watch } from "node:fs";
 import { basename, join } from "node:path";
+import { sanitizeAgentFeatures } from "../shared/agentFeatures.ts";
 import { normalizeDependsOn, releaseReason, releaseTarget, unmetDependencies } from "../shared/dependencies.ts";
 import { type EffortLevel, isValidEffort, sanitizeEfforts } from "../shared/effort.ts";
 import { normalizeCardExternal, normalizeIssueSources } from "../shared/issues.ts";
@@ -118,11 +119,28 @@ export const COLUMN_KEYS = [
   "instructions",
   "model",
   "lockModel",
+  "agentFeatures",
   "effort",
   "maxParallel",
   "emoji",
   "freshSession",
+  "fastMerge",
+  "fastMergeMovedBase",
+  "fastMergeTestCommand",
 ];
+
+export const FAST_MERGE_COMMAND_MAX = 2000;
+
+/** Fast-merge fields of a column, stored only on skill columns and only when they differ from their defaults. */
+export function normalizeFastMerge(type: ColumnType, raw: Raw): Pick<Column, "fastMerge" | "fastMergeMovedBase" | "fastMergeTestCommand"> {
+  if (type !== "skill") return {};
+  const command = typeof raw.fastMergeTestCommand === "string" ? raw.fastMergeTestCommand.trim().slice(0, FAST_MERGE_COMMAND_MAX) : "";
+  return {
+    ...(raw.fastMerge === false ? { fastMerge: false as const } : {}),
+    ...(raw.fastMergeMovedBase === "merge" || raw.fastMergeMovedBase === "agent" ? { fastMergeMovedBase: raw.fastMergeMovedBase } : {}),
+    ...(command ? { fastMergeTestCommand: command } : {}),
+  };
+}
 const CARD_KEYS = [
   "id",
   "number",
@@ -143,6 +161,7 @@ const CARD_KEYS = [
   "history",
   "timeBase",
   "models",
+  "agentFeatures",
   "efforts",
   "external",
 ];
@@ -244,12 +263,16 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
             ...(c.instructions ? { instructions: String(c.instructions) } : {}),
             ...(typeof c.model === "string" && c.model.trim() ? { model: c.model.trim() } : {}),
             ...(type === "skill" && c.lockModel === true ? { lockModel: true as const } : {}),
+            ...(type === "skill" && sanitizeAgentFeatures(c.agentFeatures)
+              ? { agentFeatures: sanitizeAgentFeatures(c.agentFeatures) }
+              : {}),
             ...(type === "skill" && typeof c.effort === "string" && isValidEffort(c.effort)
               ? { effort: c.effort.trim() as EffortLevel }
               : {}),
             ...(type === "skill" && (c.freshSession === true || c.freshSession === "auto") ? { freshSession: c.freshSession } : {}),
             ...(maxParallel !== undefined ? { maxParallel } : {}),
             ...(emoji !== undefined ? { emoji } : {}),
+            ...normalizeFastMerge(type, c),
           };
         })
     : [];
@@ -274,6 +297,7 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
     if (rawHistory.length > 50) timeBase = replayHistory(timeBase, rawHistory.slice(0, -50), asString(c.createdAt) ?? now());
     const skipColumnIds = normalizeSkipColumnIds(columns, c.skipColumnIds);
     const { models } = sanitizeModels(c.models);
+    const agentFeatures = sanitizeAgentFeatures(c.agentFeatures);
     const { efforts } = sanitizeEfforts(c.efforts);
     const columnId = typeof c.columnId === "string" && colIds.has(c.columnId) ? c.columnId : columns[0]?.id;
     const external = normalizeCardExternal(c.external);
@@ -296,6 +320,7 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
       ...(skipColumnIds ? { skipColumnIds } : {}),
       ...(c.draft === true && columnId === BACKLOG_COLUMN_ID ? { draft: true as const } : {}),
       ...(models ? { models } : {}),
+      ...(agentFeatures ? { agentFeatures } : {}),
       ...(efforts ? { efforts } : {}),
       ...(typeof c.sessionId === "string" && c.sessionId ? { sessionId: c.sessionId } : {}),
       ...(external ? { external } : {}),

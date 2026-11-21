@@ -60,6 +60,17 @@ export const settings = {
   "settings.recent.open": "Open",
   "settings.footnote": "Global settings, stored in ~/.nightshift/settings.json.",
   "settings.discardChanges": "Discard unsaved changes?",
+  "agentFeatures.title": "Agent features",
+  "agentFeatures.help":
+    "Off reduces the starting context of every agent. Turning off user skills breaks a board whose skills live in the user scope.",
+  "agentFeatures.mcp": "MCP servers (user and project)",
+  "agentFeatures.chrome": "Chrome",
+  "agentFeatures.hooks": "Hooks (user, plugins and project)",
+  "agentFeatures.userSettings": "User skills and CLAUDE.md",
+  "agentFeatures.on": "On",
+  "agentFeatures.off": "Off",
+  "agentFeatures.inheritOn": "Inherit (on)",
+  "agentFeatures.inheritOff": "Inherit (off)",
   "settings.issues.label": "Issue sources",
   "settings.issues.help":
     "Open issues of these repositories become Backlog cards. Synced every 5 minutes by the instance that runs this project's agents.",

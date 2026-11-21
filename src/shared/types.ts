@@ -1,5 +1,6 @@
 // Types shared by the server and the web client.
 
+import type { AgentFeaturesOverride } from "./agentFeatures.ts";
 import type { FlowState } from "./flow.ts";
 import type { CardExternal, IssueSource, IssueSourceStatus } from "./issues.ts";
 import type { QuotaSnapshot } from "./usage.ts";
@@ -18,6 +19,8 @@ export interface Column {
   model?: string;
   /** Skill columns only: the column model wins over the card's per-skill model. Never stored as false. */
   lockModel?: true;
+  /** Skill columns only: agent features set for this column; a missing key inherits. Never `{}`. */
+  agentFeatures?: AgentFeaturesOverride;
   /** Skill columns only: niveau d'effort (`--effort`) des runs de cette colonne ; absent = réglage global. */
   effort?: "low" | "medium" | "high" | "xhigh" | "max";
   /** Max agents running at once in this column; absent = 1. The global setting still caps the total. */
@@ -29,6 +32,12 @@ export interface Column {
    * `"auto"`: decide per run from the carried context size and age. Never stored as false.
    */
   freshSession?: true | "auto";
+  /** Skill columns only, read for `nightshift-merge`: `false` turns off the deterministic merge tried before the agent. */
+  fastMerge?: false;
+  /** Fast merge when the base moved since the card started: absent = "test" (merge, run the test command, then fast-forward). */
+  fastMergeMovedBase?: "merge" | "agent";
+  /** Fast merge: command run in the card worktree after merging a moved base (mode "test"). Absent = fall back to the agent. */
+  fastMergeTestCommand?: string;
 }
 
 export type RunStatus = "success" | "error" | "cancelled" | "question";
@@ -118,6 +127,8 @@ export interface Card {
   draft?: true;
   /** Per-skill model overrides (skill name -> alias or ID). Never `{}`; "default" is never stored. */
   models?: Record<string, string>;
+  /** Agent features set for this card, above the column's; a missing key inherits. Never `{}`. */
+  agentFeatures?: AgentFeaturesOverride;
   /** Per-skill effort overrides (skill name -> low|medium|high|xhigh|max). Never `{}`; "default" is never stored. */
   efforts?: Record<string, "low" | "medium" | "high" | "xhigh" | "max">;
   /** The card's Claude session: a column continues it unless it has `freshSession` (the default for new skill columns). */
@@ -314,6 +325,8 @@ export interface Settings {
   /** "" = skill's economic default, "inherit" = pass no --effort, else a level. */
   effort: "" | "inherit" | "low" | "medium" | "high" | "xhigh" | "max";
   extraArgs: string;
+  /** Agent features set globally; a missing key inherits the economical default. `{}` when none. */
+  agentFeatures: AgentFeaturesOverride;
   recentProjects: string[];
   /** Play a sound when a card needs human attention. */
   soundNotifications: boolean;
