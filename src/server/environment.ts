@@ -49,7 +49,8 @@ function remainingPath(board: Board, card: Card): Column[] {
 }
 
 /** The `<environment>` block put after the card in an agent prompt: its path, the project settings and the other cards. */
-export function buildEnvironment(board: Board, card: Card, live: Record<string, LiveStatus>): string {
+/** `prLine`: the pull request mode line (see prMode.ts), only when the mode is on. */
+export function buildEnvironment(board: Board, card: Card, live: Record<string, LiveStatus>, prLine?: string): string {
   const lines = ["<environment>", "Card path (remaining columns, in order):"];
   remainingPath(board, card).forEach((c, i) => {
     lines.push(`  ${i + 1}. ${describeColumn(c)}${c.id === card.columnId ? " ← current" : ""}`);
@@ -58,6 +59,7 @@ export function buildEnvironment(board: Board, card: Card, live: Record<string, 
   const skipped = skippedColumns(board.columns, card).filter((c) => board.columns.indexOf(c) > currentIndex);
   if (skipped.length > 0) lines.push(`Skipped for this card: ${skipped.map(describeColumn).join(", ")}`);
   lines.push(`Worktree policy: ${worktreePolicyOf(board)} — ${WORKTREE_POLICY_TEXT[worktreePolicyOf(board)]}`);
+  if (prLine) lines.push(prLine);
 
   const groups: string[] = [];
   for (const column of board.columns) {

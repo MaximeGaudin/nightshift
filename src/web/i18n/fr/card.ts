@@ -57,6 +57,8 @@ export const card: Record<keyof typeof enCard, string> = {
   "card.noRun": "Aucun run pour cette fiche.",
   "card.copyRef": "Copier la référence",
   "card.source.open": "Ouvrir {ref} sur {provider}",
+  "card.pr.label": "Pull request",
+  "card.pr.open": "Ouvrir la pull request",
   "card.copied": "Copié",
   "card.models.title": "Modèle et effort par skill",
   "card.models.skillRow": "{skill} ({columns})",

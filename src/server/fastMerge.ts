@@ -5,6 +5,7 @@ import { execFile, spawn } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
+import { field, section } from "../shared/pullRequests.ts";
 import type { Column } from "../shared/types.ts";
 import { git, gitLine } from "./git.ts";
 
@@ -15,28 +16,14 @@ export type ResultFields =
 
 const SHA = /\b[0-9a-f]{7,40}\b/g;
 
-/** Body of a `## <heading>` section, or undefined when the note has none. */
-function section(description: string, heading: string): string | undefined {
-  const lines = description.split("\n");
-  const start = lines.findIndex((l) => l.trim() === `## ${heading}`);
-  if (start < 0) return undefined;
-  const end = lines.findIndex((l, i) => i > start && /^## /.test(l));
-  return lines.slice(start + 1, end < 0 ? undefined : end).join("\n");
-}
-
-/** Value of a `- Key: value` line, without backticks; undefined when the line is missing. */
-function field(body: string, key: string): string | undefined {
-  const re = new RegExp(`^\\s*[-*]\\s*${key}\\s*:\\s*(.*)$`, "im");
-  const m = body.match(re);
-  return m ? m[1].replace(/`/g, "").trim() : undefined;
-}
-
 /**
  * Reads Worktree, Base and Commits from `## Result`. Any doubt gives `{ missing }`: the fast path never guesses
- * a branch. A note that already has `## Merge` is a retry, left to the agent.
+ * a branch. A note that already has `## Merge` is a retry, left to the agent, unless `allowMerge` (the pull request
+ * path, whose waiting states live under `## Merge`).
  */
-export function parseResultFields(description: string): ResultFields | { missing: string } {
-  if (section(description, "Merge") !== undefined) return { missing: "the note already has a ## Merge section (retry)" };
+export function parseResultFields(description: string, opts: { allowMerge?: boolean } = {}): ResultFields | { missing: string } {
+  if (!opts.allowMerge && section(description, "Merge") !== undefined)
+    return { missing: "the note already has a ## Merge section (retry)" };
   const body = section(description, "Result");
   if (body === undefined) return { missing: "no ## Result section" };
   const worktreeRaw = field(body, "Worktree");
@@ -117,12 +104,12 @@ function isAlive(pid: number): boolean {
   }
 }
 
-interface WorktreeEntry {
+export interface WorktreeEntry {
   path: string;
   branch?: string;
 }
 
-function parseWorktrees(porcelain: string): WorktreeEntry[] {
+export function parseWorktrees(porcelain: string): WorktreeEntry[] {
   const out: WorktreeEntry[] = [];
   for (const block of porcelain.split(/\n\n+/)) {
     const path = block.match(/^worktree (.+)$/m)?.[1];
@@ -209,6 +196,101 @@ function tail(text: string, lines: number): string {
  * Tries the merge of the card without an agent. Every unexpected situation returns a `fallback` outcome that
  * leaves no merge in progress and the lock released; the orchestrator then starts the agent.
  */
+/**
+ * Takes the merge lock directory at `path`, with the skill's rules: a stale lock (no owner, this card, older than
+ * LOCK_STALE_MS) is removed, a live one is retried LOCK_RETRIES times. Throws on an unexpected file system error.
+ */
+export async function acquireMergeLock(
+  path: string,
+  cardId: string,
+  opts: { now: () => Date; sleep: (ms: number) => Promise<void>; check: () => void },
+): Promise<{ ok: true; path: string; notes: string[] } | { ok: false; owner: string; notes: string[] }> {
+  const notes: string[] = [];
+  for (let attempt = 0, staleRemoved = 0; ; ) {
+    try {
+      mkdirSync(path);
+      writeFileSync(join(path, "owner"), `${cardId} ${opts.now().toISOString()}\n`);
+      return { ok: true, path, notes };
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+    }
+    let owner = "";
+    try {
+      owner = readFileSync(join(path, "owner"), "utf8").trim();
+    } catch {}
+    const [who, at] = owner.split(/\s+/);
+    const since = Date.parse(at ?? "");
+    const stale = !owner || who === cardId || !Number.isFinite(since) || opts.now().getTime() - since > LOCK_STALE_MS;
+    if (stale && staleRemoved < 3) {
+      rmSync(path, { recursive: true, force: true });
+      notes.push(`- removed stale lock: ${owner || "(no owner)"}`);
+      staleRemoved++;
+      continue;
+    }
+    if (attempt >= LOCK_RETRIES) return { ok: false, owner, notes };
+    attempt++;
+    await opts.sleep(LOCK_WAIT_MS);
+    opts.check();
+  }
+}
+
+/** Stops the processes running from the worktree (SIGTERM, then SIGKILL after a grace delay). */
+export async function stopWorktreeProcesses(worktree: string): Promise<{ stopped: number[]; survivors: number[] }> {
+  const stopped = await worktreeProcesses(basename(worktree));
+  for (const pid of stopped) {
+    try {
+      process.kill(pid, "SIGTERM");
+    } catch {}
+  }
+  const deadline = Date.now() + KILL_GRACE_MS;
+  while (stopped.some(isAlive) && Date.now() < deadline) await new Promise((r) => setTimeout(r, 100));
+  for (const pid of stopped.filter(isAlive)) {
+    try {
+      process.kill(pid, "SIGKILL");
+    } catch {}
+  }
+  if (stopped.length > 0) await new Promise((r) => setTimeout(r, 200));
+  return { stopped, survivors: stopped.filter(isAlive) };
+}
+
+/**
+ * Removes the card worktree and its local branches (`nightshift/<id>`, `--…`, `/…`), keeping the test selection cache.
+ * `force` deletes with `-D`: needed after a squash or rebase merge, where the branch is not an ancestor of the base.
+ */
+export async function cleanupCardWorktree(
+  cwd: string,
+  worktree: string | undefined,
+  cardBranch: string,
+  opts: { from?: string; force?: boolean } = {},
+): Promise<{ worktreeLine: string; branchLine: string }> {
+  let worktreeLine = "- Worktree removed: none";
+  if (worktree && existsSync(worktree)) {
+    const cache = join(worktree, ".testmondata");
+    if (existsSync(cache)) {
+      try {
+        const tmp = join(cwd, `.testmondata.${process.pid}.tmp`);
+        copyFileSync(cache, tmp);
+        renameSync(tmp, join(cwd, ".testmondata"));
+      } catch {}
+    }
+    const rm = await git(cwd, ["worktree", "remove", worktree]);
+    worktreeLine = rm.code === 0 ? `- Worktree removed: ${worktree}` : `- Worktree removed: failed (${oneLine(rm.stderr)})`;
+  }
+  const refs = (await git(cwd, ["for-each-ref", "--format=%(refname:short)", "refs/heads/nightshift/"])).stdout
+    .split("\n")
+    .map((s) => s.trim())
+    .filter((b) => b === cardBranch || b.startsWith(`${cardBranch}--`) || b.startsWith(`${cardBranch}/`));
+  const deleted: string[] = [];
+  const failed: string[] = [];
+  for (const b of refs) {
+    const d = await git(opts.from ?? cwd, ["branch", opts.force ? "-D" : "-d", b]);
+    if (d.code === 0) deleted.push(b);
+    else failed.push(`${b}: ${oneLine(d.stderr, 120)}`);
+  }
+  const branchLine = `- Card branch deleted: ${deleted.join(", ") || "none"}${failed.length ? `; failed (${failed.join("; ")})` : ""}`;
+  return { worktreeLine, branchLine };
+}
+
 export async function tryFastMerge(input: FastMergeInput): Promise<FastMergeOutcome> {
   const fields = parseResultFields(input.description);
   if ("missing" in fields) return { kind: "fallback", step: "read-result", command: "", error: fields.missing, state: NOTHING_CHANGED };
@@ -237,37 +319,19 @@ export async function tryFastMerge(input: FastMergeInput): Promise<FastMergeOutc
 
     // Lock, with the skill's rules.
     const common = await run("lock", cwd, ["rev-parse", "--git-common-dir"]);
-    const path = resolve(cwd, common, LOCK_DIR);
-    for (let attempt = 0, staleRemoved = 0; ; ) {
-      try {
-        mkdirSync(path);
-        lockPath = path;
-        writeFileSync(join(path, "owner"), `${input.cardId} ${now().toISOString()}\n`);
-        break;
-      } catch (e) {
-        if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw new Fallback("lock", `mkdir ${path}`, (e as Error).message);
-      }
-      let owner = "";
-      try {
-        owner = readFileSync(join(path, "owner"), "utf8").trim();
-      } catch {}
-      const [who, at] = owner.split(/\s+/);
-      const since = Date.parse(at ?? "");
-      const stale = !owner || who === input.cardId || !Number.isFinite(since) || now().getTime() - since > LOCK_STALE_MS;
-      if (stale && staleRemoved < 3) {
-        rmSync(path, { recursive: true, force: true });
-        notes.push(`- removed stale lock: ${owner || "(no owner)"}`);
-        staleRemoved++;
-        continue;
-      }
-      if (attempt >= LOCK_RETRIES) {
-        const merge = [...notes, `- the target is busy: lock held by ${owner}`].join("\n");
-        return { kind: "busy", summary: `merge rapide : la cible est occupée (verrou tenu par ${owner})`, merge, owner };
-      }
-      attempt++;
-      await sleep(LOCK_WAIT_MS);
-      check();
+    let lock: Awaited<ReturnType<typeof acquireMergeLock>>;
+    try {
+      lock = await acquireMergeLock(resolve(cwd, common, LOCK_DIR), input.cardId, { now, sleep, check });
+    } catch (e) {
+      if (e instanceof Cancelled) throw e;
+      throw new Fallback("lock", `mkdir ${resolve(cwd, common, LOCK_DIR)}`, (e as Error).message);
     }
+    notes.push(...lock.notes);
+    if (!lock.ok) {
+      const merge = [...notes, `- the target is busy: lock held by ${lock.owner}`].join("\n");
+      return { kind: "busy", summary: `merge rapide : la cible est occupée (verrou tenu par ${lock.owner})`, merge, owner: lock.owner };
+    }
+    lockPath = lock.path;
     check();
 
     // The card's worktree, found by its branch (the Result path may differ by a /private prefix).
@@ -282,23 +346,10 @@ export async function tryFastMerge(input: FastMergeInput): Promise<FastMergeOutc
     input.stopTest();
     let stopped: number[] = [];
     if (worktree) {
-      stopped = await worktreeProcesses(basename(worktree));
-      for (const pid of stopped) {
-        try {
-          process.kill(pid, "SIGTERM");
-        } catch {}
-      }
-      const deadline = Date.now() + KILL_GRACE_MS;
-      while (stopped.some(isAlive) && Date.now() < deadline) await new Promise((r) => setTimeout(r, 100));
-      for (const pid of stopped.filter(isAlive)) {
-        try {
-          process.kill(pid, "SIGKILL");
-        } catch {}
-      }
-      await new Promise((r) => setTimeout(r, 200));
-      const survivors = stopped.filter(isAlive);
-      if (survivors.length > 0)
-        throw new Fallback("stop-test", `kill -9 ${survivors.join(" ")}`, `processes still alive: ${survivors.join(", ")}`);
+      const r = await stopWorktreeProcesses(worktree);
+      stopped = r.stopped;
+      if (r.survivors.length > 0)
+        throw new Fallback("stop-test", `kill -9 ${r.survivors.join(" ")}`, `processes still alive: ${r.survivors.join(", ")}`);
     }
     const testLine = `- Test environment: ${stopped.length > 0 ? `stopped ${stopped.join(", ")}` : "none running"}`;
     check();
@@ -448,29 +499,9 @@ export async function tryFastMerge(input: FastMergeInput): Promise<FastMergeOutc
 
     // Cleanup: nothing here undoes the merge, it is already pushed.
     if (worktree) {
-      const cache = join(worktree, ".testmondata");
-      if (existsSync(cache)) {
-        try {
-          const tmp = join(cwd, `.testmondata.${process.pid}.tmp`);
-          copyFileSync(cache, tmp);
-          renameSync(tmp, join(cwd, ".testmondata"));
-        } catch {}
-      }
-      const rm = await git(cwd, ["worktree", "remove", worktree]);
-      worktreeLine = rm.code === 0 ? `- Worktree removed: ${worktree}` : `- Worktree removed: failed (${oneLine(rm.stderr)})`;
-      const refs = (await git(cwd, ["for-each-ref", "--format=%(refname:short)", "refs/heads/nightshift/"])).stdout
-        .split("\n")
-        .map((s) => s.trim())
-        .filter((b) => b === cardBranch || b.startsWith(`${cardBranch}--`) || b.startsWith(`${cardBranch}/`));
-      const deleted: string[] = [];
-      const failed: string[] = [];
-      const from = baseCheckout ?? cwd;
-      for (const b of refs) {
-        const d = await git(from, ["branch", "-d", b]);
-        if (d.code === 0) deleted.push(b);
-        else failed.push(`${b}: ${oneLine(d.stderr, 120)}`);
-      }
-      branchLine = `- Card branch deleted: ${deleted.join(", ") || "none"}${failed.length ? `; failed (${failed.join("; ")})` : ""}`;
+      const lines = await cleanupCardWorktree(cwd, worktree, cardBranch, { from: baseCheckout ?? cwd });
+      worktreeLine = lines.worktreeLine;
+      branchLine = lines.branchLine;
     }
 
     const merge = [...notes, `- Into: ${base}`, testLine, mergeLine, pushedLine, worktreeLine, branchLine, suiteLine].join("\n");

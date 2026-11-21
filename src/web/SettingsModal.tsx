@@ -2,6 +2,13 @@ import { TriangleAlert } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { EFFORT_LEVELS } from "../shared/effort.ts";
 import type { IssueSource, IssueSourceStatus } from "../shared/issues.ts";
+import {
+  MERGE_METHODS,
+  type MergeMethod,
+  PULL_REQUESTS_SETTINGS,
+  type PullRequestSettings,
+  type PullRequestsSetting,
+} from "../shared/pullRequests.ts";
 import { type LanguageSetting, MAX_PARALLEL, type Settings, WORKTREE_POLICIES, type WorktreePolicy } from "../shared/types.ts";
 import { AgentFeaturesFields, inheritedFeatures } from "./AgentFeaturesFields.tsx";
 import { api } from "./api.ts";
@@ -33,6 +40,20 @@ export function languageOptions(): { value: LanguageSetting; label: string }[] {
     { value: "fr", label: "Français" },
   ];
 }
+
+const PULL_REQUEST_LABELS: Record<PullRequestsSetting, MessageKey> = {
+  auto: "settings.pullRequests.auto",
+  off: "settings.pullRequests.off",
+};
+
+const MERGE_METHOD_LABELS: Record<MergeMethod, MessageKey> = {
+  merge: "settings.mergeMethod.merge",
+  squash: "settings.mergeMethod.squash",
+  rebase: "settings.mergeMethod.rebase",
+};
+
+const samePr = (a?: PullRequestSettings, b?: PullRequestSettings) =>
+  a?.pullRequests === b?.pullRequests && a?.mergeMethod === b?.mergeMethod && a?.autoMerge === b?.autoMerge;
 
 const WORKTREE_LABELS: Record<WorktreePolicy, MessageKey> = {
   required: "settings.worktree.required",
@@ -80,6 +101,8 @@ export function SettingsContent({
   onProjectMaxParallelChange,
   worktreePolicy,
   onWorktreePolicyChange,
+  pullRequests,
+  onPullRequestsChange,
   issues,
 }: {
   value: Settings;
@@ -92,6 +115,9 @@ export function SettingsContent({
   /** Worktree policy of the open project (draft value); its row shows in the "This project" section when given. */
   worktreePolicy?: WorktreePolicy;
   onWorktreePolicyChange?: (policy: WorktreePolicy) => void;
+  /** Pull request settings of the open project (draft value); their rows show in "This project" when given. */
+  pullRequests?: PullRequestSettings;
+  onPullRequestsChange?: (pr: PullRequestSettings) => void;
   /** Issue sources of the open project, live from its snapshot; the editor saves on its own. */
   issues?: IssuesProps;
 }) {
@@ -152,6 +178,55 @@ export function SettingsContent({
                 </SelectContent>
               </Select>
             </Row>
+          )}
+          {pullRequests && (
+            <>
+              <Row id="set-pull-requests" label={t("settings.pullRequests.label")} help={t("settings.pullRequests.help")}>
+                <Select
+                  value={pullRequests.pullRequests}
+                  onValueChange={(v) => onPullRequestsChange?.({ ...pullRequests, pullRequests: v as PullRequestsSetting })}
+                >
+                  <SelectTrigger id="set-pull-requests" className="w-full">
+                    <SelectValue>{t(PULL_REQUEST_LABELS[pullRequests.pullRequests])}</SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PULL_REQUESTS_SETTINGS.map((v) => (
+                      <SelectItem key={v} value={v}>
+                        {t(PULL_REQUEST_LABELS[v])}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Row>
+              {pullRequests.pullRequests !== "off" && (
+                <>
+                  <Row id="set-merge-method" label={t("settings.mergeMethod.label")} help={t("settings.mergeMethod.help")}>
+                    <Select
+                      value={pullRequests.mergeMethod}
+                      onValueChange={(v) => onPullRequestsChange?.({ ...pullRequests, mergeMethod: v as MergeMethod })}
+                    >
+                      <SelectTrigger id="set-merge-method" className="w-full">
+                        <SelectValue>{t(MERGE_METHOD_LABELS[pullRequests.mergeMethod])}</SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {MERGE_METHODS.map((v) => (
+                          <SelectItem key={v} value={v}>
+                            {t(MERGE_METHOD_LABELS[v])}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </Row>
+                  <Row id="set-auto-merge" label={t("settings.autoMerge.label")} help={t("settings.autoMerge.help")}>
+                    <Switch
+                      id="set-auto-merge"
+                      checked={pullRequests.autoMerge}
+                      onCheckedChange={(v) => onPullRequestsChange?.({ ...pullRequests, autoMerge: v })}
+                    />
+                  </Row>
+                </>
+              )}
+            </>
           )}
           {issues && (
             <IssueSourcesEditor project={currentProject} sources={issues.sources} status={issues.status} canSync={issues.canSync} />
@@ -312,8 +387,11 @@ export function settingsDirty(
   draftCap?: number,
   savedPolicy?: WorktreePolicy,
   draftPolicy?: WorktreePolicy,
+  savedPr?: PullRequestSettings,
+  draftPr?: PullRequestSettings,
 ): boolean {
   return (
+    !samePr(savedPr, draftPr) ||
     EDITABLE.some((k) => saved[k] !== draft[k]) ||
     JSON.stringify(saved.agentFeatures ?? {}) !== JSON.stringify(draft.agentFeatures ?? {}) ||
     savedCap !== draftCap ||
@@ -326,9 +404,15 @@ export function settingsDirty(
  * when it changed. Rejects on the first failed write.
  */
 export async function saveSettingsAndProject(
-  client: Pick<typeof api, "saveSettings" | "saveBoard"> & Partial<Pick<typeof api, "setWorktreePolicy">>,
+  client: Pick<typeof api, "saveSettings" | "saveBoard"> & Partial<Pick<typeof api, "setWorktreePolicy" | "setPullRequests">>,
   draft: Settings,
-  project?: { path: string; saved: number; draft: number; policy?: { saved: WorktreePolicy; draft: WorktreePolicy } },
+  project?: {
+    path: string;
+    saved: number;
+    draft: number;
+    policy?: { saved: WorktreePolicy; draft: WorktreePolicy };
+    pr?: { saved: PullRequestSettings; draft: PullRequestSettings };
+  },
 ): Promise<void> {
   await client.saveSettings({
     ...(Object.fromEntries(EDITABLE.map((k) => [k, draft[k]])) as Partial<Settings>),
@@ -337,6 +421,7 @@ export async function saveSettingsAndProject(
   if (!project) return;
   if (project.draft !== project.saved) await client.saveBoard(project.path, { maxParallel: project.draft });
   if (project.policy && project.policy.draft !== project.policy.saved) await client.setWorktreePolicy?.(project.path, project.policy.draft);
+  if (project.pr && !samePr(project.pr.saved, project.pr.draft)) await client.setPullRequests?.(project.path, project.pr.draft);
 }
 
 export function SettingsModal({
@@ -346,6 +431,7 @@ export function SettingsModal({
   onOpenProject,
   projectMaxParallel,
   worktreePolicy,
+  pullRequests,
   issues,
 }: {
   settings: Settings;
@@ -357,12 +443,15 @@ export function SettingsModal({
   projectMaxParallel?: number;
   /** Saved worktree policy of the open project. */
   worktreePolicy?: WorktreePolicy;
+  /** Saved pull request settings of the open project. */
+  pullRequests?: PullRequestSettings;
   issues?: IssuesProps;
 }) {
   const { t } = useT();
   const [s, setS] = useState(settings);
   const [cap, setCap] = useState(projectMaxParallel);
   const [policy, setPolicy] = useState(worktreePolicy);
+  const [pr, setPr] = useState(pullRequests);
   const project =
     currentProject && projectMaxParallel !== undefined && cap !== undefined
       ? {
@@ -370,6 +459,7 @@ export function SettingsModal({
           saved: projectMaxParallel,
           draft: cap,
           ...(worktreePolicy && policy ? { policy: { saved: worktreePolicy, draft: policy } } : {}),
+          ...(pullRequests && pr ? { pr: { saved: pullRequests, draft: pr } } : {}),
         }
       : undefined;
   // On a failed write the dialog stays open with the draft.
@@ -403,11 +493,16 @@ export function SettingsModal({
         onProjectMaxParallelChange={setCap}
         worktreePolicy={policy}
         onWorktreePolicyChange={setPolicy}
+        pullRequests={pr}
+        onPullRequestsChange={setPr}
         issues={issues}
         onOpenProject={
           onOpenProject &&
           ((path) => {
-            if (settingsDirty(settings, s, projectMaxParallel, cap, worktreePolicy, policy) && !confirm(t("settings.discardChanges")))
+            if (
+              settingsDirty(settings, s, projectMaxParallel, cap, worktreePolicy, policy, pullRequests, pr) &&
+              !confirm(t("settings.discardChanges"))
+            )
               return;
             onClose();
             onOpenProject(path);

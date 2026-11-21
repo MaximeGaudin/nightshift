@@ -5,11 +5,13 @@ description: Merges a Nightshift implementation worktree back into the branch th
 
 # Nightshift Merge
 
-The worktree and the branch come from `nightshift-implement`: branch `nightshift/<card-id>`, path on the `Worktree` line under `## Result`. The target is the branch the card started from: the `Base` line under `## Result`, written by `nightshift-implement` (step 3), for example `WIP` or `main`. This skill merges the card branch into the target, pushes the target to its upstream, then removes the worktree. Push only the target, never a card branch, and never force. Do not implement.
+The worktree and the branch come from `nightshift-implement`: branch `nightshift/<card-id>`, path on the `Worktree` line under `## Result`. The target is the branch the card started from: the `Base` line under `## Result`, written by `nightshift-implement` (step 3), for example `WIP` or `main`. This skill merges the card branch into the target, pushes the target to its upstream, then removes the worktree. Push only the target, never a card branch, and never force (the one exception is pull request mode, see pull-requests.md). Do not implement.
 
 A card with `Worktree: none` under `## Result` has no branch to merge: read references/no-worktree.md and follow it instead of the branch steps.
 
 ## Fast path
+
+When `<environment>` has a `Pull requests:` line, the card merges through its pull request: read [pull-requests.md](pull-requests.md) before step 1.
 
 When the merge column has "Merge without an agent when possible" checked (the default), Nightshift first runs this skill's steps itself, without an agent, and writes the same `## Merge` lines. You run only when that fast path stopped. Your prompt then ends with a block:
 

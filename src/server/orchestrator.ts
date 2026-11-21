@@ -39,11 +39,14 @@ import type {
 import { canSendFeedback, cardRef, columnMaxParallel, isDoneColumn } from "../shared/types.ts";
 import { safeHttpUrl } from "../shared/urls.ts";
 import type { QuotaSnapshot } from "../shared/usage.ts";
+import { CI_POLL_MS, CiWatcher } from "./ciWatcher.ts";
 import { buildEnvironment } from "./environment.ts";
 import { fallbackBlock, tryFastMerge } from "./fastMerge.ts";
 import { FlowController } from "./flow.ts";
 import { HttpError } from "./guard.ts";
 import { IssueSync } from "./issues/sync.ts";
+import { PrFlow } from "./prFlow.ts";
+import { detectPrMode, prModeLine } from "./prMode.ts";
 import { parseProgressMarker, progressFromTodos } from "./progress.ts";
 import { buildQuickRunPrompt, parseQuickOutput, QUICK_INSTRUCTION_MAX, QUICK_RESULT_SCHEMA } from "./quickrun.ts";
 import { persistScreenshots, removeScreenshots } from "./screenshots.ts";
@@ -59,6 +62,7 @@ import { getUsage, recordRateLimit } from "./usage.ts";
 
 /** Skill whose columns try the deterministic merge before starting the agent. */
 const FAST_MERGE_SKILL = "nightshift-merge";
+const REVIEW_SKILL = "nightshift-review";
 
 /** One block of an assistant message in `claude -p --output-format stream-json` (only what Nightshift reads). */
 interface StreamBlock {
@@ -332,6 +336,7 @@ export function buildPrompt(
   skillPath: string | undefined,
   live: Record<string, LiveStatus> = {},
   seen?: string,
+  prLine?: string,
 ): string {
   const next = resolveNextColumn(board.columns, { columnId: column.id, skipColumnIds: card.skipColumnIds });
   const columns = formatColumns(board);
@@ -345,7 +350,7 @@ ${column.instructions ? `\nAdditional instructions for this column:\n${column.in
 ${descriptionBlock(card.description, seen)}
 </card>
 
-${buildEnvironment(board, card, live)}
+${buildEnvironment(board, card, live, prLine)}
 
 Board columns, in order:
 ${columns}
@@ -381,6 +386,7 @@ export function buildFeedbackPrompt(
   skillPath: string | undefined,
   live: Record<string, LiveStatus> = {},
   seen?: string,
+  prLine?: string,
 ): string {
   const next = resolveNextColumn(board.columns, { columnId: column.id, skipColumnIds: card.skipColumnIds });
   const skillName = skill ? `the skill "${skill}"` : "the skill you applied earlier in this session";
@@ -398,7 +404,7 @@ Address this feedback on the card below. Follow ${skillName}${skill && skillPath
 ${descriptionBlock(card.description, seen)}
 </card>
 
-${buildEnvironment(board, card, live)}
+${buildEnvironment(board, card, live, prLine)}
 
 The card may have moved since your session ran; it is now in column "${column.name}" (id: ${column.id}, ${column.type === "skill" ? `skill: ${column.skill}` : "inert"}).
 ${column.instructions ? `\nAdditional instructions for this column:\n${column.instructions}\n` : ""}
@@ -521,6 +527,22 @@ export class Orchestrator {
     },
   });
 
+  /** Pull request flow (push and PR after review, merge through the PR), one operation at a time per card. */
+  readonly prFlow = new PrFlow({ log: (p, cardId, kind, text) => this.log(p, cardId, kind, text) });
+
+  /** Follows the cards waiting in Merge on their pull request's checks. */
+  readonly ci = new CiWatcher(
+    {
+      canRun: (p) => this.canRunAgents(p),
+      isBusy: (p, cardId) => this.jobs.has(this.key(p, cardId)),
+      detect: (p) => detectPrMode(p.path, p.board),
+      prFlow: this.prFlow,
+      stopTest: (p, cardId) => this.stopTest(p, cardId),
+      log: (p, cardId, kind, text) => this.log(p, cardId, kind, text),
+    },
+    Number(process.env.NIGHTSHIFT_CI_POLL_MS) || CI_POLL_MS,
+  );
+
   /** True when this process runs the project's agents: started with agents and holding the project's lock. */
   canRunAgents(p: Project): boolean {
     return this.agents && !this.lockedBy.has(p.path);
@@ -597,7 +619,10 @@ export class Orchestrator {
       // Just took the lock over: release the cards whose dependencies finished meanwhile, and sync the issues.
       if (!this.lockedBy.has(p.path)) {
         this.scheduleDependencies(p);
-        if (this.projects.get(p.path) === p) this.issues.start(p);
+        if (this.projects.get(p.path) === p) {
+          this.issues.start(p);
+          this.ci.start(p);
+        }
       }
     }
   }
@@ -641,7 +666,10 @@ export class Orchestrator {
     rememberProject(path);
     this.scheduleTick();
     this.scheduleDependencies(p);
-    if (this.agents) this.issues.start(p);
+    if (this.agents) {
+      this.issues.start(p);
+      this.ci.start(p);
+    }
     return p;
   }
 
@@ -1209,9 +1237,45 @@ export class Orchestrator {
       });
     }
     const answer = card.pendingAnswer;
+    // Pull request mode: detected only where it matters (review and merge), announced to the agent in <environment>.
+    const prMode = column.skill === REVIEW_SKILL || column.skill === FAST_MERGE_SKILL ? await detectPrMode(p.path, p.board) : undefined;
+    const prLine = prModeLine(prMode);
     // Merge column: try the deterministic merge first; the agent only runs when it stops (fallback).
     let fastMergeNote = "";
-    if (!answer && column.skill === FAST_MERGE_SKILL && column.fastMerge !== false) {
+    let tryLocalMerge = !answer && column.skill === FAST_MERGE_SKILL && column.fastMerge !== false;
+    if (tryLocalMerge && prMode?.active) {
+      const o = await this.prFlow.tryPrMerge({
+        p,
+        cardId: card.id,
+        mode: prMode,
+        stopTest: () => this.stopTest(p, card.id),
+        isCancelled: () => job.cancelled,
+      });
+      if (o.kind === "cancelled") return this.finish(job, "cancelled", {});
+      if (o.kind === "ineligible") this.log(p, card.id, "info", `mode PR ignoré : ${o.reason}`);
+      else if (o.kind === "fallback") {
+        tryLocalMerge = false;
+        this.log(p, card.id, "info", `merge de la PR abandonné : ${o.step} — ${o.error.replace(/\s+/g, " ").slice(0, 300)}`);
+        fastMergeNote = `\n\n${fallbackBlock(o)}`;
+      } else if (o.kind === "toReview") {
+        const review = p.board.columns.find((c) => c.skill === REVIEW_SKILL);
+        this.log(p, card.id, "info", o.summary);
+        return this.finish(job, "success", {
+          output: { summary: o.summary, move: review?.id ?? "stay", questions: [], sections: [{ heading: "CI", content: o.ci }] },
+        });
+      } else {
+        this.log(p, card.id, "info", o.summary);
+        return this.finish(job, "success", {
+          output: {
+            summary: o.summary,
+            move: o.kind === "merged" ? "next" : "stay",
+            questions: [],
+            sections: [{ heading: "Merge", content: o.merge }],
+          },
+        });
+      }
+    }
+    if (tryLocalMerge) {
       const o = await tryFastMerge({
         projectPath: p.path,
         cardId: card.id,
@@ -1258,11 +1322,11 @@ export class Orchestrator {
     job.resumedFrom = resumeId;
     job.seenAtLaunch = !answer || answer.kind === "feedback" ? card.description : undefined;
     let prompt = !answer
-      ? buildPrompt(p.board, card, column, skill?.path, this.liveStatuses(p), seen) + fastMergeNote
+      ? buildPrompt(p.board, card, column, skill?.path, this.liveStatuses(p), seen, prLine) + fastMergeNote
       : answer.kind === "resume"
         ? RECOVER_PROMPT
         : answer.kind === "feedback"
-          ? buildFeedbackPrompt(p.board, card, column, job.skill, skill?.path, this.liveStatuses(p), seen)
+          ? buildFeedbackPrompt(p.board, card, column, job.skill, skill?.path, this.liveStatuses(p), seen, prLine)
           : buildAnswerPrompt(card.title, skillRef, answer.text);
     if (carried) prompt = `${CONTINUE_PREFIX}\n\n${prompt}`;
     // Smart mode: resolved once per run, before the first spawn. A recovery or a fresh restart below reuses it.
@@ -1288,7 +1352,7 @@ export class Orchestrator {
         // A new session has seen nothing: the whole description again.
         job.resumedFrom = undefined;
         job.seenAtLaunch = card.description;
-        prompt = buildPrompt(p.board, card, column, skill?.path, this.liveStatuses(p)) + fastMergeNote;
+        prompt = buildPrompt(p.board, card, column, skill?.path, this.liveStatuses(p), undefined, prLine) + fastMergeNote;
         attempt--;
         continue;
       }
@@ -1303,11 +1367,18 @@ export class Orchestrator {
               .filter(Boolean)
           : [];
         const output: AgentOutput = { ...out, questions };
-        return this.finish(job, questions.length > 0 ? "question" : "success", {
+        const status = questions.length > 0 ? "question" : "success";
+        this.finish(job, status, {
           output,
           costUsd,
           ...(sessionId ? { sessionId } : {}),
         });
+        // Pull request mode: a successful review pushes the branch and opens or updates the PR, in the background.
+        if (status === "success" && column.skill === REVIEW_SKILL && prMode?.active) {
+          const last = p.card(card.id)?.lastRun;
+          if (last?.status === "success" && last.columnId === job.columnId) void this.prFlow.afterReview(p, card.id, prMode);
+        }
+        return;
       }
       const reason = !result
         ? `Agent exited without a result (${r.exit}).${r.stderr.trim() ? ` ${r.stderr.trim()}` : ""}`
@@ -1834,6 +1905,7 @@ export class Orchestrator {
   async shutdown(graceMs = SHUTDOWN_GRACE_MS) {
     clearInterval(this.lockTimer);
     this.issues.shutdown();
+    this.ci.shutdown();
     this.quotaPoller.stop();
     const groups = [...this.tests.values()].map((t) => t.proc.pid).filter((pid): pid is number => !!pid);
     // Queued quick runs are dropped; the running ones are stopped like jobs.

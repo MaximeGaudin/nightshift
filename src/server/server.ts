@@ -8,6 +8,7 @@ import { describeEffortChanges, diffEfforts, type EffortLevel, isValidEffort, va
 import { effectiveBaseUrl, matchesLabels, parseGitRemote, providerInfo } from "../shared/issues.ts";
 import { describeModelChanges, diffModels, validateModelsStrict } from "../shared/models.ts";
 import { MAX_PENDING_IMAGES, pendingIds, resolvePending } from "../shared/pendingImages.ts";
+import { MERGE_METHODS, type MergeMethod, PULL_REQUESTS_SETTINGS, type PullRequestsSetting } from "../shared/pullRequests.ts";
 import { type CardImageStored, cardImageType } from "../shared/screenshots.ts";
 import { normalizeSkipColumnIds, skippedColumns } from "../shared/skip.ts";
 import {
@@ -45,6 +46,7 @@ import {
   isRaw,
   newId,
   normalizeFastMerge,
+  normalizePullRequestSettings,
   type Project,
   type Raw,
   remapColumnId,
@@ -633,6 +635,34 @@ export function startServer({ port, development, agents = true }: { port: number
             // The default is never stored: the field is removed instead.
             if (policy === DEFAULT_WORKTREE_POLICY) delete board.worktreePolicy;
             else board.worktreePolicy = policy as WorktreePolicy;
+          });
+          return orch.snapshot(p);
+        }),
+      },
+      "/api/pull-requests": {
+        PUT: h((b, url) => {
+          const p = project(b, url);
+          const patch: Record<string, unknown> = {};
+          if (b.pullRequests !== undefined) {
+            if (!PULL_REQUESTS_SETTINGS.includes(b.pullRequests as PullRequestsSetting))
+              throw new Error(`Unknown pull requests setting: ${String(b.pullRequests)}`);
+            patch.pullRequests = b.pullRequests;
+          }
+          if (b.mergeMethod !== undefined) {
+            if (!MERGE_METHODS.includes(b.mergeMethod as MergeMethod)) throw new Error(`Unknown merge method: ${String(b.mergeMethod)}`);
+            patch.mergeMethod = b.mergeMethod;
+          }
+          if (b.autoMerge !== undefined) {
+            if (typeof b.autoMerge !== "boolean") throw new Error("autoMerge must be a boolean");
+            patch.autoMerge = b.autoMerge;
+          }
+          p.mutate((board) => {
+            // Defaults are never stored: the normalizer drops them.
+            const next = normalizePullRequestSettings({ ...board, ...patch });
+            delete board.pullRequests;
+            delete board.mergeMethod;
+            delete board.autoMerge;
+            Object.assign(board, next);
           });
           return orch.snapshot(p);
         }),

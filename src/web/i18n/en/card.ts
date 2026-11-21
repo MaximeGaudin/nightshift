@@ -55,6 +55,8 @@ export const card = {
   "card.noRun": "No run for this card.",
   "card.copyRef": "Copy the reference",
   "card.source.open": "Open {ref} on {provider}",
+  "card.pr.label": "Pull request",
+  "card.pr.open": "Open the pull request",
   "card.copied": "Copied",
   "card.models.title": "Model and effort per skill",
   "card.models.skillRow": "{skill} ({columns})",

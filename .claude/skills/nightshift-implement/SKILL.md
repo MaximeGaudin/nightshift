@@ -17,7 +17,7 @@ Other cards may run on this repository at the same time, so by default this run 
 
 - The worker prompt contains the card (`<title>`, `<description>`, `id`); the description is the specification.
 - The process starts in the board project, a git repository (`git rev-parse --is-inside-work-tree`). If that fails, set `move` to `stay`, write the error under `## Result`, and stop.
-- Do not push or create a pull request. Unless the policy lets you work in the shared checkout (step 3), do not commit, stage, checkout, or edit it.
+- Do not push or open a PR (Nightshift does). Unless the policy lets you work in the shared checkout (step 3), do not commit, stage, checkout, or edit it.
 
 ## Steps
 
