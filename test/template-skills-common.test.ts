@@ -63,6 +63,16 @@ test("template-skills-on-demand: implement and review stay small and point at th
   }
 });
 
+test("template-skills-merge-cap: nightshift-merge stays under 6 KB and points at its full procedure", () => {
+  const md = read("nightshift-merge");
+  expect(Buffer.byteLength(md)).toBeLessThanOrEqual(6_144);
+  expect(md.includes("references/full-merge.md")).toBe(true);
+  expect(existsSync(join(SKILLS, "nightshift-merge", "references", "full-merge.md"))).toBe(true);
+  for (const f of ["pull-requests.md", "references/no-worktree.md"]) expect(md.includes(f), f).toBe(true);
+  for (const line of ["- Into:", "- Test environment:", "- Merge commit:", "- Pushed:", "- Worktree removed:", "- Card branch deleted:"])
+    expect(md.includes(line), line).toBe(true);
+});
+
 test("template-skills-capture-once: only review captures when it remains, implement defers", () => {
   const impl = read("nightshift-implement");
   expect(impl).toContain("Deferred to review.");
