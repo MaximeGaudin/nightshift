@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const SKILLS = join(import.meta.dir, "..", ".claude", "skills");
@@ -22,11 +22,16 @@ const COMMON_BLOCKS = [
 // 72 619 bytes before card #72, minus 25 %.
 const SIZE_CAP = 54_464;
 
+const references = (dir: string) => {
+  const refDir = join(SKILLS, dir, "references");
+  return existsSync(refDir) ? readdirSync(refDir).map((f) => readFileSync(join(refDir, f), "utf8")) : [];
+};
+
 test("template-skills-no-common-block: no column skill repeats a rule the prompt carries", () => {
   expect(COLUMN_SKILLS.length).toBe(5);
   for (const dir of COLUMN_SKILLS) {
-    const md = read(dir);
-    for (const block of COMMON_BLOCKS) expect(md.includes(block), `${dir}: ${block}`).toBe(false);
+    for (const md of [read(dir), ...references(dir)])
+      for (const block of COMMON_BLOCKS) expect(md.includes(block), `${dir}: ${block}`).toBe(false);
   }
 });
 
@@ -40,4 +45,20 @@ test("template-skills-one-output-example: each column skill keeps one JSON outpu
 test("template-skills-size-cap: the column skills stay under the size cap", () => {
   const total = COLUMN_SKILLS.reduce((sum, dir) => sum + Buffer.byteLength(read(dir)), 0);
   expect(total).toBeLessThanOrEqual(SIZE_CAP);
+});
+
+// Rare cases live in references/, read on demand: only the SKILL.md counts against these caps.
+const SKILL_CAPS: Record<string, number> = { "nightshift-implement": 10_240, "nightshift-review": 7_168 };
+
+test("template-skills-on-demand: implement and review stay small and point at their references", () => {
+  for (const [dir, cap] of Object.entries(SKILL_CAPS)) {
+    const md = read(dir);
+    expect(Buffer.byteLength(md), dir).toBeLessThanOrEqual(cap);
+    for (const ref of ["references/ui-cards.md", "references/no-worktree.md"]) {
+      expect(md.includes(ref), `${dir}: ${ref}`).toBe(true);
+      expect(existsSync(join(SKILLS, dir, ref)), `${dir}: ${ref} exists`).toBe(true);
+    }
+    // A reference must stand alone: it never sends the agent to another skill.
+    for (const text of references(dir)) expect(text.includes("nightshift-review`'s"), dir).toBe(false);
+  }
 });

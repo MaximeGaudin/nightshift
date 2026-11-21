@@ -29,6 +29,21 @@ test("templates-copy-new-project", async () => {
   expect(readdirSync(join(dir, ".claude", "skills")).sort()).toEqual(NAMES);
 });
 
+test("templates-copy-references", async () => {
+  const dir = tempDir("ns-tpl-refs-");
+  await open(dir);
+  for (const [skill, files] of Object.entries({
+    "nightshift-implement": ["ui-cards.md", "no-worktree.md"],
+    "nightshift-review": ["ui-cards.md", "no-worktree.md"],
+    "nightshift-merge": ["no-worktree.md"],
+  })) {
+    for (const file of files) {
+      const copy = join(dir, ".claude", "skills", skill, "references", file);
+      expect(readFileSync(copy).equals(readFileSync(join(REPO_SKILLS, skill, "references", file)))).toBe(true);
+    }
+  }
+});
+
 test("templates-keep-user-folder", async () => {
   const dir = tempDir("ns-tpl-keep-");
   mkdirSync(join(dir, ".claude", "skills", "nightshift-grill"), { recursive: true });
