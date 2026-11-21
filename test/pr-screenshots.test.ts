@@ -138,3 +138,13 @@ test("sync-only-stored-captures", async () => {
   expect(logs).toEqual([]);
 });
 
+test("sync-crlf-body-not-edited", async () => {
+  fake.setState({ pr: { url: PR_URL, body: "Body", state: "OPEN" }, release: { assets: [] } });
+  await sync();
+  const st = fake.state();
+  const crlf = (st.pr?.body ?? "").replace(/\n/g, "\r\n");
+  fake.setState({ ...st, pr: { url: PR_URL, body: crlf, state: "OPEN" } });
+  await sync();
+  expect(kinds()).not.toContain("pr edit");
+  expect(logs).toEqual([]);
+});

@@ -194,7 +194,8 @@ export async function syncPrScreenshots(opts: {
       return { alt: i.alt, url: asset.url };
     });
     const next = mergeScreenshotsSection(body, linked);
-    if (next === body) return;
+    // GitHub may hand the body back with CRLF line ends: compare without them, or every run would edit it.
+    if (next.replace(/\r\n/g, "\n") === body.replace(/\r\n/g, "\n")) return;
     const edit = await gh(["pr", "edit", pr.url, "--body-file", "-"], { cwd, stdin: next });
     if (edit.missing) throw new SyncError("gh introuvable");
     if (edit.code !== 0) throw failure(edit, "gh pr edit");
