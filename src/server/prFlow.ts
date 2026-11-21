@@ -5,7 +5,7 @@
 
 import { rmSync } from "node:fs";
 import { resolve } from "node:path";
-import { buildPrBody, type MergeStatusKind, mergeStatusLine, section, setSectionPrLine } from "../shared/pullRequests.ts";
+import { buildPrBody, type MergeStatusKind, mergeStatusLine, parseMergeStatus, section, setSectionPrLine } from "../shared/pullRequests.ts";
 import type { LogLine } from "../shared/types.ts";
 import { type CodeHost, CodeHostError, type FailedCheck, type PrInfo } from "./codehost/codehost.ts";
 import {
@@ -114,9 +114,16 @@ export class PrFlow {
 
   /**
    * Pushes the card branch (never forced), then finds its PR: updates an open one when `update`, creates one when
-   * there is none. A closed or merged PR is returned as is: the merge path decides.
+   * there is none (a draft when `draft`). A closed or merged PR is returned as is: the merge path decides.
    */
-  private async ensurePr(p: Project, cardId: string, el: Extract<Eligibility, { ok: true }>, host: CodeHost, update: boolean) {
+  private async ensurePr(
+    p: Project,
+    cardId: string,
+    el: Extract<Eligibility, { ok: true }>,
+    host: CodeHost,
+    update: boolean,
+    draft = false,
+  ) {
     const card = p.card(cardId);
     if (!card) throw new Error("card not found");
     const pushArgs = ["push", "-u", "origin", el.branch];
@@ -128,7 +135,7 @@ export class PrFlow {
       if (update) await host.updatePr(p.path, existing.url, { title: card.title, body: buildPrBody(card, existing.body) });
       return existing;
     }
-    const url = await host.createPr(p.path, { base: el.base, head: el.branch, title: card.title, body: buildPrBody(card) });
+    const url = await host.createPr(p.path, { base: el.base, head: el.branch, title: card.title, body: buildPrBody(card), draft });
     return (
       (await host.prState(p.path, url)) ?? {
         url,
@@ -137,12 +144,57 @@ export class PrFlow {
         body: "",
         mergeable: "UNKNOWN",
         baseRefName: el.base,
-        isDraft: false,
+        isDraft: draft,
       }
     );
   }
 
-  /** After a successful review: push, create or update the PR, write `- PR:` under `## Review`. Never throws. */
+  /**
+   * A card enters Review: push, open a draft PR (or turn its open ready PR back into a draft, auto-merge disabled
+   * first when `## Merge` says it is scheduled), write `- PR:` under `## Review`. Never throws, never blocks the review.
+   */
+  beforeReview(p: Project, cardId: string, mode: ActiveMode): Promise<void> {
+    return this.withCard(p, cardId, async () => {
+      const card = p.card(cardId);
+      if (!card) return;
+      const el = await prEligibility(p.path, cardId, card.description);
+      if (!el.ok) {
+        this.hooks.log(p, cardId, "info", `mode PR ignoré : ${el.reason}`);
+        return;
+      }
+      const host = mode.host;
+      let pr: PrInfo;
+      try {
+        pr = await this.ensurePr(p, cardId, el, host, false, true);
+      } catch (e) {
+        this.hooks.log(p, cardId, "error", `PR draft non créée : ${oneLine(messageOf(e), 200)}`);
+        return;
+      }
+      if (pr.state !== "OPEN") return;
+      if (!pr.isDraft) {
+        if (parseMergeStatus(p.card(cardId)?.description ?? "")?.status === "auto") {
+          try {
+            await host.disableAutoMerge(p.path, pr.url);
+          } catch (e) {
+            this.hooks.log(p, cardId, "error", `auto-merge non désactivé : ${oneLine(messageOf(e), 200)}`);
+          }
+        }
+        try {
+          await host.markDraft(p.path, pr.url);
+        } catch (e) {
+          this.hooks.log(p, cardId, "error", `PR non repassée en draft : ${oneLine(messageOf(e), 200)}`);
+          return;
+        }
+      }
+      this.setReviewPr(p, cardId, pr.url);
+      this.hooks.log(p, cardId, "info", `PR draft : ${pr.url}`);
+    });
+  }
+
+  /**
+   * After a successful review: push, create or update the PR, mark a draft ready, write `- PR:` under `## Review`.
+   * Never throws.
+   */
   afterReview(p: Project, cardId: string, mode: ActiveMode): Promise<void> {
     return this.withCard(p, cardId, async () => {
       const card = p.card(cardId);
@@ -154,6 +206,19 @@ export class PrFlow {
       }
       try {
         const pr = await this.ensurePr(p, cardId, el, mode.host, true);
+        if (pr.state === "OPEN" && pr.isDraft) {
+          try {
+            await mode.host.markReady(p.path, pr.url);
+          } catch (e) {
+            const reason = oneLine(messageOf(e), 200);
+            this.setReviewPr(p, cardId, `${pr.url} — failed to mark ready: ${reason}`);
+            this.hooks.log(p, cardId, "error", `PR non passée en ready : ${reason}`);
+            return;
+          }
+          this.setReviewPr(p, cardId, pr.url);
+          this.hooks.log(p, cardId, "info", `PR prête : ${pr.url}`);
+          return;
+        }
         this.setReviewPr(p, cardId, pr.url);
         this.hooks.log(p, cardId, "info", `PR ${pr.state === "OPEN" ? "à jour" : pr.state.toLowerCase()} : ${pr.url}`);
       } catch (e) {
@@ -206,6 +271,14 @@ export class PrFlow {
             "the pull request was closed without being merged",
             mergeStatusLine(pr.url, "closed"),
           );
+        }
+        if (pr.isDraft) {
+          try {
+            await host.markReady(p.path, pr.url);
+          } catch (e) {
+            return fallback("pr-ready", `gh pr ready ${pr.url}`, messageOf(e));
+          }
+          pr = { ...pr, isDraft: false };
         }
         const checks = await host.checks(p.path, pr.url);
         if (checks.state === "fail") {
