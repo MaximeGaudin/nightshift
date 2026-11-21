@@ -1,5 +1,6 @@
 // Time spent by a card per column and part, replayed from its history. Pure, no dependencies.
 import {
+  type Board,
   type Card,
   type Column,
   DONE_COLUMN_ID,
@@ -156,6 +157,30 @@ export function cardTimers(card: Card, columns: Column[], nowMs: number): { tota
   const totalMs = cardTimeSlices(card, columns, nowMs).reduce((sum, s) => sum + s.ms, 0);
   const step = nowMs - Date.parse(card.enteredColumnAt);
   return { totalMs, stepMs: Number.isFinite(step) && step > 0 ? step : 0 };
+}
+
+/**
+ * Agent running time (ms) of the cards that already left `column`, most recent visit first, at most `limit`.
+ * The card `excludeCardId` and the cards still in the column are left out. The time cumulates every attempt
+ * and question round of the visit; human time is not counted.
+ */
+export function recentRunDurations(board: Board, column: Column, excludeCardId: string, nowMs: number, limit = 10): number[] {
+  const found: { at: number; ms: number }[] = [];
+  for (const c of board.cards) {
+    if (c.id === excludeCardId || c.columnId === column.id) continue;
+    const ms = cardTimeSlices(c, board.columns, nowMs)
+      .filter((s) => s.columnId === column.id && s.part === "running")
+      .reduce((sum, s) => sum + s.ms, 0);
+    if (ms <= 0) continue;
+    let last = Number.NaN;
+    for (const e of c.history) if (e.columnId === column.id) last = Date.parse(e.at);
+    if (!Number.isFinite(last)) last = Date.parse(c.updatedAt);
+    found.push({ at: Number.isFinite(last) ? last : 0, ms });
+  }
+  return found
+    .sort((a, b) => b.at - a.at)
+    .slice(0, limit)
+    .map((f) => f.ms);
 }
 
 /** Unit suffixes of formatDuration; the web passes translated ones, the default is French. */

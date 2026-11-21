@@ -365,6 +365,18 @@ export interface RunProgress {
   at: string;
 }
 
+/**
+ * Estimate the agent gave for its current run, from a `[nightshift-estimate] <minutes>` marker.
+ * Live only, never persisted. `minutes` is the total duration of the run (integer >= 1), not what remains.
+ */
+export interface RunEstimate {
+  minutes: number;
+  /** ISO timestamp when the current `claude -p` process was launched: the remaining time counts from it. */
+  runStartedAt: string;
+  /** ISO timestamp of the last update. */
+  at: string;
+}
+
 /** A skill launched from the command palette without a card. */
 export interface QuickRun {
   id: string;
@@ -404,6 +416,8 @@ export interface ProjectSnapshot {
   testing: string[];
   /** Progress per card id; only for cards that are live "running". */
   progress: Record<string, RunProgress>;
+  /** Estimate per card id; only for card runs that gave a valid one and are still running. */
+  estimates?: Record<string, RunEstimate>;
   /** Quick runs not finished yet, sorted by createdAt. */
   quickRuns: QuickRun[];
   /** Fast forward and pause, in memory per project. */
