@@ -148,7 +148,8 @@ export class CiWatcher {
       this.hooks.log(p, cardId, "info", `CI en échec (${checks.failed.map((c) => c.name).join(", ")}) : retour en review`);
       return;
     }
-    if ((checks.state === "pass" || checks.state === "none") && status === "pending") {
+    // `none` here means the required checks have not reported yet (a PR without required checks never waits).
+    if (checks.state === "pass" && status === "pending") {
       this.writeStatus(p, cardId, url, "ready");
       this.hooks.log(p, cardId, "info", `checks verts, prêt à merger : ${url}`);
     }
