@@ -6,6 +6,7 @@ import { type EffortLevel, isValidEffort, sanitizeEfforts } from "../shared/effo
 import { normalizeCardExternal, normalizeIssueSources } from "../shared/issues.ts";
 import { sanitizeModels } from "../shared/models.ts";
 import { needsRun } from "../shared/needs-run.ts";
+import { DEFAULT_MERGE_METHOD, MERGE_METHODS, type MergeMethod } from "../shared/pullRequests.ts";
 import { normalizeSkipColumnIds, resolveNextColumn } from "../shared/skip.ts";
 import { replayHistory } from "../shared/timeline.ts";
 import {
@@ -175,6 +176,9 @@ const BOARD_KEYS = [
   "favoriteSkills",
   "worktreePolicy",
   "issueSources",
+  "pullRequests",
+  "mergeMethod",
+  "autoMerge",
 ];
 
 /**
@@ -242,6 +246,17 @@ function normalizeFavoriteSkills(value: unknown): string[] | undefined {
 /** A non-default policy from the file; the default and anything unknown give undefined (field omitted). */
 function normalizeWorktreePolicy(value: unknown): WorktreePolicy | undefined {
   return WORKTREE_POLICIES.includes(value as WorktreePolicy) && value !== DEFAULT_WORKTREE_POLICY ? (value as WorktreePolicy) : undefined;
+}
+
+/** Pull request settings of a board, without their defaults (never stored). */
+export function normalizePullRequestSettings(r: Raw): Pick<Board, "pullRequests" | "mergeMethod" | "autoMerge"> {
+  return {
+    ...(r.pullRequests === "off" ? { pullRequests: "off" as const } : {}),
+    ...(MERGE_METHODS.includes(r.mergeMethod as MergeMethod) && r.mergeMethod !== DEFAULT_MERGE_METHOD
+      ? { mergeMethod: r.mergeMethod as MergeMethod }
+      : {}),
+    ...(r.autoMerge === true ? { autoMerge: true as const } : {}),
+  };
 }
 
 /** Normalizes a parsed board so the rest of the code can trust its shape. */
@@ -360,6 +375,7 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
     ...(favoriteSkills ? { favoriteSkills } : {}),
     ...(worktreePolicy ? { worktreePolicy } : {}),
     ...(issueSources ? { issueSources } : {}),
+    ...normalizePullRequestSettings(r),
   };
 }
 
