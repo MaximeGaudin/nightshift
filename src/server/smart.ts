@@ -159,7 +159,7 @@ export async function runSmart(call: SmartCall): Promise<SmartResult> {
   const started = Date.now();
   const timeoutMs = call.timeoutMs ?? smartTimeoutMs();
   const fail = (reason: string, costUsd = 0): SmartResult => ({ ok: false, reason, costUsd, durationMs: Date.now() - started });
-  let proc: Subprocess<"pipe", "pipe", "pipe">;
+  let proc: Subprocess<Uint8Array<ArrayBuffer>, "pipe", "pipe">;
   try {
     proc = Bun.spawn(smartArgs(call.claudePath), {
       cwd: call.cwd,
