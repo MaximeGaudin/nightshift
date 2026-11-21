@@ -151,7 +151,9 @@ bun run dev    # same as start (development mode: HMR and browser console echo u
 bun test
 ```
 
-Scripts: `bun run lint` (Biome), `bun run format`, `bun run typecheck`, `bun test`, `bun run test:coverage`, and `bun run check` (lint + typecheck + tests, run it before committing). Code is formatted and linted with [Biome](https://biomejs.dev).
+Scripts: `bun run lint` (Biome), `bun run format`, `bun run typecheck`, `bun test` (sequential, for debugging), `bun run test:parallel`, `bun run test:coverage`, and `bun run check` (lint + typecheck + parallel tests, run it before committing). Code is formatted and linted with [Biome](https://biomejs.dev).
+
+`bun run test:parallel` (`scripts/test-parallel.ts`) splits `test/**/*.test.{ts,tsx}` into groups, one `bun test` process each, balanced with the durations of the previous run (`.test-timings.json`, git-ignored), then prints one summary and exits non-zero if any group fails or crashes. `TEST_JOBS=N` or `--jobs N` sets the group count (default: cores, at most 8); extra arguments filter files by path substring. Bun 1.2.15 (this machine) has no native parallelism between test files, so the script is the parallelism; `bun test --reporter=junit` is used to learn per-file durations. If a newer Bun gains a native option, prefer it and drop the script.
 
 ## Layout
 
