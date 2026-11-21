@@ -85,9 +85,19 @@ test("fast forward moves every ready card at once", async () => {
     return statuses.filter((x) => x === "running").length === 2 && statuses.filter((x) => x === "queued").length === 1;
   });
   for (const id of ids) expect(s.board.cards.find((c) => c.id === id)?.columnId).toBe("col_grill");
-  // One move each, all in a single pass.
-  const moved = s.board.cards.filter((c) => ids.includes(c.id)).map((c) => c.history.find((h) => h.text.startsWith("Fast forward"))?.at);
-  expect(new Set(moved).size).toBe(1);
+  // One move each, all in a single pass. Each move stamps its own time, so a pass may straddle a millisecond.
+  const moved = s.board.cards
+    .filter((c) => ids.includes(c.id))
+    .map((c) =>
+      Date.parse(
+        must(
+          c.history.find((h) => h.text.startsWith("Fast forward")),
+          "fast forward move",
+        ).at,
+      ),
+    );
+  expect(moved).toHaveLength(3);
+  expect(Math.max(...moved) - Math.min(...moved)).toBeLessThan(50);
 });
 
 test("fast forward picks cards added later and skips inert columns", async () => {
