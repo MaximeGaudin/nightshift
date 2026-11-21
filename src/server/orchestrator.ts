@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import type { Subprocess } from "bun";
 import { isReady, releaseReason } from "../shared/dependencies.ts";
 import { fastForwardSkipIds } from "../shared/flow.ts";
+import { agentFeatureArgs, formatAgentFeatures, type ResolvedAgentFeatures, resolveAgentFeatures } from "../shared/agentFeatures.ts";
 import { describeModelChanges, formatDropped, type ModelSource, mergeModels, resolveModel } from "../shared/models.ts";
 import { resolveNextColumn } from "../shared/skip.ts";
 import type {
@@ -88,10 +89,12 @@ interface RunTarget {
   model: string | undefined;
   /** Where `model` comes from, shown in the start log line. */
   modelSource: ModelSource;
+  /** Agent features resolved for this run: they decide the flags that keep the user's setup out of the context. */
+  features: ResolvedAgentFeatures;
   log(kind: LogLine["kind"], text: string): void;
   setProgress(v: { step: number; total: number; label: string }, source: RunProgress["source"]): void;
   /** First log line, once the model and permission mode are known. */
-  startMessage(model: string | undefined, permissionMode: string, source: ModelSource): string;
+  startMessage(model: string | undefined, permissionMode: string, source: ModelSource, features: string): string;
 }
 
 /** A skill launched from the command palette: in memory only, never written to nightshift.json. */
@@ -839,6 +842,8 @@ export class Orchestrator {
       schema: QUICK_RESULT_SCHEMA,
       model: getSettings().model.trim() || undefined,
       modelSource: getSettings().model.trim() ? "settings" : "default",
+      // No card and no column: global > default.
+      features: resolveAgentFeatures({ settings: getSettings() }),
       log: (kind, text) => {
         const line: LogLine = { at: new Date().toISOString(), kind, text };
         try {
@@ -846,8 +851,8 @@ export class Orchestrator {
         } catch {}
       },
       setProgress: (v, source) => this.setProgress(q, v, source),
-      startMessage: (model, permissionMode, source) =>
-        `Starting quick run of skill "${q.skill}" (permission mode: ${permissionMode}, model: ${modelLabel(model, source)}).`,
+      startMessage: (model, permissionMode, source, features) =>
+        `Starting quick run of skill "${q.skill}" (permission mode: ${permissionMode}, model: ${modelLabel(model, source)}, ${features}).`,
     };
   }
 
@@ -1129,10 +1134,11 @@ export class Orchestrator {
       schema: RESULT_SCHEMA,
       model: resolved.model,
       modelSource: resolved.source,
+      features: resolveAgentFeatures({ card: fresh, column, settings: getSettings() }),
       log: (kind, text) => this.log(p, card.id, kind, text),
       setProgress: (v, source) => this.setProgress(job, v, source),
-      startMessage: (model, permissionMode, source) =>
-        `${verb} ${job.skill ? `skill "${job.skill}"` : "session"} in "${column.name}" (permission mode: ${permissionMode}, model: ${modelLabel(model, source)}).`,
+      startMessage: (model, permissionMode, source, features) =>
+        `${verb} ${job.skill ? `skill "${job.skill}"` : "session"} in "${column.name}" (permission mode: ${permissionMode}, model: ${modelLabel(model, source)}, ${features}).`,
     };
   }
 
@@ -1167,9 +1173,10 @@ export class Orchestrator {
       "--name",
       target.name,
       ...(model ? ["--model", model] : []),
+      ...agentFeatureArgs(target.features),
       ...splitArgs(settings.extraArgs),
     ];
-    target.log("info", target.startMessage(model, settings.permissionMode, target.modelSource));
+    target.log("info", target.startMessage(model, settings.permissionMode, target.modelSource, formatAgentFeatures(target.features)));
 
     let result: StreamEvent | null = null;
     let stderr = "";
