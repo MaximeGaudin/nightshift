@@ -45,9 +45,11 @@ const buttons = (el: ReactElement): ReactElement<{ disabled: boolean; onClick: (
 };
 
 test("teamclaude-dialog-ui: reason with the URL, the waiting runs and three choices", () => {
-  const html = renderToStaticMarkup(view(WAIT));
-  expect(html).toContain("Proxy teamclaude injoignable");
-  expect(html).toContain("Aucune réponse de http://localhost:3456.");
+  // Title and reason are props of the dialog shell: another test file may mock its header differently in a full run.
+  const el = view(WAIT);
+  expect((el.props as { title: string }).title).toBe("Proxy teamclaude injoignable");
+  expect((el.props as { description: string }).description).toBe("Aucune réponse de http://localhost:3456.");
+  const html = renderToStaticMarkup(el);
   expect(html).toContain("#12");
   expect(html).toContain("Fix login");
   expect(html).toContain("— alpha");
