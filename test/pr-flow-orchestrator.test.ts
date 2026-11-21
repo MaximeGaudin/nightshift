@@ -370,3 +370,12 @@ test("PUT /api/pull-requests stores valid values, never the defaults, and reject
   expect((await put({ pullRequests: "on" })).status).toBe(400);
   expect((await put({ autoMerge: "yes" })).status).toBe(400);
 });
+
+test("merge: a required check that has not reported yet makes the card wait, not escalate", async () => {
+  fake.setState({ prs: [], nextNumber: 90, mergeError: 'GraphQL: Required status check "ci" is expected. (mergePullRequest)' });
+  const b = await setup();
+  const { id } = await b.card("pr-not-reported");
+  await waitFor(async () => (await b.get(id)).description.includes("checks en attente"), 30_000);
+  expect((await b.get(id)).columnId).toBe(b.mergeCol.id);
+  expect(agentRuns().filter((r) => r.title.includes("pr-not-reported")).length).toBe(1);
+}, 60_000);

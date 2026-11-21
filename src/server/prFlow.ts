@@ -37,6 +37,10 @@ export interface PrFlowHooks {
 export const CI_LOG_LINES = 200;
 export const CI_SECTION_MAX = 20_000;
 
+/** gh's refusal when a required status check has not reported (or not passed) yet. */
+const REQUIRED_STATUS_PENDING =
+  /required status checks? .*(expected|pending|in progress|not (yet )?(been )?(reported|completed))|status checks? (are|is) (expected|pending)/i;
+
 const NOTHING_CHANGED = "nothing changed: the PR, the base and the card worktree are as before";
 const short = (sha: string) => sha.slice(0, 7);
 const oneLine = (s: string, max = 300) => s.replace(/\s+/g, " ").trim().slice(0, max);
@@ -201,28 +205,28 @@ export class PrFlow {
             ci: await ciSection(host, p.path, checks.failed),
           };
         }
-        if (checks.state === "pending") {
+        // Pending required checks: wait in Merge, or schedule GitHub's auto-merge when the board allows it.
+        const waitForChecks = async (url: string): Promise<PrMergeOutcome> => {
           if (!mode.autoMerge) {
             return {
               kind: "waiting",
               status: "pending",
-              summary: `PR en attente des checks : ${pr.url}`,
-              merge: mergeStatusLine(pr.url, "pending"),
+              summary: `PR en attente des checks : ${url}`,
+              merge: mergeStatusLine(url, "pending"),
             };
           }
-          const r = await host.mergePr(p.path, pr.url, { method: mode.mergeMethod, auto: true });
-          if (!r.ok) return fallback(`pr-${r.kind}`, `gh pr merge ${pr.url} --${mode.mergeMethod} --auto`, r.message);
-          return {
-            kind: "waiting",
-            status: "auto",
-            summary: `auto-merge programmé : ${pr.url}`,
-            merge: mergeStatusLine(pr.url, "auto"),
-          };
-        }
+          const r = await host.mergePr(p.path, url, { method: mode.mergeMethod, auto: true });
+          if (!r.ok) return fallback(`pr-${r.kind}`, `gh pr merge ${url} --${mode.mergeMethod} --auto`, r.message);
+          return { kind: "waiting", status: "auto", summary: `auto-merge programmé : ${url}`, merge: mergeStatusLine(url, "auto") };
+        };
+        if (checks.state === "pending") return await waitForChecks(pr.url);
         if (pr.mergeable === "CONFLICTING") {
           return fallback("pr-conflict", `gh pr view ${pr.url} --json mergeable`, `${pr.url} conflicts with ${el.base}`);
         }
         const r = await host.mergePr(p.path, pr.url, { method: mode.mergeMethod, auto: false });
+        // Right after a push the required checks may not have reported yet: GitHub refuses the merge for a missing
+        // required status. That is a pending check, not a protection to escalate.
+        if (!r.ok && r.kind === "protected" && REQUIRED_STATUS_PENDING.test(r.message)) return await waitForChecks(pr.url);
         if (!r.ok) return fallback(`pr-${r.kind}`, `gh pr merge ${pr.url} --${mode.mergeMethod} --delete-branch`, r.message);
         if (input.isCancelled()) return { kind: "cancelled" };
         const merged = (await host.prState(p.path, pr.url)) ?? pr;
