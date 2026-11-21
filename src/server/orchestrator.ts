@@ -466,8 +466,11 @@ export class Orchestrator {
     onState: (p) => this.broadcast({ type: "board", project: p.path, snapshot: this.snapshot(p) }),
     onResume: () => this.scheduleTick(),
   });
-  /** Cards retried by the user while paused may start anyway: job key -> the enteredColumnAt the retry wrote. */
-  private explicitRetries = new Map<string, string>();
+  /**
+   * Cards retried by the user while paused may start anyway: job key -> the column and the enteredColumnAt the retry
+   * wrote. The column is part of the match because a move in the same millisecond keeps the same timestamp.
+   */
+  private explicitRetries = new Map<string, { columnId: string; enteredColumnAt: string }>();
   private tests = new Map<string, { project: Project; cardId: string; proc: ChildProcess; lines: LogLine[] }>();
   private lastTestLines = new Map<string, LogLine[]>();
 
@@ -640,7 +643,7 @@ export class Orchestrator {
     const key = this.key(p, card.id);
     const retried = this.explicitRetries.get(key);
     if (retried === undefined) return true;
-    if (retried === card.enteredColumnAt) return false;
+    if (retried.columnId === card.columnId && retried.enteredColumnAt === card.enteredColumnAt) return false;
     this.explicitRetries.delete(key);
     return true;
   }
@@ -1042,7 +1045,7 @@ export class Orchestrator {
       if (!card) throw new HttpError(404, "Unknown card");
       card.enteredColumnAt = new Date().toISOString();
       // Explicit action: starts even while the project is paused (set before the change schedules a tick).
-      this.explicitRetries.set(this.key(p, card.id), card.enteredColumnAt);
+      this.explicitRetries.set(this.key(p, card.id), { columnId: card.columnId, enteredColumnAt: card.enteredColumnAt });
       delete card.lastRun;
       delete card.pendingAnswer;
       p.addHistory(card, "edited", "Retry requested by user");
