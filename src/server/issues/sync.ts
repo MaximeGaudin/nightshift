@@ -43,6 +43,9 @@ const newer = (a: string, b: string) => {
   return Number.isNaN(ta) || Number.isNaN(tb) ? a !== b : ta > tb;
 };
 const sameTarget = (a: IssueSource, b: IssueSource) => a.provider === b.provider && a.baseUrl === b.baseUrl && a.repo === b.repo;
+/** Same target and same label filter: a plan fetched for one source config is only applied to that config. */
+const sameConfig = (a: IssueSource, b: IssueSource) =>
+  sameTarget(a, b) && JSON.stringify(a.labels ?? []) === JSON.stringify(b.labels ?? []);
 
 /** Card description built from an issue: its body, then a link back to it. */
 export function issueDescription(issue: Pick<ExternalIssue, "body" | "url">): string {
@@ -59,6 +62,8 @@ export class IssueSync {
   private timers = new Map<string, ReturnType<typeof setInterval>>();
   /** In-flight sync per `path::sourceId`: a trigger during a sync gets the running one. */
   private inflight = new Map<string, Promise<void>>();
+  /** One follow-up sync per `path::sourceId`, queued when a trigger arrives during a sync (the source may have changed). */
+  private queued = new Map<string, Promise<void>>();
   /** Live state per project path, then per source id. */
   private states = new Map<string, Map<string, LiveState>>();
   private writeBackScheduled = new Set<string>();
@@ -138,7 +143,18 @@ export class IssueSync {
   syncSource(p: Project, sourceId: string): Promise<void> {
     const key = `${p.path}::${sourceId}`;
     const running = this.inflight.get(key);
-    if (running) return running;
+    if (running) {
+      // The running sync read the source before this trigger: run once more after it, with the current source.
+      let next = this.queued.get(key);
+      if (!next) {
+        next = running.then(() => {
+          this.queued.delete(key);
+          return this.syncSource(p, sourceId);
+        });
+        this.queued.set(key, next);
+      }
+      return next;
+    }
     const run = this.runSync(p, sourceId).finally(() => this.inflight.delete(key));
     this.inflight.set(key, run);
     return run;
@@ -199,7 +215,7 @@ export class IssueSync {
     fetched: IssueSource,
     plan: { toImport: ExternalIssue[]; updates: Map<string, ExternalIssue>; gone: Set<string> },
   ): string[] {
-    const current = () => p.board.issueSources?.find((s) => s.id === fetched.id && s.enabled && sameTarget(s, fetched));
+    const current = () => p.board.issueSources?.find((s) => s.id === fetched.id && s.enabled && sameConfig(s, fetched));
     const src = current();
     if (!src) return [];
     const inBacklog = (id: string) => {

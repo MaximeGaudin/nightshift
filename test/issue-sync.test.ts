@@ -299,3 +299,26 @@ test("writeback-skipped-for-disabled-source", async () => {
   expect(p.card(card?.id as string)?.external?.writeBack).toBeUndefined();
   setToken("github", "https://api.github.com", "");
 });
+
+test("sync-trigger-during-sync-reruns-with-new-config", async () => {
+  const { p, sync } = setup();
+  fake.issues.set("o/r", [issue(1, { labels: ["bug"] }), issue(2, { labels: ["ui"] })]);
+  let release = () => {};
+  fake.gate = new Promise<void>((r) => {
+    release = r;
+  });
+  const first = sync.syncSource(p, "src_0");
+  await flush();
+  // The filter changes while the first sync runs: its plan is dropped and a follow-up sync applies the new one.
+  p.mutate((b) => {
+    const s = b.issueSources?.[0];
+    if (s) s.labels = ["ui"];
+  });
+  const second = sync.syncSource(p, "src_0");
+  fake.gate = undefined;
+  release();
+  await first;
+  await second;
+  expect(backlog(p).map((c) => c.external?.number)).toEqual([2]);
+  expect(fake.calls.filter((c) => c.startsWith("list")).length).toBe(2);
+});
