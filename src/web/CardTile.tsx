@@ -1,8 +1,10 @@
-import { ArrowRight, ChevronsRight } from "lucide-react";
+import { ArrowRight, ChevronsRight, GitPullRequest } from "lucide-react";
 import type { HTMLAttributes, KeyboardEvent, Ref } from "react";
 import { providerLabel } from "../shared/issues.ts";
 import { resolveModel } from "../shared/models.ts";
+import { prUrlOf } from "../shared/pullRequests.ts";
 import { type Card, type Column, cardRef, type LiveStatus, type RunProgress as RunProgressData, type Settings } from "../shared/types.ts";
+import { safeHttpUrl } from "../shared/urls.ts";
 import { CardThumbnail } from "./CardThumbnail.tsx";
 import { CardTimers } from "./CardTimers.tsx";
 import { IconButton } from "./components/icon-button.tsx";
@@ -76,6 +78,7 @@ export function CardTile({
 }) {
   const { t, tn } = useT();
   const override = cardModelOverride(column, settings, card);
+  const prHref = safeHttpUrl(prUrlOf(card.description));
   const lr = card.lastRun?.columnId === card.columnId ? card.lastRun : undefined;
   const status = live ?? lr?.status;
   const excerpt = card.description ? toPlainText(card.description).slice(0, 160) : "";
@@ -126,6 +129,20 @@ export function CardTile({
           >
             <ProviderIcon provider={card.external.provider} size={11} />
           </span>
+        )}
+        {prHref && (
+          <a
+            href={prHref}
+            target="_blank"
+            rel="noreferrer"
+            className="card-pr inline-flex items-center hover:text-foreground"
+            title={t("card.pr.open")}
+            aria-label={t("card.pr.open")}
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+          >
+            <GitPullRequest size={11} aria-hidden="true" />
+          </a>
         )}
         {override && (
           <Badge

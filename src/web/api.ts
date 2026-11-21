@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { AgentFeaturesOverride } from "../shared/agentFeatures.ts";
 import type { FlowState } from "../shared/flow.ts";
 import type { IssueSourceInput } from "../shared/issues.ts";
+import type { PullRequestSettings } from "../shared/pullRequests.ts";
 import type { CardImageStored, CardImageUpload } from "../shared/screenshots.ts";
 import type {
   LogLine,
@@ -111,6 +112,8 @@ export const api = {
   createSkill: (project: string, name: string, description: string, body: string) =>
     call<SkillInfo>("POST", "/api/skills", { project, name, description, body }),
   setWorktreePolicy: (project: string, policy: WorktreePolicy) => call<ProjectSnapshot>("PUT", "/api/worktree-policy", { project, policy }),
+  setPullRequests: (project: string, settings: PullRequestSettings) =>
+    call<ProjectSnapshot>("PUT", "/api/pull-requests", { project, ...settings }),
   toggleFavoriteSkill: (project: string, name: string, favorite: boolean) =>
     call<ProjectSnapshot>("PUT", "/api/favorite-skills", { project, name, favorite }),
   startQuickRun: (project: string, skill: string, instruction: string) =>

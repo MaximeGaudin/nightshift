@@ -11,6 +11,18 @@ export const MERGE_METHODS = ["merge", "squash", "rebase"] as const;
 export type MergeMethod = (typeof MERGE_METHODS)[number];
 export const DEFAULT_MERGE_METHOD: MergeMethod = "merge";
 
+/** The three pull request settings of a board, as the settings dialog edits them. */
+export interface PullRequestSettings {
+  pullRequests: PullRequestsSetting;
+  mergeMethod: MergeMethod;
+  autoMerge: boolean;
+}
+
+/** Effective pull request settings of a board. */
+export function pullRequestSettingsOf(board: Pick<Board, "pullRequests" | "mergeMethod" | "autoMerge">): PullRequestSettings {
+  return { pullRequests: pullRequestsOf(board), mergeMethod: mergeMethodOf(board), autoMerge: autoMergeOf(board) };
+}
+
 /** The board's pull request setting; the only place that reads `board.pullRequests`. */
 export function pullRequestsOf(board: Pick<Board, "pullRequests">): PullRequestsSetting {
   return board.pullRequests && PULL_REQUESTS_SETTINGS.includes(board.pullRequests) ? board.pullRequests : DEFAULT_PULL_REQUESTS;

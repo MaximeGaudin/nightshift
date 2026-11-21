@@ -1,6 +1,7 @@
-import { Loader2 } from "lucide-react";
+import { GitPullRequest, Loader2 } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { providerLabel } from "../shared/issues.ts";
+import { prUrlOf } from "../shared/pullRequests.ts";
 import {
   BACKLOG_COLUMN_ID,
   type Board,
@@ -259,7 +260,8 @@ export function CardModal(props: CardModalProps) {
       size="xl"
       title={
         <span>
-          {t("card.heading")} <CopyRef card={card} /> <CardSourceLink card={card} /> {live === "paused" && <PausedBadge />}{" "}
+          {t("card.heading")} <CopyRef card={card} /> <CardSourceLink card={card} /> <CardPrLink card={card} />{" "}
+          {live === "paused" && <PausedBadge />}{" "}
           <span className="font-normal text-muted-foreground">
             · {column && columnEmoji(column) ? `${columnEmoji(column)} ` : ""}
             {column?.name}
@@ -746,6 +748,25 @@ export function CardSourceLink({ card }: { card: Card }) {
     </a>
   ) : (
     <span className={className}>{content}</span>
+  );
+}
+
+/** Link to the card's pull request (`- PR: <url>` under `## Review`); nothing without one. */
+export function CardPrLink({ card }: { card: Pick<Card, "description"> }) {
+  const { t } = useT();
+  const href = safeHttpUrl(prUrlOf(card.description));
+  if (!href) return null;
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="card-pr-link inline-flex items-center gap-1 text-xs font-normal text-muted-foreground hover:text-foreground hover:underline"
+      title={t("card.pr.open")}
+    >
+      <GitPullRequest size={12} aria-hidden="true" />
+      <span>{t("card.pr.label")}</span>
+    </a>
   );
 }
 

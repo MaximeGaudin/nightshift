@@ -1,6 +1,7 @@
 import { Columns3, FastForward, Info, Pause, Play, Settings as SettingsIcon, Sparkles, TriangleAlert } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { pullRequestSettingsOf } from "../shared/pullRequests.ts";
 import { type ProjectSnapshot, type SkillInfo, worktreePolicyOf } from "../shared/types.ts";
 import { AgentSky } from "./AgentSky.tsx";
 import { api, useServerEvents, useSettings } from "./api.ts";
@@ -406,6 +407,7 @@ export function App() {
           currentProject={snap.path}
           projectMaxParallel={snap.maxParallel}
           worktreePolicy={worktreePolicyOf(snap.board)}
+          pullRequests={pullRequestSettingsOf(snap.board)}
           issues={{ sources: snap.board.issueSources ?? [], status: snap.issueSources, canSync: !snap.agentsDisabled && !snap.lockedBy }}
           onOpenProject={(p) => {
             setModal(null);
