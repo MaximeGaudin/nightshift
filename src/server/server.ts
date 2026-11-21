@@ -177,29 +177,25 @@ export function startServer({ port, development, agents = true }: { port: number
       historyText?: string;
     },
   ): Card => {
-    const now = new Date().toISOString();
     if (!columnId || !p.column(columnId)) throw new Error("Unknown column");
     const skipColumnIds = normalizeSkipColumnIds(p.board.columns, skipInput);
     const dependsOn = dependsOnInput === undefined ? [] : resolveDependencyRefs(p.board, dependsOnInput);
     if (dependsOn.length > 0 && columnId !== BACKLOG_COLUMN_ID) throw new Error("dependsOn requires the Backlog column");
     if (draft && columnId !== BACKLOG_COLUMN_ID) throw new Error("draft requires the Backlog column");
     return p.mutate((board) => {
-      const card: Card = {
-        id: newId("card"),
-        number: board.nextCardNumber,
-        title: (title || "Untitled").trim(),
-        description: description ?? "",
-        columnId,
-        ...(skipColumnIds ? { skipColumnIds } : {}),
-        ...(dependsOn.length > 0 ? { dependsOn } : {}),
-        ...(draft ? { draft: true as const } : {}),
-        createdAt: now,
-        updatedAt: now,
-        enteredColumnAt: now,
-        history: [],
-      };
-      board.nextCardNumber += 1;
-      // Images are written and their markers resolved before the card joins the board: no observer sees `pending:`.
+      const card = p.addCard(
+        board,
+        {
+          title: title ?? "",
+          description: description ?? "",
+          columnId,
+          ...(skipColumnIds ? { skipColumnIds } : {}),
+          ...(dependsOn.length > 0 ? { dependsOn } : {}),
+          ...(draft ? { draft: true as const } : {}),
+        },
+        historyText,
+      );
+      // Images are written and their markers resolved before the mutation ends: no observer sees `pending:`.
       if (images) {
         const paths = new Map<number, string | null>();
         for (const n of pendingIds(card.description)) {
@@ -214,12 +210,9 @@ export function startServer({ port, development, agents = true }: { port: number
         }
         card.description = resolvePending(card.description, paths);
       }
-      p.addHistory(card, "created", historyText ?? `Created in ${p.column(columnId)?.name}`, columnId);
-      board.cards.push(card);
       // Every dependency already in Done: the card leaves Backlog right away.
       if (!card.draft && card.dependsOn && unmetDependencies(board, card).length === 0)
         p.releaseDependencies(board, card, releaseReason(board, card));
-      else p.addQueued(card, board);
       return card;
     });
   };
@@ -455,21 +448,7 @@ export function startServer({ port, development, agents = true }: { port: number
         }),
         DELETE: h((b, url, req) => {
           const p = project(b, url);
-          p.mutate((board) => {
-            const gone = board.cards.find((c) => c.id === req.params.id);
-            board.cards = board.cards.filter((c) => c.id !== req.params.id);
-            if (!gone) return;
-            // A deleted dependency counts as met: drop it from every card waiting for it.
-            for (const card of board.cards) {
-              if (!card.dependsOn?.includes(gone.id)) continue;
-              const rest = card.dependsOn.filter((id) => id !== gone.id);
-              if (rest.length > 0) card.dependsOn = rest;
-              else delete card.dependsOn;
-              p.addHistory(card, "edited", `Dependency ${cardRef(gone)} deleted`);
-              if (card.columnId === BACKLOG_COLUMN_ID && !card.draft && unmetDependencies(board, card).length === 0)
-                p.releaseDependencies(board, card, releaseReason(board, card));
-            }
-          });
+          p.mutate((board) => p.deleteCard(board, req.params.id));
           removeScreenshots(req.params.id);
           orch.purgeCard(p, req.params.id);
         }),

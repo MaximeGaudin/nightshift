@@ -1,6 +1,6 @@
 import { copyFileSync, existsSync, type FSWatcher, readFileSync, statSync, watch } from "node:fs";
 import { basename, join } from "node:path";
-import { normalizeDependsOn, releaseTarget } from "../shared/dependencies.ts";
+import { normalizeDependsOn, releaseReason, releaseTarget, unmetDependencies } from "../shared/dependencies.ts";
 import { normalizeCardExternal, normalizeIssueSources } from "../shared/issues.ts";
 import { sanitizeModels } from "../shared/models.ts";
 import { needsRun } from "../shared/needs-run.ts";
@@ -13,6 +13,7 @@ import {
   type Card,
   type Column,
   type ColumnType,
+  cardRef,
   DEFAULT_WORKTREE_POLICY,
   doneColumn,
   ensureSystemColumns,
@@ -456,6 +457,54 @@ export class Project {
       const dropped = card.history.splice(0, card.history.length - 50);
       card.timeBase = replayHistory(card.timeBase, dropped, card.createdAt);
     }
+  }
+
+  /**
+   * Creates a card at the end of its column inside a mutation: id, number, timestamps, the "created" history entry,
+   * then queueing. `historyText` defaults to "Created in <column>".
+   */
+  addCard(
+    board: Board,
+    fields: Pick<Card, "title" | "description" | "columnId"> & Partial<Pick<Card, "skipColumnIds" | "dependsOn" | "draft" | "external">>,
+    historyText?: string,
+  ): Card {
+    const at = now();
+    const card: Card = {
+      ...fields,
+      id: newId("card"),
+      number: board.nextCardNumber,
+      title: (fields.title || "Untitled").trim(),
+      createdAt: at,
+      updatedAt: at,
+      enteredColumnAt: at,
+      history: [],
+    };
+    board.nextCardNumber += 1;
+    this.addHistory(card, "created", historyText ?? `Created in ${board.columns.find((c) => c.id === card.columnId)?.name}`, card.columnId);
+    board.cards.push(card);
+    this.addQueued(card, board);
+    return card;
+  }
+
+  /**
+   * Removes a card inside a mutation and returns it (undefined when unknown). A deleted dependency counts as met:
+   * it is dropped from every card waiting for it, and a Backlog card left with no unmet dependency is released.
+   * Files kept for the card (screenshots, logs) are the caller's to remove, after the mutation.
+   */
+  deleteCard(board: Board, cardId: string): Card | undefined {
+    const gone = board.cards.find((c) => c.id === cardId);
+    if (!gone) return undefined;
+    board.cards = board.cards.filter((c) => c.id !== cardId);
+    for (const card of board.cards) {
+      if (!card.dependsOn?.includes(gone.id)) continue;
+      const rest = card.dependsOn.filter((id) => id !== gone.id);
+      if (rest.length > 0) card.dependsOn = rest;
+      else delete card.dependsOn;
+      this.addHistory(card, "edited", `Dependency ${cardRef(gone)} deleted`);
+      if (card.columnId === BACKLOG_COLUMN_ID && !card.draft && unmetDependencies(board, card).length === 0)
+        this.releaseDependencies(board, card, releaseReason(board, card));
+    }
+    return gone;
   }
 
   /** Records that a card waits for an agent, when it is in a skill column and needs a run. */
