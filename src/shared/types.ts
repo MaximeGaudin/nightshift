@@ -307,7 +307,41 @@ export interface Settings {
   carryMaxTokens: number;
   /** Auto fresh-session mode: the oldest last run (minutes) still worth continuing; the prompt cache lifetime. */
   carryMaxAgeMinutes: number;
+  /** Run the agents through the local teamclaude proxy (multi-account pool). */
+  teamclaudeEnabled: boolean;
+  /** Base URL of the teamclaude proxy, http(s), stored without a trailing slash. */
+  teamclaudeUrl: string;
 }
+
+/** Why an agent launch through teamclaude is blocked. */
+export type TeamclaudeFailure =
+  | { kind: "not-found" }
+  | { kind: "env-failed"; detail: string }
+  | { kind: "no-response"; url: string };
+
+/** One run blocked on the teamclaude proxy: a card run (feedback included) or a quick run. */
+export interface TeamclaudeWaitEntry {
+  /** Absolute project path. */
+  project: string;
+  cardId?: string;
+  /** "#12" for a card run. */
+  ref?: string;
+  quickRunId?: string;
+  /** Card title, or the skill name for a quick run. */
+  title: string;
+}
+
+/** The runs blocked on the teamclaude proxy, waiting for a human choice. */
+export interface TeamclaudeWait {
+  failure: TeamclaudeFailure;
+  /** In arrival order. */
+  entries: TeamclaudeWaitEntry[];
+  /** A retry is in progress: the choices are disabled. */
+  retrying: boolean;
+}
+
+export const TEAMCLAUDE_ACTIONS = ["retry", "direct", "cancel"] as const;
+export type TeamclaudeAction = (typeof TEAMCLAUDE_ACTIONS)[number];
 
 export interface SkillInfo {
   name: string;
@@ -408,6 +442,8 @@ export interface ProjectSnapshot {
   quickRuns: QuickRun[];
   /** Fast forward and pause, in memory per project. */
   flow: FlowState;
+  /** Cards of this project whose run waits for the teamclaude proxy. */
+  proxyWaiting: string[];
 }
 
 /** Why a card needs a human: it reached an inert column, asks questions, or its run failed. */
@@ -423,4 +459,5 @@ export type ServerEvent =
   | { type: "settings"; settings: Settings }
   | { type: "usage"; usage: QuotaSnapshot | null }
   | { type: "attention"; project: string; cardId: string; kind: AttentionKind }
-  | { type: "quickrun"; project: string; result: QuickRunResult };
+  | { type: "quickrun"; project: string; result: QuickRunResult }
+  | { type: "teamclaude"; wait: TeamclaudeWait | null };

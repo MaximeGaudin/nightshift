@@ -132,3 +132,22 @@ test("settings-language: an invalid value in the file falls back to auto", async
   expect(getSettings().language).toBe("auto");
   expect(getSettings().model).toBe("");
 });
+
+test("settings-teamclaude-validation: off by default, http(s) URL only, stored without a trailing slash", async () => {
+  const { getSettings, updateSettings } = await load();
+  expect(getSettings().teamclaudeEnabled).toBe(false);
+  expect(getSettings().teamclaudeUrl).toBe("http://localhost:3456");
+  for (const bad of ["ftp://x", "pas une url", "", "   ", 42]) {
+    expect(() => updateSettings({ teamclaudeUrl: bad as never })).toThrow("teamclaudeUrl must be an http(s) URL");
+  }
+  expect(() => updateSettings({ teamclaudeEnabled: "yes" as never })).toThrow("teamclaudeEnabled must be a boolean");
+  expect(getSettings().teamclaudeUrl).toBe("http://localhost:3456");
+  updateSettings({ teamclaudeUrl: "http://h:1/", teamclaudeEnabled: true });
+  expect(getSettings().teamclaudeUrl).toBe("http://h:1");
+  expect(JSON.parse(readFileSync(join(home, "settings.json"), "utf8")).teamclaudeUrl).toBe("http://h:1");
+});
+
+test("settings-teamclaude-validation: an invalid URL in the file keeps the default, a valid one is normalized", async () => {
+  expect((await load(JSON.stringify({ teamclaudeUrl: "ftp://x" }))).getSettings().teamclaudeUrl).toBe("http://localhost:3456");
+  expect((await load(JSON.stringify({ teamclaudeUrl: "https://tc.local:9/" }))).getSettings().teamclaudeUrl).toBe("https://tc.local:9");
+});

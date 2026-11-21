@@ -548,6 +548,7 @@ export class Orchestrator {
           ...(q.status === "running" && q.progress ? { progress: q.progress } : {}),
         })),
       flow: this.flow.get(p),
+      proxyWaiting: [],
       ...(lockedBy ? { lockedBy } : {}),
       ...(this.agents ? {} : { agentsDisabled: true }),
     };
