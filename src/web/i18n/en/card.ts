@@ -54,6 +54,7 @@ export const card = {
   "card.tabTime": "Time",
   "card.noRun": "No run for this card.",
   "card.copyRef": "Copy the reference",
+  "card.source.open": "Open {ref} on {provider}",
   "card.copied": "Copied",
   "card.models.title": "Models per skill",
   "card.models.skillRow": "{skill} ({columns})",

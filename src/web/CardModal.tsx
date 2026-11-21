@@ -1,5 +1,6 @@
 import { Loader2 } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { providerLabel } from "../shared/issues.ts";
 import {
   BACKLOG_COLUMN_ID,
   type Board,
@@ -12,6 +13,7 @@ import {
   type LogLine,
   type RunProgress as RunProgressData,
 } from "../shared/types.ts";
+import { safeHttpUrl } from "../shared/urls.ts";
 import { api, useServerEvents, useSettings } from "./api.ts";
 import { CardModelsEditor } from "./CardModelsEditor.tsx";
 import { PausedBadge } from "./CardTile.tsx";
@@ -28,7 +30,7 @@ import { Textarea } from "./components/ui/textarea.tsx";
 import { DependencyPicker } from "./DependencyPicker.tsx";
 import { FeedbackForm } from "./FeedbackForm.tsx";
 import { formatTime, useT } from "./i18n/index.ts";
-import { StatusIcon } from "./icons.tsx";
+import { ProviderIcon, StatusIcon } from "./icons.tsx";
 import { dragHasFiles, handleImageTransfer, type ImagePasteDeps, type Selection } from "./imagePaste.ts";
 import { cn } from "./lib/utils.ts";
 import { Markdown } from "./markdown.tsx";
@@ -256,7 +258,7 @@ export function CardModal(props: CardModalProps) {
       size="xl"
       title={
         <span>
-          {t("card.heading")} <CopyRef card={card} /> {live === "paused" && <PausedBadge />}{" "}
+          {t("card.heading")} <CopyRef card={card} /> <CardSourceLink card={card} /> {live === "paused" && <PausedBadge />}{" "}
           <span className="font-normal text-muted-foreground">
             · {column && columnEmoji(column) ? `${columnEmoji(column)} ` : ""}
             {column?.name}
@@ -716,6 +718,35 @@ function LogRow({ kind, time, text }: { kind: string; time: string; text: string
 }
 
 /** Card ref shown as muted text; click copies it and briefly confirms. Clipboard failures stay silent. */
+/** Provider icon and `owner/repo#n` link to the issue an imported card comes from; nothing for a manual card. */
+export function CardSourceLink({ card }: { card: Card }) {
+  const { t } = useT();
+  const ext = card.external;
+  if (!ext) return null;
+  const ref = `${ext.repo}#${ext.number}`;
+  const href = safeHttpUrl(ext.url);
+  const content = (
+    <>
+      <ProviderIcon provider={ext.provider} size={12} />
+      <span>{ref}</span>
+    </>
+  );
+  const className = "card-source-link inline-flex items-center gap-1 text-xs font-normal text-muted-foreground";
+  return href ? (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className={`${className} hover:text-foreground hover:underline`}
+      title={t("card.source.open", { ref, provider: providerLabel(ext.provider) })}
+    >
+      {content}
+    </a>
+  ) : (
+    <span className={className}>{content}</span>
+  );
+}
+
 function CopyRef({ card }: { card: Card }) {
   const { t } = useT();
   const [copied, setCopied] = useState(false);

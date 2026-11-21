@@ -56,6 +56,7 @@ export const card: Record<keyof typeof enCard, string> = {
   "card.tabTime": "Temps",
   "card.noRun": "Aucun run pour cette fiche.",
   "card.copyRef": "Copier la référence",
+  "card.source.open": "Ouvrir {ref} sur {provider}",
   "card.copied": "Copié",
   "card.models.title": "Modèles par skill",
   "card.models.skillRow": "{skill} ({columns})",

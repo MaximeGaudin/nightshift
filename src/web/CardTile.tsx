@@ -1,5 +1,6 @@
 import { ArrowRight, ChevronsRight } from "lucide-react";
 import type { HTMLAttributes, KeyboardEvent, Ref } from "react";
+import { providerLabel } from "../shared/issues.ts";
 import { resolveModel } from "../shared/models.ts";
 import { type Card, type Column, cardRef, type LiveStatus, type RunProgress as RunProgressData, type Settings } from "../shared/types.ts";
 import { CardThumbnail } from "./CardThumbnail.tsx";
@@ -7,7 +8,7 @@ import { CardTimers } from "./CardTimers.tsx";
 import { IconButton } from "./components/icon-button.tsx";
 import { Badge } from "./components/ui/badge.tsx";
 import { useT } from "./i18n/index.ts";
-import { StatusIcon } from "./icons.tsx";
+import { ProviderIcon, StatusIcon } from "./icons.tsx";
 import { cn } from "./lib/utils.ts";
 import { toPlainText } from "./markdown.tsx";
 import { RunProgress } from "./RunProgress.tsx";
@@ -115,6 +116,14 @@ export function CardTile({
       <CardThumbnail project={project} card={card} />
       <div className="card-ref mb-1 flex min-h-5 items-center gap-1 pr-6 text-[11px] text-muted-foreground tabular-nums">
         <span>{cardRef(card)}</span>
+        {card.external && (
+          <span
+            className="card-source inline-flex items-center"
+            title={`${providerLabel(card.external.provider)} ${card.external.repo}#${card.external.number}`}
+          >
+            <ProviderIcon provider={card.external.provider} size={11} />
+          </span>
+        )}
         {override && (
           <Badge
             variant="secondary"

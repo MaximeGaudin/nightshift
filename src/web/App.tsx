@@ -272,6 +272,9 @@ export function App() {
       case "pause":
         guard(action.paused ? api.pause(snap.path) : api.play(snap.path));
         break;
+      case "issuesSync":
+        guard(api.syncIssues(snap.path));
+        break;
       case "quickRun":
         guard(api.startQuickRun(snap.path, action.skill, quickRunInstruction(action.skill, search)));
         break;
