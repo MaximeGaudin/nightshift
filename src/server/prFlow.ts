@@ -15,7 +15,7 @@ import {
   setSectionPrLine,
 } from "../shared/pullRequests.ts";
 import type { LogLine } from "../shared/types.ts";
-import { type CodeHost, CodeHostError, type FailedCheck, type PrInfo } from "./codehost/codehost.ts";
+import { type ChecksSummary, type CodeHost, CodeHostError, type FailedCheck, type PrInfo } from "./codehost/codehost.ts";
 import {
   acquireMergeLock,
   cleanupCardWorktree,
@@ -39,6 +39,41 @@ export type PrMergeOutcome =
 
 export interface PrFlowHooks {
   log(p: Project, cardId: string, kind: LogLine["kind"], text: string): void;
+  /** Clock of the no-checks grace (ms since epoch); `Date.now` by default. */
+  now?: () => number;
+}
+
+/** How long a PR head of a repository with CI workflows may show no check at all before it merges without CI. */
+export const CI_NO_CHECKS_GRACE_MS = 10 * 60_000;
+
+/** The CI gate's answer: red (with the failed checks), still running, or green (`noCi`: no check came at all). */
+export type CiVerdict = { state: "fail"; failed: FailedCheck[] } | { state: "pending" } | { state: "pass"; noCi?: true };
+
+/**
+ * Decides whether every check of a PR is green. `none` (no check reported) is green only in a repository without CI
+ * workflows, or once `graceMs` have passed since `noChecksSince` (the first time this head showed no check).
+ */
+export function ciVerdict(input: {
+  checks: ChecksSummary;
+  hasWorkflows: boolean;
+  noChecksSince: number;
+  now: number;
+  graceMs: number;
+}): CiVerdict {
+  const { checks } = input;
+  if (checks.state === "fail") return { state: "fail", failed: checks.failed };
+  if (checks.state === "pending") return { state: "pending" };
+  if (checks.state === "pass") return { state: "pass" };
+  if (!input.hasWorkflows) return { state: "pass" };
+  if (input.now - input.noChecksSince < input.graceMs) return { state: "pending" };
+  return { state: "pass", noCi: true };
+}
+
+/** The branch holds at least one GitHub Actions workflow; a git error counts as yes (the grace bounds the wait). */
+async function hasWorkflows(cwd: string, branch: string): Promise<boolean> {
+  const r = await git(cwd, ["ls-tree", "--name-only", branch, ".github/workflows/"]);
+  if (r.code !== 0) return true;
+  return r.stdout.split("\n").some((l) => /\.ya?ml$/i.test(l.trim()));
 }
 
 /** Log lines kept per failed check in `## CI`, and the cap of the whole section. */
@@ -91,8 +126,42 @@ export async function ciSection(host: CodeHost, cwd: string, failed: FailedCheck
 
 export class PrFlow {
   private chains = new Map<string, Promise<unknown>>();
+  /** First time each PR head (`<url>@<sha>`) showed no check at all, for the no-checks grace. In memory only. */
+  private noChecks = new Map<string, { since: number; logged: boolean }>();
 
   constructor(private readonly hooks: PrFlowHooks) {}
+
+  private now() {
+    return (this.hooks.now ?? Date.now)();
+  }
+
+  /**
+   * The CI gate of the Merge column and the CI watcher: every check of the PR head (required or not) must be green.
+   * Call it under the card's `withCard` (it does not take the lock itself).
+   */
+  async ciGate(p: Project, cardId: string, branch: string, pr: PrInfo, host: CodeHost): Promise<CiVerdict> {
+    const key = `${pr.url}@${pr.headSha ?? ""}`;
+    const checks = await host.checks(p.path, pr.url, { all: true });
+    if (checks.state !== "none") {
+      this.noChecks.delete(key);
+      return ciVerdict({ checks, hasWorkflows: true, noChecksSince: 0, now: 0, graceMs: 0 });
+    }
+    const workflows = await hasWorkflows(p.path, branch);
+    const now = this.now();
+    const entry = this.noChecks.get(key) ?? { since: now, logged: false };
+    if (workflows) this.noChecks.set(key, entry);
+    const verdict = ciVerdict({ checks, hasWorkflows: workflows, noChecksSince: entry.since, now, graceMs: CI_NO_CHECKS_GRACE_MS });
+    if (verdict.state === "pass" && verdict.noCi && !entry.logged) {
+      entry.logged = true;
+      this.hooks.log(p, cardId, "info", `aucun check après ${Math.round(CI_NO_CHECKS_GRACE_MS / 60_000)} min : merge sans CI`);
+    }
+    return verdict;
+  }
+
+  /** Forgets the no-checks grace of every head of a PR (merged or closed). */
+  private forgetNoChecks(url: string) {
+    for (const k of this.noChecks.keys()) if (k.startsWith(`${url}@`)) this.noChecks.delete(k);
+  }
 
   /** Runs `fn` after every earlier operation of the same card has finished. */
   withCard<T>(p: Project, cardId: string, fn: () => Promise<T>): Promise<T> {
@@ -288,17 +357,19 @@ export class PrFlow {
           }
           pr = { ...pr, isDraft: false };
         }
-        const checks = await host.checks(p.path, pr.url);
-        if (checks.state === "fail") {
+        // Every check counts, required or not: a red or running check never merges.
+        const verdict = await this.ciGate(p, cardId, el.branch, pr, host);
+        if (verdict.state === "fail") {
           return {
             kind: "toReview",
             summary: `CI en échec sur ${pr.url} : retour en review`,
-            ci: await ciSection(host, p.path, checks.failed),
+            ci: await ciSection(host, p.path, verdict.failed),
           };
         }
-        // Pending required checks: wait in Merge, or schedule GitHub's auto-merge when the board allows it.
+        // Checks still running: wait in Merge (the CI watcher follows), or let GitHub's auto-merge wait for them, which
+        // it only does for required checks: on a base without any, GitHub would merge at once.
         const waitForChecks = async (url: string): Promise<PrMergeOutcome> => {
-          if (!mode.autoMerge) {
+          if (!mode.autoMerge || !(await host.requiredChecks(p.path, el.base))) {
             return {
               kind: "waiting",
               status: "pending",
@@ -310,7 +381,7 @@ export class PrFlow {
           if (!r.ok) return fallback(`pr-${r.kind}`, `gh pr merge ${url} --${mode.mergeMethod} --auto`, r.message);
           return { kind: "waiting", status: "auto", summary: `auto-merge programmé : ${url}`, merge: mergeStatusLine(url, "auto") };
         };
-        if (checks.state === "pending") return await waitForChecks(pr.url);
+        if (verdict.state === "pending") return await waitForChecks(pr.url);
         if (pr.mergeable === "CONFLICTING") {
           return fallback("pr-conflict", `gh pr view ${pr.url} --json mergeable`, `${pr.url} conflicts with ${el.base}`);
         }
@@ -340,6 +411,7 @@ export class PrFlow {
     pr: PrInfo,
     stopTest: () => void,
   ): Promise<FastMergeOutcome> {
+    this.forgetNoChecks(pr.url);
     const cwd = p.path;
     const { branch, base } = el;
     const worktree = parseWorktrees((await git(cwd, ["worktree", "list", "--porcelain"])).stdout).find((w) => w.branch === branch)?.path;
