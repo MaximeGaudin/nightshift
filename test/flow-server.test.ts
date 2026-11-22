@@ -34,7 +34,7 @@ if (!resumed && title.includes("slow")) {
   const file = ${JSON.stringify(tmp)} + "/release-" + title.replace(/\\W/g, "_");
   const end = Date.now() + 30000;
   while (!existsSync(file) && Date.now() < end) await Bun.sleep(20);
-} else await Bun.sleep(150);
+} else await Bun.sleep(150); // the run itself: no test waits on its length
 if (title.includes("fail")) e({ type: "result", is_error: true, result: "boom", session_id: "s" });
 else if (title.includes("ask") && !resumed) e({ type: "result", is_error: false, session_id: "s", structured_output: { move: "stay", summary: "q", questions: ["Why?"] } });
 else e({ type: "result", is_error: false, session_id: "s", structured_output: { move: resumed ? "stay" : "next", summary: "ok" } });
