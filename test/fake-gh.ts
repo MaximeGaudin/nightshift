@@ -116,7 +116,9 @@ if (cmd === "pr" && sub === "view") {
       isDraft: p.isDraft === true,
       ...(headSha(p) ? { headRefOid: headSha(p) } : {}),
       // Like GitHub (an object while enabled, null otherwise), but only once the PR's auto-merge state is known.
-      ...(p.autoMerge === undefined ? {} : { autoMergeRequest: p.autoMerge ? { enabledAt: "2026-01-01T00:00:00Z", mergeMethod: "MERGE" } : null }),
+      ...(p.autoMerge === undefined
+        ? {}
+        : { autoMergeRequest: p.autoMerge ? { enabledAt: "2026-01-01T00:00:00Z", mergeMethod: "MERGE" } : null }),
     }),
   );
   process.exit(0);
