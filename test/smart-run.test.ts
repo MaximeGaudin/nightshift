@@ -161,7 +161,9 @@ test("smart-run: a retry reads the cache; a new description calls again", async 
   const before = smartCalls("stay").length;
   await send(`/api/cards/${id}/retry`, { project: dir });
   await waitFor(async () => (await logOf(id)).some((l) => l.text.startsWith("Smart (cached): ")));
-  await waitFor(async () => (await card(id)).lastRun?.status === "attention" && !(await logOf(id)).some((l) => l.text.startsWith("Smart: ")));
+  await waitFor(
+    async () => (await card(id)).lastRun?.status === "attention" && !(await logOf(id)).some((l) => l.text.startsWith("Smart: ")),
+  );
   expect(smartCalls("stay").length).toBe(before);
   const retried = must(agentRuns("stay").at(-1)).argv;
   expect(retried[retried.indexOf("--effort") + 1]).toBe("high");
