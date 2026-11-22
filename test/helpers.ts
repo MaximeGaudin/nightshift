@@ -28,14 +28,23 @@ export interface ChildServer {
   home: string;
   skills: string;
   tmp: string;
+  pid: number;
   stop(): Promise<void>;
+  /** Signals the server and waits for it to exit, keeping its folder (home, skills) for a server started with `reuse`. */
+  kill(signal: NodeJS.Signals): Promise<void>;
   call(path: string, init?: { method?: string; body?: unknown }): Promise<Response>;
 }
 
 export async function startChildServer(
-  opts: { agents?: boolean; settings?: Record<string, unknown>; env?: Record<string, string> } = {},
+  opts: {
+    agents?: boolean;
+    settings?: Record<string, unknown>;
+    env?: Record<string, string>;
+    /** Start on the folder (home, skills) of a server stopped with kill(): a restart of the same Nightshift. */
+    reuse?: Pick<ChildServer, "tmp">;
+  } = {},
 ): Promise<ChildServer> {
-  const tmp = mkdtempSync(join(tmpdir(), "ns-child-"));
+  const tmp = opts.reuse?.tmp ?? mkdtempSync(join(tmpdir(), "ns-child-"));
   const home = join(tmp, "home");
   const skills = join(tmp, "skills");
   mkdirSync(skills, { recursive: true });
@@ -82,10 +91,15 @@ setInterval(() => {}, 1 << 30);
     home,
     skills,
     tmp,
+    pid: child.pid,
     async stop() {
       child.kill("SIGTERM");
       await child.exited;
       rmSync(tmp, { recursive: true, force: true });
+    },
+    async kill(signal) {
+      child.kill(signal);
+      await child.exited;
     },
     call(path, init = {}) {
       return fetch(base + path, {

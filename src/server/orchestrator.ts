@@ -538,8 +538,8 @@ export function activityLabel(name: string, input: unknown): string {
 }
 
 // Column model wins over the global setting; neither means no --model (CLI default).
-/** How long shutdown() waits for agents and test commands to exit after SIGTERM before sending SIGKILL. */
-const SHUTDOWN_GRACE_MS = 2000;
+/** Error of a run stopped because Nightshift stopped (shutdown, or a crash found at the next start). */
+export const INTERRUPTED_ERROR = "Interrupted: Nightshift stopped while the agent was running";
 /** How long a finished test command may take to flush its output pipes before "Exited" is reported anyway. */
 const STREAM_DRAIN_MS = 500;
 // biome-ignore lint/suspicious/noControlCharactersInRegex: strips ANSI colour escape sequences (ESC is the point)
@@ -582,6 +582,10 @@ export class Orchestrator {
   private tests = new Map<string, { project: Project; cardId: string; proc: ChildProcess; lines: LogLine[]; handle?: LiveRun }>();
   /** Every process this orchestrator starts for a run, on disk, so the next server can clean up after a crash. */
   private readonly registry = new RunRegistry(NIGHTSHIFT_HOME);
+  /** Set once shutdown() has begun: nothing starts any more. */
+  private stopping = false;
+  /** Resolves once the processes left by dead servers (crash) are stopped; exposed for tests. */
+  readonly reaped: Promise<void> = Promise.resolve();
   private lastTestLines = new Map<string, LogLine[]>();
 
   /** False for a test instance (`--no-agents`): it shows and edits boards but never runs agents nor takes locks. */
@@ -676,6 +680,9 @@ export class Orchestrator {
       for (const p of this.projects.values()) this.acquireLock(p);
     }, LOCK_RECHECK_MS);
     this.lockTimer.unref?.();
+    // A previous server that crashed may have left runs behind: stop their processes now, before any project opens.
+    // Their card entries stay on disk until the project is opened (markInterruptedFromRegistry).
+    if (agents) this.reaped = this.reapDeadRuns();
     const settings = getSettings();
     this.quotaPoller.configure(settings.teamclaudeEnabled, settings.teamclaudeUrl);
   }
@@ -713,6 +720,11 @@ export class Orchestrator {
       this.scheduleTick();
       // Just took the lock over: release the cards whose dependencies finished meanwhile, and sync the issues.
       if (!this.lockedBy.has(p.path)) {
+        if (this.agents) {
+          // The holder may have crashed: stop what it left, then mark its cards before this project's first tick.
+          void this.reapDeadRuns();
+          this.markInterruptedFromRegistry(p);
+        }
         this.scheduleDependencies(p);
         if (this.projects.get(p.path) === p) {
           this.issues.start(p);
@@ -749,6 +761,7 @@ export class Orchestrator {
       if (failed.length > 0) this.templateFailures.set(path, failed);
     }
     if (this.agents) this.acquireLock(p);
+    if (this.agents && !this.lockedBy.has(path)) this.markInterruptedFromRegistry(p);
     this.projects.set(path, p);
     p.onChange(() => {
       this.cancelStaleJobs(p);
@@ -959,7 +972,7 @@ export class Orchestrator {
   }
 
   private tick() {
-    if (!this.agents) return;
+    if (this.stopping || !this.agents) return;
     // Each project has its own cap: a full project only makes its own cards and quick runs wait.
     const full = (p: Project) => this.runningInProject(p) >= this.projectMaxParallel(p);
     let started = this.startQueuedQuickRuns(full);
@@ -1208,6 +1221,9 @@ export class Orchestrator {
 
   /** Runs one `claude -p` to its structured output. `done` never rejects; `cancel` stops the process. */
   runAside(p: Project, run: AsideRun): AsideHandle {
+    if (this.stopping) {
+      return { done: Promise.resolve({ ok: false, error: "Nightshift is stopping", cancelled: true, costUsd: 0 }), cancel: () => {} };
+    }
     const job: Runner = { project: p, cancelled: false };
     this.asides.add(job);
     const done = this.aside(job, run)
@@ -1956,6 +1972,8 @@ export class Orchestrator {
   private finish(job: Job, status: RunStatus, data: { output?: AgentOutput; error?: string; costUsd?: number; sessionId?: string }) {
     const p = job.project;
     job.done = true;
+    // shutdown() already wrote this run's outcome (interrupted): a late result must not overwrite it.
+    if (job.interrupted) return;
     const card = p.card(job.cardId);
     if (!card || card.columnId !== job.columnId || card.enteredColumnAt !== job.enteredAt) {
       this.log(p, job.cardId, "info", "Result discarded: the card changed column during the run.");
@@ -2150,11 +2168,11 @@ export class Orchestrator {
   }
 
   /** Stops the card's test command and everything it started; undefined when no test runs. */
-  private stopTestProcesses(p: Project, cardId: string): Promise<void> | undefined {
+  private stopTestProcesses(p: Project, cardId: string, graceMs = STOP_GRACE_MS): Promise<void> | undefined {
     const t = this.tests.get(this.key(p, cardId));
     const pid = t?.proc.pid;
     if (!t || !pid) return undefined;
-    if (t.handle) return stopRunProcesses(t.handle);
+    if (t.handle) return stopRunProcesses(t.handle, graceMs);
     const signal = (s: NodeJS.Signals) => {
       try {
         process.kill(-pid, s);
@@ -2165,7 +2183,7 @@ export class Orchestrator {
       setTimeout(() => {
         if (this.tests.has(this.key(p, cardId))) signal("SIGKILL");
         resolve();
-      }, STOP_GRACE_MS).unref?.(),
+      }, graceMs).unref?.(),
     );
   }
 
@@ -2173,43 +2191,134 @@ export class Orchestrator {
    * Stops every agent and test command: SIGTERM, a short grace period, then SIGKILL for whatever is left.
    * The caller must await it before exiting the process, otherwise a process that ignores SIGTERM would be orphaned.
    */
-  async shutdown(graceMs = SHUTDOWN_GRACE_MS) {
+  async shutdown(graceMs = STOP_GRACE_MS) {
+    this.stopping = true;
     clearInterval(this.lockTimer);
     this.issues.shutdown();
     this.ci.shutdown();
     this.prStatus.shutdown();
     this.briefing.shutdown();
     this.quotaPoller.stop();
-    const groups = [...this.tests.values()].map((t) => t.proc.pid).filter((pid): pid is number => !!pid);
+    // The outcome of the running card runs is on disk before anything is signalled: they are not restarted.
+    this.markRunningInterrupted();
     // Queued quick runs are dropped; the running ones are stopped like jobs.
     for (const q of [...this.quickRuns.values()]) if (q.status === "queued") this.quickRuns.delete(q.id);
     const jobs: Runner[] = [...this.jobs.values(), ...this.quickRuns.values(), ...this.asides];
-    for (const t of this.tests.values()) this.stopTest(t.project, t.cardId);
-    for (const job of jobs) this.kill(job);
-    const groupAlive = (pid: number) => {
-      try {
-        process.kill(-pid, 0);
-        return true;
-      } catch {
-        return false;
-      }
-    };
-    const jobAlive = (job: Runner) => !!job.proc && job.proc.exitCode === null && job.proc.signalCode === null;
-    const end = Date.now() + graceMs;
-    while (Date.now() < end && (groups.some(groupAlive) || jobs.some(jobAlive))) await new Promise((r) => setTimeout(r, 25));
-    for (const pid of groups) {
-      try {
-        process.kill(-pid, "SIGKILL");
-      } catch {}
+    const stops: Promise<void>[] = [];
+    for (const t of [...this.tests.values()]) {
+      const stop = this.stopTestProcesses(t.project, t.cardId, graceMs);
+      if (stop) stops.push(stop);
     }
     for (const job of jobs) {
-      try {
-        if (jobAlive(job)) job.proc?.kill("SIGKILL");
-      } catch {}
+      job.cancelled = true;
+      job.abortWait?.();
+      if (job.handle) stops.push(stopRunProcesses(job.handle, graceMs));
+      else if (job.proc) stops.push(stopProcess(job.proc, graceMs));
     }
+    await Promise.all(stops);
     for (const p of this.projects.values()) {
       p.close();
       if (!this.lockedBy.has(p.path)) rmSync(this.lockFile(p), { force: true });
     }
+    this.registry.close();
   }
+
+  /** shutdown(): every active card run whose card still sits where it ran is recorded as interrupted (or cancelled). */
+  private markRunningInterrupted() {
+    const byProject = new Map<Project, Job[]>();
+    for (const job of this.jobs.values()) {
+      if (job.done) continue;
+      byProject.set(job.project, [...(byProject.get(job.project) ?? []), job]);
+    }
+    for (const [p, jobs] of byProject) {
+      if (!this.canRunAgents(p)) continue;
+      try {
+        p.mutate(() => {
+          for (const job of jobs) {
+            const card = p.card(job.cardId);
+            if (!card || card.columnId !== job.columnId || card.enteredColumnAt !== job.enteredAt) continue;
+            job.interrupted = true;
+            const sessionId = job.sessionId ?? job.resumedFrom ?? card.pendingAnswer?.sessionId;
+            // Stopped by the user just before the shutdown: a plain cancel, as it would have been recorded.
+            this.writeStopped(p, card, { columnId: job.columnId, sessionId, skill: job.skill, interrupted: !job.cancelled });
+          }
+        });
+      } catch (e) {
+        console.error(`Could not record the interrupted runs of ${p.path}:`, e);
+      }
+    }
+  }
+
+  /**
+   * Stops the processes of the runs left by dead servers. The entries are read synchronously, so a card entry taken
+   * by markInterruptedFromRegistry right after is still stopped; non-card entries are dropped once stopped.
+   */
+  private reapDeadRuns(): Promise<void> {
+    const dead = this.registry.readDeadEntries();
+    if (dead.length === 0) return Promise.resolve();
+    return Promise.all(
+      dead.map((e) =>
+        // Without its start time, a root pid could have been reused: only the token and the snapshots count then.
+        stopRunProcesses({ token: e.token, rootPid: e.rootStartedAt ? e.rootPid : 0, rootStartedAt: e.rootStartedAt, tracked: e.tracked }),
+      ),
+    ).then(() => this.registry.dropNonCardDeadEntries());
+  }
+
+  /**
+   * After a crash: marks the cards whose run the dead server left behind, before this project's first tick. Only a
+   * card still in the column and column entry it ran in, with no outcome newer than the run, is marked.
+   */
+  private markInterruptedFromRegistry(p: Project) {
+    const entries = this.registry.takeInterrupted(p.path);
+    if (entries.length === 0) return;
+    try {
+      p.mutate(() => {
+        for (const e of entries) {
+          const card = e.cardId ? p.card(e.cardId) : undefined;
+          if (!card || card.columnId !== e.columnId || card.enteredColumnAt !== e.enteredColumnAt) continue;
+          if (card.lastRun && card.lastRun.at > e.startedAt) continue;
+          const sessionId = e.sessionId ?? card.pendingAnswer?.sessionId;
+          this.writeStopped(p, card, { columnId: card.columnId, sessionId, skill: this.sessionSkill(p, card), interrupted: true });
+        }
+      });
+    } catch (e) {
+      console.error(`Could not record the interrupted runs of ${p.path}:`, e);
+    }
+  }
+
+  /** Inside a mutation: the run on this card stopped without a result (interrupted by Nightshift, or cancelled). */
+  private writeStopped(
+    p: Project,
+    card: Card,
+    r: { columnId: string; sessionId?: string; skill?: string; interrupted: boolean; summary?: string },
+  ) {
+    delete card.pendingAnswer;
+    card.lastRun = {
+      columnId: r.columnId,
+      status: "cancelled",
+      at: new Date().toISOString(),
+      ...(r.interrupted ? { interrupted: true, error: INTERRUPTED_ERROR } : {}),
+      ...(r.summary ? { summary: r.summary } : {}),
+      ...(r.sessionId ? { sessionId: r.sessionId } : {}),
+      ...(r.skill ? { skill: r.skill } : {}),
+    };
+    if (r.sessionId) card.sessionId = r.sessionId;
+    const colName = p.column(r.columnId)?.name ?? "?";
+    p.addHistory(
+      card,
+      "run",
+      `${colName}: ${r.interrupted ? "interrupted (Nightshift stopped)" : (r.summary ?? "cancelled").toLowerCase()}`,
+    );
+  }
+}
+
+/** SIGTERM, up to graceMs for the process to exit, then SIGKILL (a process with no registered handle: a smart call). */
+async function stopProcess(proc: Subprocess, graceMs: number) {
+  try {
+    proc.kill("SIGTERM");
+  } catch {}
+  await Promise.race([proc.exited, Bun.sleep(graceMs)]);
+  try {
+    if (proc.exitCode === null && proc.signalCode === null) proc.kill("SIGKILL");
+  } catch {}
 }

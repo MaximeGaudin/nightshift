@@ -194,6 +194,7 @@ export async function stopRunProcesses(h: RunHandle, graceMs = STOP_GRACE_MS): P
   try {
     const first = await snapshot(h);
     if (first.table.length === 0) {
+      if (h.rootPid <= 1) return;
       // `ps` failed: the root and its group (it leads one, being spawned detached) are all that can be reached.
       for (const sig of ["SIGTERM", "SIGKILL"] as const) {
         signal(-h.rootPid, sig);
