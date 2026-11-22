@@ -3,7 +3,7 @@
 import { t } from "./i18n/index.ts";
 
 /** `{ tab: n }` activates the n-th project tab (1-based). */
-export type Shortcut = "palette" | "newCard" | "help" | { tab: number };
+export type Shortcut = "palette" | "newCard" | "briefing" | "help" | { tab: number };
 
 export interface ShortcutEvent {
   key: string;
@@ -44,6 +44,7 @@ export function shortcutFor(e: ShortcutEvent, ctx: { dialogOpen: boolean }): Sho
   if (digit && [e.metaKey, e.ctrlKey, e.altKey].filter(Boolean).length === 1) return { tab: Number(digit) };
   if (e.metaKey || e.ctrlKey || e.altKey) return null;
   if (e.key === "c" || e.key === "C") return "newCard";
+  if (e.key === "b" || e.key === "B") return "briefing";
   if (e.key === "?") return "help";
   return null;
 }
@@ -54,6 +55,7 @@ export function shortcutHelpRows(): { keys: string[]; label: string }[] {
     { keys: ["⌘ K", "Ctrl K"], label: t("shortcuts.palette") },
     { keys: ["⌘ 1–9", "⌥ 1–9"], label: t("shortcuts.tab") },
     { keys: ["C"], label: t("shortcuts.newCard") },
+    { keys: ["B"], label: t("shortcuts.briefing") },
     { keys: ["?"], label: t("shortcuts.help") },
     { keys: [t("shortcuts.keyEscape")], label: t("shortcuts.close") },
     { keys: [t("shortcuts.keySpace")], label: t("shortcuts.drag") },

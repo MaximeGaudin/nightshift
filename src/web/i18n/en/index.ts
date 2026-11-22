@@ -1,4 +1,5 @@
 import { board } from "./board.ts";
+import { briefing } from "./briefing.ts";
 import { card } from "./card.ts";
 import { columns } from "./columns.ts";
 import { common } from "./common.ts";
@@ -18,4 +19,5 @@ export const en = {
   ...palette,
   ...shortcuts,
   ...quickRun,
+  ...briefing,
 };

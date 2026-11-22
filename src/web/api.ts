@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { AgentFeaturesOverride } from "../shared/agentFeatures.ts";
 import type { CardAttachmentStored, CardAttachmentUpload } from "../shared/attachments.ts";
+import type { BriefingState } from "../shared/briefing.ts";
 import type { FlowState } from "../shared/flow.ts";
 import type { IssueSourceInput, IssueSyncPreview, IssueSyncResult } from "../shared/issues.ts";
 import type { PrCiStatus, PullRequestSettings } from "../shared/pullRequests.ts";
@@ -154,6 +155,23 @@ export const api = {
     call<ProjectSnapshot & { results: IssueSyncResult[] }>("POST", "/api/issue-sources/sync", { project, sourceId, prune: true }),
   /** Dry run of a resync: how many cards it would import, update and delete. */
   previewResync: (project: string, sourceId: string) => call<IssueSyncPreview>("POST", "/api/issue-sources/preview", { project, sourceId }),
+  briefing: (project: string) => call<{ briefing: BriefingState | null }>("GET", `/api/briefing?${q(project)}`),
+  /** Starts a briefing, or triages the Backlog cards that arrived since the last triage. */
+  briefingStart: (project: string) => call<{ briefing: BriefingState | null }>("POST", "/api/briefing/start", { project }),
+  briefingEnd: (project: string) => call<{ briefing: BriefingState | null }>("POST", "/api/briefing/end", { project }),
+  /** Sends the easy cards (all, or the given ones) out of the Backlog. */
+  briefingLaunchEasy: (project: string, cardIds?: string[]) =>
+    call<{ briefing: BriefingState | null; launched: number }>("POST", "/api/briefing/launch-easy", {
+      project,
+      ...(cardIds ? { cardIds } : {}),
+    }),
+  /** Turns an easy card into a topic to talk about. */
+  briefingDiscuss: (project: string, cardId: string) =>
+    call<{ briefing: BriefingState | null; topicId: string }>("POST", "/api/briefing/discuss", { project, cardId }),
+  briefingSay: (project: string, topicId: string, answers: Record<string, string>, text: string) =>
+    call<{ briefing: BriefingState | null }>("POST", `/api/briefing/topics/${topicId}/say`, { project, answers, text }),
+  briefingTopic: (project: string, topicId: string, action: "finalize" | "launch" | "skip" | "reopen" | "retry" | "focus") =>
+    call<{ briefing: BriefingState | null }>("POST", `/api/briefing/topics/${topicId}/${action}`, { project }),
   detectIssueSource: (project: string) =>
     call<{ provider?: string; baseUrl?: string; repo?: string }>("GET", `/api/issue-sources/detect?${q(project)}`),
 };
@@ -245,4 +263,25 @@ export function useTeamclaudeWait(): TeamclaudeWait | null {
   }, []);
   useServerEvents((e) => e.type === "teamclaude" && setWait(e.wait));
   return wait ?? null;
+}
+
+/** The briefing of a project (null when there is none): loaded when the project changes, then pushed by the server. */
+export function useBriefing(project: string | undefined): BriefingState | null {
+  const [entry, setEntry] = useState<{ project: string; briefing: BriefingState | null } | null>(null);
+  useEffect(() => {
+    if (!project) return;
+    let stale = false;
+    api
+      .briefing(project)
+      // A pushed state that arrived first is newer than this answer.
+      .then((r) => !stale && setEntry((cur) => (cur?.project === project ? cur : { project, briefing: r.briefing })))
+      .catch(() => {});
+    return () => {
+      stale = true;
+    };
+  }, [project]);
+  useServerEvents((e) => {
+    if (e.type === "briefing" && e.project === project) setEntry({ project: e.project, briefing: e.briefing });
+  });
+  return entry && entry.project === project ? entry.briefing : null;
 }

@@ -11,6 +11,7 @@
 - **Skill columns**: every card entering a column is processed by the skill you chose, in your project folder.
 - **Batched questions**: a blocked agent returns all its questions at once; answering resumes the same session.
 - **Feedback and resume**: send free-text feedback to the agent from any card.
+- **Briefing**: a working session on your Backlog. The easy cards start at once, the others are decided with an agent, oldest first.
 - **Fast forward and pause**: one button sends every ready Backlog card through the board in parallel, another pauses automatic runs.
 - **Dependencies**: a card can wait in Backlog until other cards are done, then start on its own.
 - **Project tabs**: keep several projects open in one browser tab and switch with a click or ⌥1–9.
@@ -87,6 +88,19 @@ Nightshift ships six template skills in the repository's own `.claude/skills/` f
 - Customize a skill by editing its project copy, or in the Skills modal.
 - If a copy fails, the board is still created and a toast names the skills that were not copied.
 
+## Briefing
+
+The board is the factory. The briefing is where you sit down with your Backlog: switch to it with the **Board / Briefing** control in the header, the `B` key, or the command palette. One briefing per project.
+
+1. **Triage.** One agent call reads every Backlog card that is neither a draft nor held by its dependencies (at most 120, oldest first) and sorts them. *Easy*: an agent can build it without asking you anything. *To decide*: a product decision is missing. Related cards to decide are grouped into one topic, so you decide once.
+2. **Ready to launch.** The easy cards are shown in full: what the agent will build, why nothing is to decide, and the card's own description. Untick what should wait, send a card to a conversation with **Discuss first**, then launch: the cards go to the first column after the Backlog that they do not skip.
+3. **To decide, oldest first.** Each topic is a conversation. The agent reads the code and writes a short briefing (what this is about, what exists today, how the cards relate), then lists the decisions to make, each with options and the one it recommends. Pick options, write your own answer, or ask anything. **Take the recommendations** fills every open answer; **Let the agent decide the rest** settles what is left.
+4. **Launch.** As soon as no decision is open, the agent writes `## Decisions` and `## Acceptance` into each card and the cards leave the Backlog. When you have answered every question, the view moves to the next topic without waiting: a topic comes back to you only if your answer opens a new decision.
+
+Two topics are prepared ahead of you, so the next conversation is ready when you finish one. **Launch as is** sends the cards of a topic as they are; **Leave in Backlog** skips it. Cards created during the briefing can be triaged from the bottom of the left rail. A card moved or deleted on the board leaves the briefing.
+
+The briefing agents are read-only (`Edit`, `Write` and `NotebookEdit` are denied) and run outside the card queue: a conversation never waits for a free agent slot, and it also runs while the project is paused. A launched card then runs like any card moved by hand. The briefing is saved in `~/.nightshift/briefings/` (never in `nightshift.json`): it survives a restart, and a turn that was in flight can be retried. Ending the briefing forgets the conversations; what was written to the cards stays. The routes are under `/api/briefing` and the state is pushed as a `briefing` WebSocket event.
+
 ## Fast forward and pause
 
 Two buttons in the board header, per project.
@@ -138,6 +152,7 @@ Then turn on **Run agents through teamclaude** in Settings (off by default) and 
 - `~/.nightshift/settings.json`: global settings (permission mode, model, extra `claude` args, teamclaude, recent projects).
 - `~/.nightshift/logs/`: last agent log per card (removed with the card).
 - `~/.nightshift/screenshots/`: card screenshots.
+- `~/.nightshift/briefings/`: the briefing of each project (triage result and conversations).
 - `~/.nightshift/locks/`: one lock per open project folder.
 
 ## Permissions
@@ -158,7 +173,7 @@ Scripts: `bun run lint` (Biome), `bun run format`, `bun run typecheck`, `bun tes
 ## Layout
 
 - `bin/nightshift.ts`: CLI entry point.
-- `src/server/`: `store.ts` (board file), `orchestrator.ts` (queue, `claude` processes, questions), `skills.ts`, `settings.ts`, `server.ts` (HTTP + WebSocket API, serves the UI).
+- `src/server/`: `store.ts` (board file), `orchestrator.ts` (queue, `claude` processes, questions), `briefing.ts` (backlog triage and decision conversations), `skills.ts`, `settings.ts`, `server.ts` (HTTP + WebSocket API, serves the UI).
 - `src/web/`: React UI bundled by Bun.
 - `src/web/i18n/`: in-house translation layer, `en/` and `fr/` message files per namespace.
 - `.claude/skills/`: the skills Nightshift runs on its own board, also the templates copied into new projects.
