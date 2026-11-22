@@ -290,7 +290,7 @@ export function CardModal(props: CardModalProps) {
   );
 }
 
-function CardModalFooter({
+export function CardModalFooter({
   project,
   card,
   board,
@@ -331,7 +331,7 @@ function CardModalFooter({
         live !== "running" &&
         lr?.sessionId &&
         lr.columnId === card.columnId &&
-        (lr.status === "error" || lr.status === "cancelled") && (
+        (lr.status === "error" || lr.status === "cancelled" || lr.status === "attention") && (
           <Button type="button" variant="outline" title={t("card.resumeHint")} onClick={() => guard(api.resumeSession(project, card.id))}>
             {t("card.resume")}
           </Button>

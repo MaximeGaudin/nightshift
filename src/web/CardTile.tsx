@@ -96,9 +96,10 @@ export function CardTile({
     error: t("board.status.error"),
     cancelled: t("board.status.cancelled"),
     question: t("board.status.question"),
+    attention: t("board.status.attention"),
   };
   const statusColor =
-    status === "error"
+    status === "error" || status === "attention"
       ? "text-err"
       : status === "question" || status === "paused"
         ? "text-warn"
@@ -216,6 +217,9 @@ export function CardTile({
           {columns && <CardTimers card={card} columns={columns} column={column} inline />}
           {status === "success" && lr?.summary && (
             <span className="muted min-w-0 truncate font-normal"> · {toPlainText(lr.summary).slice(0, 80)}</span>
+          )}
+          {status === "attention" && lr?.error && (
+            <span className="muted min-w-0 truncate font-normal"> · {toPlainText(lr.error).slice(0, 80)}</span>
           )}
           {status === "question" && lr?.questions && (
             <span className="muted min-w-0 truncate font-normal"> · {tn("board.card.questions", lr.questions.length)}</span>

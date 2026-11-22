@@ -2,6 +2,7 @@
 import {
   Ban,
   Circle,
+  CircleAlert,
   CircleCheck,
   CircleDashed,
   CircleDot,
@@ -26,6 +27,7 @@ const STATUS_ICONS: Record<Status, LucideIcon> = {
   error: CircleX,
   cancelled: Ban,
   question: CircleQuestionMark,
+  attention: CircleAlert,
 };
 
 /** Run or live state of a card, colored by the `.st-<status>` class. */

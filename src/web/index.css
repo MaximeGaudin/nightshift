@@ -188,7 +188,8 @@
   .st-icon.st-success {
     color: var(--ok);
   }
-  .st-icon.st-error {
+  .st-icon.st-error,
+  .st-icon.st-attention {
     color: var(--err);
   }
   .st-icon.st-cancelled,
@@ -404,7 +405,8 @@
     opacity: 1;
   }
 }
-.card.st-error {
+.card.st-error,
+.card.st-attention {
   --rail: var(--err);
   border-color: color-mix(in srgb, var(--err) 35%, transparent);
 }
@@ -437,7 +439,8 @@
   background: var(--ok-soft);
   color: var(--ok);
 }
-.status-chip.st-error {
+.status-chip.st-error,
+.status-chip.st-attention {
   background: var(--err-soft);
 }
 .status-chip.st-question,
