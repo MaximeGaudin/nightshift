@@ -13,6 +13,11 @@ export const settings = {
   "settings.projectParallel.label": "Parallel agents in this project",
   "settings.projectParallel.help": "Saved in this project's nightshift.json. Each column also has its own limit.",
   "settings.sound.label": "Notification sounds",
+  "settings.cpu.label": "Limit agent launches by CPU load",
+  "settings.cpu.help":
+    "While the machine's CPU load is at or above the limit, no new card agent starts. Agents already running are never stopped.",
+  "settings.cpuLimit.label": "CPU limit (%)",
+  "settings.cpuLimit.help": "Whole number from 10 to 100, averaged over 10 seconds. Quick runs ignore it.",
   "settings.sound.help":
     "Plays a sound when a card needs you (inert column, question, error). The browser requires a first click on the page.",
   "settings.carryTokens.label": "Max carried context (tokens)",

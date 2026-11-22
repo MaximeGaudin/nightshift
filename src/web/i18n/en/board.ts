@@ -113,6 +113,8 @@ export const board = {
   "board.quota.duration.hm": "{h}h {m}m",
   "board.quota.duration.dh": "{d}d {h}h",
   "board.app.queued": "{count} queued",
+  "board.app.cpuThrottled": "CPU {load}%",
+  "board.app.cpuThrottledTip": "New agents waiting: CPU load {load}% \u2265 limit {limit}%.",
   "board.flow.fastForwardOn": "Fast forward: on (click to turn off)",
   "board.flow.fastForwardOff": "Fast forward: off (click to move every ready Backlog card out and rerun cancelled runs)",
   "board.flow.playing": "Playing: click to pause",
