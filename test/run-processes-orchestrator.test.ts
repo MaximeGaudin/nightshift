@@ -75,3 +75,25 @@ test("run-end-kills-leftover", async () => {
   expect((await card())?.lastRun?.status).not.toBe("cancelled");
   await waitFor(() => registryEntries() === 0, 8000, registryEntries);
 }, 30000);
+
+test("test-command-end-kills-leftover", async () => {
+  const { dir, id, card } = await addAgentCard(srv, "stay");
+  await waitFor(async () => !!(await card())?.lastRun, 10000, card);
+  const bgPidFile = `${pidFile}.test`;
+  await srv.call(`/api/cards/${id}/test`, {
+    method: "PUT",
+    body: { project: dir, command: `${process.execPath} -e "setInterval(() => {}, 1000)" & echo $! > ${bgPidFile}; exit 0` },
+  });
+  expect((await srv.call(`/api/cards/${id}/test/start`, { body: { project: dir } })).status).toBe(200);
+  await waitFor(() => existsSync(bgPidFile) && readFileSync(bgPidFile, "utf8").trim() !== "", 8000);
+  const pid = Number(readFileSync(bgPidFile, "utf8"));
+  try {
+    await waitFor(
+      () => !alive(pid),
+      8000,
+      () => `still alive: ${pid}`,
+    );
+  } finally {
+    if (alive(pid)) process.kill(pid, "SIGKILL");
+  }
+}, 30000);

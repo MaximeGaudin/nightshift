@@ -2187,8 +2187,11 @@ export class Orchestrator {
         );
     }
     const done = (text: string) => {
-      // A test command that ends on its own may leave a daemon on purpose: it is only stopped by Stop or shutdown.
-      if (handle) this.registry.remove(handle.id);
+      // Ended on its own: what it left running in the background (`server &`) is stopped like any run's processes.
+      if (handle) {
+        const h = handle;
+        void stopRunProcesses(h).finally(() => this.registry.remove(h.id));
+      }
       if (this.tests.get(key) !== entry) return;
       this.testLine(p, cardId, lines, "info", text);
       this.tests.delete(key);
