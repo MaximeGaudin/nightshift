@@ -39,7 +39,7 @@ test("tests-isolation: keepSettingsGlobal puts back the very object a module alr
 });
 
 // The real cross-file scenario of the bug: environment-prompt.test.ts makes settings.ts capture the global,
-// issue-tokens.test.ts resets it to get fresh instances, nightshift.test.ts then reads it from the module cache.
+// issue-tokens.test.ts resets it to get fresh instances, nightshift-units.test.ts then reads it from the module cache.
 // Whatever the CI grouping, a file that leaves `__nightshiftSettings` undefined fails this run.
 test("tests-isolation: files that reset the settings global do not break the files that follow", async () => {
   const proc = Bun.spawn(
@@ -48,7 +48,7 @@ test("tests-isolation: files that reset the settings global do not break the fil
       "test",
       "./test/environment-prompt.test.ts",
       "./test/issue-tokens.test.ts",
-      "./test/nightshift.test.ts",
+      "./test/nightshift-units.test.ts",
       "-t",
       "soundNotifications|token-store",
     ],
