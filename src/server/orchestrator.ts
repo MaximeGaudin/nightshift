@@ -40,6 +40,7 @@ import { canSendFeedback, cardRef, columnMaxParallel, isDoneColumn } from "../sh
 import { safeHttpUrl } from "../shared/urls.ts";
 import type { QuotaSnapshot } from "../shared/usage.ts";
 import { removeAttachments } from "./attachments.ts";
+import { BackgroundTasks } from "./backgroundTasks.ts";
 import { type AsideHandle, type AsideResult, type AsideRun, Briefing } from "./briefing.ts";
 import { CI_POLL_MS, CiWatcher } from "./ciWatcher.ts";
 import { buildEnvironment } from "./environment.ts";
@@ -108,6 +109,8 @@ interface Runner {
   markerSeen?: boolean;
   /** A TodoWrite was seen in the current process: tool activity no longer overwrites it. */
   todoSeen?: boolean;
+  /** Background commands the current process started and that have not ended; reset at each spawn. */
+  background?: BackgroundTasks;
   /** Set while the launch waits in the teamclaude gate: removes it from there. */
   abortWait?: () => void;
 }
@@ -300,6 +303,30 @@ export const RESULT_SCHEMA = {
 export const CONTINUE_PREFIX = `New step for this card. The messages above are its earlier steps, in other columns: keep their context, but follow only the instructions below for this step, and return this step's structured output.`;
 
 /** Sent when resuming a session that stopped before returning its structured result. */
+/**
+ * How agents run long commands and wait for them. `claude -p` asks for the structured output as soon as a turn ends,
+ * so an agent that ends its turn to wait for a background command is forced to answer before the command is done.
+ */
+export const LONG_COMMANDS_RULE = [
+  "- Any command that can run longer than 2 minutes (test suites, builds, `scripts/run_test*`) starts with `run_in_background: true` and an explicit `timeout` from the first call: its expected duration plus margin, up to 7200000 ms (2 h). Never rely on the 120 s default and never start it in a plain foreground call.",
+  "- Never end your turn while a background command you need is still running: wait for it inside the turn with foreground calls that block (for example Bash with `timeout: 600000` waiting on its output file), repeated until it ends; only then return the structured output.",
+  '- `move: "stay"` with no questions means the work is not finished: the board shows the card as needing attention.',
+].join("\n");
+
+/** Opening phrase of the prompt sent when a run returned while its background commands were still running. */
+export const BACKGROUND_PROMPT_LEAD =
+  "Your previous turn returned the structured output while background commands you started were still running";
+
+/** Resumes a session whose result came back while background commands it started were still running. */
+export function buildBackgroundPrompt(commands: string[]): string {
+  return `${BACKGROUND_PROMPT_LEAD}:
+${commands.map((c) => `- ${c.slice(0, 200)}`).join("\n")}
+The session ended since, so they are no longer running. Run again the ones you still need, following the rules below, wait for them inside your turn, check their result, then return the structured output exactly once, describing the final state.
+${LONG_COMMANDS_RULE}
+${PROGRESS_RULE}
+When resuming, re-emit the marker of the step currently in progress before anything else.`;
+}
+
 export const RECOVER_PROMPT = `Your previous run in this session stopped before returning Nightshift's structured output (it may have been interrupted, or it only returned interim results while background work was running).
 Check the actual state of your work first (worktrees, branches, commits, background tasks). If work remains, finish it. Then return the structured output exactly once, describing the final state.
 ${PROGRESS_RULE}
@@ -1494,6 +1521,29 @@ export class Orchestrator {
               .filter(Boolean)
           : [];
         const output: AgentOutput = { ...out, questions };
+        // A result given while a background command it started still runs is not final: the agent did not wait.
+        // Resumed once (the run's single recovery) to run it again and wait; a second time, it needs attention.
+        const open = questions.length === 0 ? (job.background?.openCommands() ?? []) : [];
+        if (open.length > 0) {
+          if (attempt === 0 && sessionId) {
+            this.log(
+              p,
+              card.id,
+              "info",
+              `Returned while a background command was still running (${open.length}). Resuming the session once to wait for it.`,
+            );
+            prompt = buildBackgroundPrompt(open);
+            resumeId = sessionId;
+            continue;
+          }
+          this.finish(job, "attention", {
+            output,
+            costUsd,
+            error: `Returned while a background command was still running: ${open.map((c) => c.slice(0, 200)).join("; ")}`.slice(0, 2000),
+            ...(sessionId ? { sessionId } : {}),
+          });
+          return;
+        }
         // "stay" with no questions is how every skill says "stopped, not finished": never let it look done.
         // Feedback runs are driven by the user (staying is legitimate there), and inert columns have no work to finish.
         const unfinished =
@@ -1652,6 +1702,7 @@ export class Orchestrator {
   ): Promise<{ startError: string } | { result: StreamEvent | null; stderr: string; exit: string }> {
     const p = job.project;
     job.progress = undefined;
+    job.background = new BackgroundTasks();
     job.markerSeen = false;
     job.todoSeen = false;
     const settings = getSettings();
@@ -1794,6 +1845,7 @@ export class Orchestrator {
   }
 
   private handleEvent(job: Runner, target: RunTarget, ev: StreamEvent) {
+    job.background?.onEvent(ev);
     if (ev.type === "assistant") {
       // Subagent messages carry parent_tool_use_id: they are logged but never drive the card's progress.
       const own = !ev.parent_tool_use_id;

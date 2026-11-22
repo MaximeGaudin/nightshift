@@ -105,3 +105,57 @@ test("run-stay-feedback-unchanged: feedback answered with stay in an inert colum
   expect(c.lastRun?.status).toBe("success");
   expect(c.columnId).toBe(done.id);
 });
+
+/** Agent launches of a background scenario: the first one has its title, the resumed ones name it in the wait prompt. */
+const bgLaunches = (scenario: string) =>
+  readFileSync(argsLog, "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((l) => JSON.parse(l) as { title: string; resumed: boolean; resumeId: string | null; prompt: string })
+    .filter((l) => l.title === scenario || (l.resumed && l.prompt.includes(`# ${scenario}\n`)));
+
+test("bg-guard-resumes-once: a result given while a background command runs is resumed once with the wait prompt", async () => {
+  const { dir, work, done, card } = await setup();
+  const { id } = await post("/api/cards", { project: dir, columnId: work.id, title: "bg-open-once" });
+  await waitFor(async () => (await card(id)).lastRun?.status !== undefined);
+  const c = await card(id);
+  expect(c.lastRun?.status).toBe("success");
+  expect(c.columnId).toBe(done.id);
+  const runs = bgLaunches("bg-open-once");
+  expect(runs).toHaveLength(2);
+  expect(runs[1]?.resumeId).toBe("sess-bg");
+  expect(runs[1]?.prompt).toContain(
+    "Your previous turn returned the structured output while background commands you started were still running",
+  );
+  expect(runs[1]?.prompt).toContain("- sleep 999 # bg-open-once");
+  expect(runs[1]?.prompt).toContain("run_in_background: true");
+});
+
+test("bg-guard-attention: a second early result needs attention and the card does not move", async () => {
+  const { dir, work, card } = await setup();
+  const { id } = await post("/api/cards", { project: dir, columnId: work.id, title: "bg-open" });
+  await waitFor(async () => (await card(id)).lastRun?.status !== undefined);
+  const c = await card(id);
+  expect(c.lastRun?.status).toBe("attention");
+  expect(c.lastRun?.error).toBe("Returned while a background command was still running: sleep 999 # bg-open");
+  expect(c.columnId).toBe(work.id);
+  expect(bgLaunches("bg-open")).toHaveLength(2);
+});
+
+test("bg-guard-closed-success: a background command that ended before the result changes nothing", async () => {
+  const { dir, work, done, card } = await setup();
+  const { id } = await post("/api/cards", { project: dir, columnId: work.id, title: "bg-closed" });
+  await waitFor(async () => (await card(id)).lastRun?.status !== undefined);
+  expect((await card(id)).lastRun?.status).toBe("success");
+  expect((await card(id)).columnId).toBe(done.id);
+  expect(bgLaunches("bg-closed")).toHaveLength(1);
+});
+
+test("bg-guard-subagent-ignored: a subagent's background command is not the card's", async () => {
+  const { dir, work, done, card } = await setup();
+  const { id } = await post("/api/cards", { project: dir, columnId: work.id, title: "bg-subagent" });
+  await waitFor(async () => (await card(id)).lastRun?.status !== undefined);
+  expect((await card(id)).lastRun?.status).toBe("success");
+  expect((await card(id)).columnId).toBe(done.id);
+  expect(bgLaunches("bg-subagent")).toHaveLength(1);
+});

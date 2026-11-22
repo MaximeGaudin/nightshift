@@ -18,6 +18,9 @@
 // Smart calls (prompt starting with <nightshift-smart>) never write FAKE_ARGS_LOG: they write { title, argv, prompt } to
 // FAKE_SMART_LOG and answer in --output-format json. The card title drives them: "smart-fail" (error result),
 // "smart-slow" (sleeps 10 s), "smart-invalid" (effort max); otherwise mcp on, effort high, cost 0.0012.
+// Background commands: "bg-open" starts a Bash command in the background and returns move "next" without waiting, on every
+// launch (resumed too); "bg-open-once" does it only at the first launch; "bg-closed" starts it and gets its
+// <task-notification> before the result; "bg-subagent" starts it from a subagent (parent_tool_use_id set).
 // A card title containing FAKE_KEEP_DESC leaves the description alone; FAKE_SECTIONS adds a "Result" section instead.
 // Briefing calls (prompt starting with <nightshift-briefing-…>) write { kind, argv, prompt } to FAKE_BRIEFING_LOG. Triage: a card
 // whose title contains "easy" is easy, cards sharing a "[group]" tag form one topic, "triage-fail" fails the call. First turn of
@@ -193,6 +196,11 @@ if (continuing && prompt.includes("FAKE_UNKNOWN_SESSION")) {
   process.exit(1);
 }
 emit({ type: "system", subtype: "init", session_id: "sess-1", model: "fake" });
+const bgScenario = title.startsWith("bg-")
+  ? title
+  : resumed && prompt.includes("background commands you started were still running")
+    ? (prompt.match(/# (bg-[a-z-]+)/)?.[1] ?? "")
+    : "";
 if (title === "rate-limit") {
   emit({
     type: "rate_limit_event",
@@ -310,6 +318,43 @@ if (quick) {
       structured_output: { status: "success", summary: `fake quick run: ${instruction || "no instruction"}` },
     });
   }
+} else if (bgScenario) {
+  // A Bash command left running in the background (see the header). Its command names the scenario, so the resumed
+  // run, whose prompt has no <title>, finds it in the wait prompt.
+  if (!(resumed && bgScenario === "bg-open-once")) {
+    const parent = bgScenario === "bg-subagent" ? "tu-agent" : null;
+    emit({
+      type: "assistant",
+      parent_tool_use_id: parent,
+      message: {
+        content: [
+          { type: "tool_use", id: "tu-bg", name: "Bash", input: { command: `sleep 999 # ${bgScenario}`, run_in_background: true } },
+        ],
+      },
+    });
+    emit({
+      type: "user",
+      parent_tool_use_id: parent,
+      tool_use_result: { backgroundTaskId: "bg1" },
+      message: {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "tu-bg",
+            content: "Command running in background with ID: bg1. Output is being written to: /tmp/bg1.output.",
+          },
+        ],
+      },
+    });
+    if (bgScenario === "bg-closed") {
+      emit({
+        type: "user",
+        message: { role: "user", content: "<task-notification>\n<task-id>bg1</task-id>\n<status>completed</status>\n</task-notification>" },
+      });
+    }
+  }
+  emit({ type: "result", is_error: false, session_id: "sess-bg", structured_output: { move: "next", summary: `${bgScenario} done` } });
 } else if (title === "no-output" && !resumed) {
   // Finished its turn without the structured result (e.g. only interim results while background work ran).
   emit({ type: "result", is_error: false, subtype: "success", result: "", session_id: "sess-1" });
