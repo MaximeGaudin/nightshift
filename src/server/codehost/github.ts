@@ -120,8 +120,8 @@ export const github: CodeHost = {
     if (r.code !== 0) throw errorOf(r, "gh pr ready --undo");
   },
 
-  async checks(cwd, url): Promise<ChecksSummary> {
-    const r = await gh(cwd, ["pr", "checks", url, "--required", "--json", "name,state,bucket,link"]);
+  async checks(cwd, url, opts): Promise<ChecksSummary> {
+    const r = await gh(cwd, ["pr", "checks", url, ...(opts?.all ? [] : ["--required"]), "--json", "name,state,bucket,link"]);
     // gh exits 1 on failing checks and 8 on pending ones, with the JSON on stdout anyway.
     let rows: { name?: string; bucket?: string; link?: string }[] | undefined;
     try {

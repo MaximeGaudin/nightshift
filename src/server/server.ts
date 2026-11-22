@@ -628,6 +628,13 @@ export function startServer({ port, development, agents = true }: { port: number
           return storeCardAttachment(card.id, name, typeof b.data === "string" ? b.data : "") satisfies CardAttachmentStored;
         }),
       },
+      "/api/cards/:id/ci-refresh": {
+        POST: h(async (b, url, req) => {
+          const p = project(b, url);
+          if (!p.card(req.params.id)) throw new HttpError(404, "Unknown card");
+          return { ci: await orch.prStatus.refresh(p, req.params.id) };
+        }),
+      },
       "/api/cards/:id/resume": {
         POST: h((b, url, req) => orch.resumeSession(project(b, url), req.params.id)),
       },

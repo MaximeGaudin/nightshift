@@ -393,6 +393,7 @@ export function App() {
           board={snap.board}
           live={snap.live[card.id]}
           progress={snap.progress?.[card.id]}
+          ci={snap.ci?.[card.id]}
           testing={snap.testing?.includes(card.id) ?? false}
           onClose={() => setOpenCard(null)}
           onOpenCard={setOpenCard}

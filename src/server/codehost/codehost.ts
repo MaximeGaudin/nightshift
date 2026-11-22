@@ -46,7 +46,8 @@ export interface CodeHost {
   markDraft(cwd: string, url: string): Promise<void>;
   /** The PR by URL (state, mergeability, merge commit). */
   prState(cwd: string, url: string): Promise<PrInfo | null>;
-  checks(cwd: string, url: string): Promise<ChecksSummary>;
+  /** Checks of a PR: the required ones by default, every reported check with `all: true`. */
+  checks(cwd: string, url: string, opts?: { all?: boolean }): Promise<ChecksSummary>;
   mergePr(cwd: string, url: string, opts: { method: MergeMethod; auto: boolean }): Promise<MergeResult>;
   disableAutoMerge(cwd: string, url: string): Promise<void>;
   /** Log excerpt of a failed check (its last `maxLines` lines); empty when the link is not a CI run. */
