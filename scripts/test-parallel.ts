@@ -47,7 +47,7 @@ const byCodeUnit = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 /** CI grouping: files sorted by code unit, file i goes to group i % jobs. Depends on nothing but the file list. */
 export function ciGroups(files: string[], jobs: number = CI_JOBS): string[][] {
   const groups: string[][] = Array.from({ length: Math.max(1, Math.min(jobs, files.length)) }, () => []);
-  [...files].sort(byCodeUnit).forEach((f, i) => groups[i % groups.length].push(f));
+  for (const [i, f] of [...files].sort(byCodeUnit).entries()) groups[i % groups.length].push(f);
   return groups.filter((g) => g.length > 0);
 }
 
