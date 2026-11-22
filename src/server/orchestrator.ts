@@ -425,6 +425,7 @@ ${CARD_UPDATE_RULE}
 ${PROGRESS_RULE}
 - Never edit nightshift.json yourself; the board is updated from your structured output.
 ${SHARED_RULES}
+${LONG_COMMANDS_RULE}
 - Never kill processes by name or pattern (pkill -f, killall, kill $(pgrep …)): other agents run on this machine and their processes can match. Only kill PIDs you started yourself.
 - Return the structured output exactly once, at the very end. If you started background work (subagents, background shells), wait until all of it has finished first. Never return an interim or "in progress" result.
 - When finished, return the structured output:
@@ -482,6 +483,7 @@ ${PROGRESS_RULE}
 When resuming, re-emit the marker of the step currently in progress before anything else.
 - Never edit nightshift.json yourself; the board is updated from your structured output.
 ${SHARED_RULES}
+${LONG_COMMANDS_RULE}
 - Never kill processes by name or pattern (pkill -f, killall, kill $(pgrep …)): other agents run on this machine and their processes can match. Only kill PIDs you started yourself.
 - Return the structured output exactly once, at the very end. If you started background work (subagents, background shells), wait until all of it has finished first. Never return an interim or "in progress" result.
 - When finished, return the structured output:
