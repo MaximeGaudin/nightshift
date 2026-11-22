@@ -86,20 +86,10 @@ export async function readProcessTable(): Promise<ProcInfo[]> {
   return parseProcessTable(await run(["ps", "-A", "-o", "pid=,ppid=,pgid=,stat=,lstart="]));
 }
 
-/** lstart of one process, read synchronously; undefined when it is not running or `ps` fails. */
-export function processStartedAt(pid: number): string | undefined {
-  try {
-    const r = Bun.spawnSync(["ps", "-o", "pid=,ppid=,pgid=,stat=,lstart=", "-p", String(pid)], {
-      stdin: "ignore",
-      stdout: "pipe",
-      stderr: "ignore",
-      env: PS_ENV,
-    });
-    const p = parseProcessTable(r.stdout.toString()).find((x) => x.pid === pid);
-    return p && !p.zombie ? p.startedAt : undefined;
-  } catch {
-    return undefined;
-  }
+/** lstart of one process; undefined when it is not running or `ps` fails. */
+export async function processStartedAt(pid: number): Promise<string | undefined> {
+  const p = parseProcessTable(await run(["ps", "-o", "pid=,ppid=,pgid=,stat=,lstart=", "-p", String(pid)])).find((x) => x.pid === pid);
+  return p && !p.zombie ? p.startedAt : undefined;
 }
 
 /** Pids of the processes whose environment holds this run token (when the OS shows it); [] on failure. */

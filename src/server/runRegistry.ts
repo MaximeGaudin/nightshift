@@ -5,6 +5,7 @@
 
 import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { uptime } from "node:os";
 import { join } from "node:path";
 import {
   collectRunProcesses,
@@ -38,7 +39,8 @@ export interface RunEntry {
 interface RegistryFile {
   version: 1;
   serverPid: number;
-  serverStartedAt?: string;
+  /** Epoch ms the server process started: a file from before the last boot belongs to a dead server. */
+  serverStartedAtMs: number;
   entries: RunEntry[];
 }
 
@@ -46,6 +48,9 @@ interface RegistryFile {
 export type LiveRun = RunHandle & { id: string };
 
 export type NewRunEntry = Omit<RunEntry, "id" | "tracked" | "rootStartedAt" | "token" | "rootPid">;
+
+/** Margin on the boot time computed from uptime (clock adjustments). */
+const BOOT_SLACK_MS = 60_000;
 
 /** How often the tracker snapshots the descendants of the live runs. */
 export const TRACK_INTERVAL_MS = 2000;
@@ -65,12 +70,16 @@ function writeAtomic(file: string, data: unknown) {
   renameSync(tmp, file);
 }
 
+function bootTimeMs() {
+  return Date.now() - uptime() * 1000 - BOOT_SLACK_MS;
+}
+
 export class RunRegistry {
   private readonly dir: string;
   private readonly file: string;
   private readonly runs = new Map<string, { entry: RunEntry; handle: LiveRun }>();
   private timer: ReturnType<typeof setInterval> | undefined;
-  private serverStartedAt: string | undefined;
+  private readonly serverStartedAtMs = Date.now() - process.uptime() * 1000;
   private lastWritten = "";
   private closed = false;
 
@@ -81,15 +90,15 @@ export class RunRegistry {
 
   /** Registers a spawned process; the returned handle is what stopRunProcesses needs. Never throws. */
   add(e: NewRunEntry, token: string, rootPid: number): LiveRun {
-    const handle: LiveRun = {
-      id: randomBytes(6).toString("hex"),
-      token,
-      rootPid,
-      rootStartedAt: processStartedAt(rootPid),
-      tracked: [],
-    };
+    const handle: LiveRun = { id: randomBytes(6).toString("hex"), token, rootPid, tracked: [] };
     this.runs.set(handle.id, { entry: { ...e, id: handle.id, token, rootPid, tracked: [] }, handle });
     this.write();
+    // Read asynchronously: a synchronous spawn crashes Bun 1.2.15 while other processes are being spawned.
+    void processStartedAt(rootPid).then((started) => {
+      if (!started || !this.runs.has(handle.id)) return;
+      handle.rootStartedAt = started;
+      this.write();
+    });
     if (!this.timer && !this.closed) {
       this.timer = setInterval(() => void this.track(), TRACK_INTERVAL_MS);
       this.timer.unref?.();
@@ -173,11 +182,10 @@ export class RunRegistry {
         this.lastWritten = "";
         return;
       }
-      this.serverStartedAt ??= processStartedAt(process.pid);
       const data: RegistryFile = {
         version: 1,
         serverPid: process.pid,
-        ...(this.serverStartedAt ? { serverStartedAt: this.serverStartedAt } : {}),
+        serverStartedAtMs: this.serverStartedAtMs,
         entries: [...this.runs.values()].map(({ entry, handle }) => ({
           ...entry,
           ...(handle.rootStartedAt ? { rootStartedAt: handle.rootStartedAt } : {}),
@@ -224,12 +232,8 @@ export class RunRegistry {
       const pid = data?.serverPid ?? Number(name.split("-")[0]);
       if (!Number.isInteger(pid) || pid <= 0) continue;
       if (pid === process.pid) continue;
-      if (isAlive(pid)) {
-        // Alive: the same server only if it started when the file says (otherwise the pid was reused).
-        if (!data?.serverStartedAt) continue;
-        const started = processStartedAt(pid);
-        if (!started || started === data.serverStartedAt) continue;
-      }
+      // Alive: the same server, unless it started before the last boot (the pid was reused after a reboot).
+      if (isAlive(pid) && !(typeof data?.serverStartedAtMs === "number" && data.serverStartedAtMs < bootTimeMs())) continue;
       out.push({ path, data });
     }
     return out;

@@ -2,7 +2,6 @@ import { afterAll, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { processStartedAt } from "../src/server/runProcesses.ts";
 import { RunRegistry } from "../src/server/runRegistry.ts";
 
 const dirs: string[] = [];
@@ -34,9 +33,9 @@ const entry = (project: string, cardId: string, kind: "card" | "quick" | "test" 
   tracked: [],
 });
 
-function writeRegistry(h: string, name: string, serverPid: number, entries: unknown[], serverStartedAt?: string) {
+function writeRegistry(h: string, name: string, serverPid: number, entries: unknown[], serverStartedAtMs = Date.now()) {
   mkdirSync(join(h, "runs"), { recursive: true });
-  writeFileSync(join(h, "runs", name), JSON.stringify({ version: 1, serverPid, ...(serverStartedAt ? { serverStartedAt } : {}), entries }));
+  writeFileSync(join(h, "runs", name), JSON.stringify({ version: 1, serverPid, serverStartedAtMs, entries }));
 }
 
 test("registry-dead-detection", async () => {
@@ -44,14 +43,12 @@ test("registry-dead-detection", async () => {
   const project = home();
   const dead = await deadPid();
   writeRegistry(h, `${dead}-aaaaaa.json`, dead, [entry(project, "dead")]);
-  // A live pid whose start time differs from the file: the pid was reused, the server is dead.
+  // A live pid, but the file's server started before the last boot: the pid was reused, the server is dead.
   const sleeper = Bun.spawn(["sleep", "30"]);
   try {
-    writeRegistry(h, `${sleeper.pid}-bbbbbb.json`, sleeper.pid, [entry(project, "reused")], "Mon Jan  1 00:00:00 2001");
-    // A live server with the right start time is left alone.
-    const started = processStartedAt(sleeper.pid);
-    expect(started).toBeTruthy();
-    writeRegistry(h, `${sleeper.pid}-cccccc.json`, sleeper.pid, [entry(project, "live")], started);
+    writeRegistry(h, `${sleeper.pid}-bbbbbb.json`, sleeper.pid, [entry(project, "reused")], 0);
+    // A live server started in this boot is left alone.
+    writeRegistry(h, `${sleeper.pid}-cccccc.json`, sleeper.pid, [entry(project, "live")]);
     // Another instance in this very process is never dead.
     const other = new RunRegistry(h);
     other.add({ kind: "card", project, cardId: "same-process", startedAt: new Date().toISOString() }, "tok2", sleeper.pid);
@@ -103,8 +100,8 @@ test("registry-tracks-descendants-and-removes-file", async () => {
   const sh = Bun.spawn(["sh", "-c", "sleep 30 & wait"], { detached: true });
   try {
     const run = reg.add({ kind: "test", project, cardId: "c", startedAt: new Date().toISOString() }, "toktrack", sh.pid);
+    await Bun.sleep(300);
     expect(run.rootStartedAt).toBeTruthy();
-    await Bun.sleep(200);
     await reg.track();
     const files = readdirSync(join(h, "runs"));
     expect(files.length).toBe(1);
