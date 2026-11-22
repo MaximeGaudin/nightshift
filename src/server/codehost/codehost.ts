@@ -19,6 +19,11 @@ export interface PrInfo {
   isDraft: boolean;
   /** Full sha of the PR head commit, when the host reports it. */
   headSha?: string;
+  /**
+   * The host's auto-merge is enabled on the PR (`true`) or not (`false`). Absent when the host did not say: treat it
+   * as still enabled, never as cancelled.
+   */
+  autoMerge?: boolean;
 }
 
 export interface FailedCheck {
