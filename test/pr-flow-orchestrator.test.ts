@@ -416,13 +416,34 @@ test("review: a draft PR opens when the card enters Review, then is updated and 
   expect(prOf(head).length).toBe(1);
 }, 90_000);
 
+/**
+ * What a timed-out wait on a card's PR shows: the card's column and last run, its PR log lines, the gh calls about its
+ * branch or PRs, and the PRs of the fake gh state.
+ */
+async function prDiagnostic(b: Awaited<ReturnType<typeof setup>>, id: string) {
+  const head = `nightshift/${id}`;
+  const card = await b.get(id);
+  const prs = fake.state().prs as { head: string; number: number; url: string; isDraft?: boolean; state: string }[];
+  const urls = prs.filter((p) => p.head === head).map((p) => p.url);
+  const calls = fake.calls();
+  return {
+    column: card.columnId,
+    lastRun: card.lastRun,
+    prLog: (await b.logOf(id)).filter((l) => /PR/.test(l.text)).map((l) => `${l.kind}: ${l.text}`),
+    ghCalls: calls.filter((c) => c.args.some((a) => a.includes(head) || urls.includes(a))).map((c) => c.args.join(" ")),
+    ghCallCount: calls.length,
+    prs: prs.map((p) => ({ head: p.head, number: p.number, state: p.state, isDraft: p.isDraft === true })),
+  };
+}
+
 test("review: a failed review leaves the PR in draft", async () => {
   fake.setState({ prs: [], nextNumber: 110, defaultChecks: PENDING });
   const b = await setup();
   const { id } = await b.card("fail", { exact: true });
-  await waitFor(async () => (await b.get(id)).lastRun?.status === "error", 30_000);
+  const diag = () => prDiagnostic(b, id);
+  await waitFor(async () => (await b.get(id)).lastRun?.status === "error", 30_000, diag);
   const head = `nightshift/${id}`;
-  await waitFor(async () => prOf(head).length === 1, 20_000);
+  await waitFor(async () => prOf(head).length === 1, 20_000, diag);
   const [pr] = prOf(head);
   expect(pr.isDraft).toBe(true);
   expect(callIndex(isReady(pr.url))).toBe(-1);
