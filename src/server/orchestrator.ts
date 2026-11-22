@@ -340,6 +340,11 @@ export function descriptionBlock(description: string, seen?: string): string {
   return `<description-changes>\n${changes}\n</description-changes>`;
 }
 
+/** The agent's summary for a status line, or "no summary". */
+function summaryOf(out: Raw): string {
+  return typeof out.summary === "string" && out.summary.trim() ? out.summary.trim() : "no summary";
+}
+
 /** The column an agent's `move` resolves to: "next", a column id or name; undefined for "stay" or an unknown target. */
 function moveTarget(p: Project, card: Card, move: unknown): Column | undefined {
   const m = String(move ?? "stay").trim();
@@ -1489,10 +1494,18 @@ export class Orchestrator {
               .filter(Boolean)
           : [];
         const output: AgentOutput = { ...out, questions };
-        const status = questions.length > 0 ? "question" : "success";
+        // "stay" with no questions is how every skill says "stopped, not finished": never let it look done.
+        // Feedback runs are driven by the user (staying is legitimate there), and inert columns have no work to finish.
+        const unfinished =
+          questions.length === 0 &&
+          answer?.kind !== "feedback" &&
+          column.type === "skill" &&
+          isStayMove(p, p.card(card.id) ?? card, out.move);
+        const status = questions.length > 0 ? "question" : unfinished ? "attention" : "success";
         this.finish(job, status, {
           output,
           costUsd,
+          ...(unfinished ? { error: `Stopped in ${column.name} without finishing: ${summaryOf(out)}`.slice(0, 2000) } : {}),
           ...(sessionId ? { sessionId } : {}),
         });
         // Pull request mode: a successful review pushes the branch and opens or updates the PR, in the background.

@@ -994,7 +994,7 @@ test("attention: cancelled run emits nothing", async () => {
   }
 }, 15000);
 
-test("attention: move into a skill column or stay emits nothing", async () => {
+test("attention: move into a skill column emits nothing; stay without questions rings as needing attention", async () => {
   const b = await attentionBoard([
     { name: "A", type: "skill", skill: "enrich" },
     { name: "B", type: "skill", skill: "enrich" },
@@ -1004,12 +1004,12 @@ test("attention: move into a skill column or stay emits nothing", async () => {
     const [a, , done] = b.cols;
     const stay = await post("/api/cards", { project: b.dir, columnId: a.id, title: "stay" });
     const flow = await post("/api/cards", { project: b.dir, columnId: a.id, title: "flow" });
-    await waitFor(async () => (await b.card(stay.id))?.lastRun?.status === "success" && (await b.idle(stay.id)));
+    await waitFor(async () => (await b.card(stay.id))?.lastRun?.status === "attention" && (await b.idle(stay.id)));
     await waitFor(async () => (await b.card(flow.id))?.columnId === done.id && (await b.idle(flow.id)));
     await waitFor(() => b.forCard(flow.id).length > 0);
-    await quiet(100); // the stay card emits nothing
+    await quiet(100);
     expect((await b.card(stay.id)).columnId).toBe(a.id);
-    expect(b.forCard(stay.id)).toEqual([]);
+    expect(b.forCard(stay.id)).toEqual([{ type: "attention", project: b.dir, cardId: stay.id, kind: "error" }]);
     expect(b.forCard(flow.id)).toEqual([{ type: "attention", project: b.dir, cardId: flow.id, kind: "inert" }]);
   } finally {
     b.stop();

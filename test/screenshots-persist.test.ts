@@ -115,7 +115,7 @@ test("persist-overwrite-and-missing", async () => {
   const second = await runAgent(`![B](${png})\n![G](${gone})`, first.id);
   expect(readFileSync(copy).equals(modified)).toBe(true);
   expect(second.card.description).toBe(`![B](${copy})\n![G](${gone})`);
-  expect(second.card.lastRun.status).toBe("success");
+  expect(second.card.lastRun.status).toBe("attention"); // the fake answers "stay": applied, not finished
   // Idempotent: a path already in the stable dir is left alone.
   const third = await runAgent(second.card.description, first.id);
   expect(third.card.description).toBe(second.card.description);

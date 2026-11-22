@@ -9,7 +9,7 @@
 // or FAKE_SLOW (sleeps FAKE_SLOW_MS first).
 // Quick runs: the instruction may contain FAKE_QUICK_ERROR (error status), FAKE_QUICK_INVALID (no status),
 // FAKE_QUICK_SLOW (sleeps FAKE_SLOW_MS) or FAKE_QUICK_PROGRESS (emits a progress marker 1/2); otherwise success echoing it.
-// FAKE_EXTRA_OUTPUT, when set, is a JSON object merged into the structured output of card runs.
+// FAKE_EXTRA_OUTPUT, when set, is a JSON object merged into the structured output of card runs (default and "stay").
 // FAKE_ARGS_LOG, when set, receives one JSON line per run: { title, resumed, continuing, resumeId, model, ... }.
 // FAKE_ENV_LOG, when set, receives one JSON line per run: { title, HTTPS_PROXY, NODE_EXTRA_CA_CERTS, ANTHROPIC_BASE_URL }.
 // A card titled "rate-limit" emits a rate_limit_event (5 h 38 %, 7 d 88 %); "rate-limit-bad" emits a malformed one.
@@ -349,7 +349,7 @@ if (quick) {
 } else if (title === "fail") {
   emit({ type: "result", is_error: true, result: "boom", session_id: "sess-1" });
 } else if (title === "stay") {
-  emit({ type: "result", is_error: false, session_id: "sess-1", structured_output: { move: "stay", summary: "stayed" } });
+  emit({ type: "result", is_error: false, session_id: "sess-1", structured_output: { move: "stay", summary: "stayed", ...extra } });
 } else {
   emit({
     type: "result",
