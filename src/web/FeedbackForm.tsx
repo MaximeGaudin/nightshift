@@ -25,7 +25,14 @@ export function FeedbackForm({
   const [text, setText] = useState(initialText);
   const [sending, setSending] = useState(false);
   const ref = useRef<HTMLTextAreaElement>(null);
-  const images = useImagePaste({ ref, text, setText, upload: (image) => api.uploadCardImage(project, cardId, image), onError });
+  const images = useImagePaste({
+    ref,
+    text,
+    setText,
+    upload: (image) => api.uploadCardImage(project, cardId, image),
+    attach: (file) => api.uploadCardAttachment(project, cardId, file),
+    onError,
+  });
   const ready = canSend(text, sending, images.uploading);
   return (
     <form

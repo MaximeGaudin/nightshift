@@ -1,5 +1,6 @@
 import { GitPullRequest, Loader2 } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { CardAttachmentStored } from "../shared/attachments.ts";
 import { providerLabel } from "../shared/issues.ts";
 import { prUrlOf } from "../shared/pullRequests.ts";
 import {
@@ -358,17 +359,19 @@ function AnswerField({
   value,
   setValue,
   upload,
+  attach,
   busy,
 }: {
   index: number;
   value: string;
   setValue(update: (text: string) => string): void;
   upload(image: Blob): Promise<{ path: string }>;
+  attach(file: File): Promise<CardAttachmentStored>;
   busy(delta: 1 | -1): void;
 }) {
   const { t } = useT();
   const ref = useRef<HTMLTextAreaElement>(null);
-  const images = useImagePaste({ ref, text: value, setText: setValue, upload, onError: notifyError, busy });
+  const images = useImagePaste({ ref, text: value, setText: setValue, upload, attach, onError: notifyError, busy });
   return (
     <Textarea
       ref={ref}
@@ -454,6 +457,7 @@ export function CardModalContent({
   };
   const imageDeps: ImagePasteDeps = {
     upload: (image) => api.uploadCardImage(project, card.id, image),
+    attach: (file) => api.uploadCardAttachment(project, card.id, file),
     apply: (edit) =>
       setDescription((text) => {
         const next = edit(text);
@@ -463,7 +467,7 @@ export function CardModalContent({
     onError: notifyError,
     busy: (delta) => setUploading((n) => n + delta),
   };
-  // Images go where the editor's selection is; from the preview, at the end of the text, and the editor opens.
+  // Images and files go where the editor's selection is; from the preview, at the end of the text, and the editor opens.
   const imageTarget = (): Selection => {
     const el = descRef.current;
     if (descMode === "edit" && el) return { start: el.selectionStart, end: el.selectionEnd };
@@ -520,9 +524,9 @@ export function CardModalContent({
           }}
           onDrop={(e) => {
             if (!dragHasFiles(e.dataTransfer)) return;
-            // A dropped file that is not an image must not be opened by the browser either (it would leave the board).
+            // A dropped file must never be opened by the browser (it would leave the board), even when none can be read.
             e.preventDefault();
-            if (!handleImageTransfer(e, e.dataTransfer, imageTarget, imageDeps)) notifyError(t("card.imageUnsupported"));
+            void handleImageTransfer(e, e.dataTransfer, imageTarget, imageDeps);
           }}
         >
           <div className="flex items-center justify-between gap-3">
@@ -619,6 +623,7 @@ export function CardModalContent({
                   value={answers[i] ?? ""}
                   setValue={(update) => setAnswers((a) => Object.assign([...a], { [i]: update(a[i] ?? "") }))}
                   upload={(image) => api.uploadCardImage(project, card.id, image)}
+                  attach={(file) => api.uploadCardAttachment(project, card.id, file)}
                   busy={(delta) => setAnswerUploads((n) => n + delta)}
                 />
               </div>

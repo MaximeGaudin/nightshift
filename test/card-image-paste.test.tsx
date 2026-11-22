@@ -7,6 +7,7 @@ import {
   type ImagePasteDeps,
   insertImageBlock,
   type TransferLike,
+  transferFiles,
   transferImages,
 } from "../src/web/imagePaste.ts";
 
@@ -40,12 +41,16 @@ function paste(items: NonNullable<PasteEventLike["clipboardData"]>["items"], sta
 }
 
 /** Deps whose `apply` edits `text` in place, recording uploads, errors and the busy counter. */
-function deps(text: string, upload: ImagePasteDeps["upload"]) {
-  const state = { text, cursor: -1, errors: [] as string[], busy: 0, maxBusy: 0, uploads: 0 };
+function deps(text: string, upload: ImagePasteDeps["upload"], attach?: ImagePasteDeps["attach"]) {
+  const state = { text, cursor: -1, errors: [] as string[], busy: 0, maxBusy: 0, uploads: 0, attaches: 0 };
   const d: ImagePasteDeps = {
     upload: (image) => {
       state.uploads++;
       return upload(image);
+    },
+    attach: (file) => {
+      state.attaches++;
+      return attach ? attach(file) : Promise.reject(new Error("no attach"));
     },
     apply: (edit) => {
       const next = edit(state.text);
@@ -117,12 +122,17 @@ test("paste failure toasts", async () => {
   expect(state.busy).toBe(0);
 });
 
-test("paste refuses unsupported or oversized images before any request, others still insert", async () => {
-  const { d, state } = deps("", async () => ({ path: "/p/ok.png" }));
+test("paste refuses oversized images before any request, attaches other image types, others still insert", async () => {
+  const { d, state } = deps(
+    "",
+    async () => ({ path: "/p/ok.png" }),
+    async () => ({ path: "/a/pasted", name: "pasted" }),
+  );
   await handleImagePaste(paste([fileItem("image/svg+xml"), fileItem("image/png", 8 * 1024 * 1024 + 1), fileItem("image/png")], 0).e, d);
   expect(state.uploads).toBe(1);
-  expect(state.errors).toEqual(["Type d'image non pris en charge (PNG, JPEG, GIF ou WebP)", "L'image dépasse 8 Mo"]);
-  expect(state.text).toBe("![image](/p/ok.png)");
+  expect(state.attaches).toBe(1);
+  expect(state.errors).toEqual(["L'image dépasse 8 Mo"]);
+  expect(state.text).toBe("[pasted](/a/pasted)\n![image](/p/ok.png)");
 });
 
 test("transfer images fall back to files when items hold none", () => {
@@ -155,4 +165,62 @@ test("card modal wires paste and drop on the description and the uploading hint"
   expect(src).toContain('t("card.uploadingImage")');
   // A pasted image previewed before Save fails to load; the preview remounts once the card is saved.
   expect(src).toContain("<Markdown key={card.updatedAt} source={description}");
+});
+
+test("card-file-drop-ui: images and files land in drop order at the caret", async () => {
+  const resolvers: Record<string, () => void> = {};
+  const { d, state } = deps(
+    "ab",
+    () => new Promise((resolve) => (resolvers.png = () => resolve({ path: "/s/a.png" }))),
+    (file) => new Promise((resolve) => (resolvers.pdf = () => resolve({ path: `/att/${file.name}`, name: file.name }))),
+  );
+  const png = new File([new Uint8Array(4)], "a.png", { type: "image/png" });
+  const pdf = new File([new Uint8Array(4)], "b.pdf", { type: "application/pdf" });
+  let prevented = false;
+  const done = handleImageTransfer({ preventDefault: () => (prevented = true) }, { files: [png, pdf] }, () => ({ start: 1, end: 1 }), d);
+  expect(prevented).toBe(true);
+  expect(state.maxBusy).toBe(2);
+  resolvers.pdf();
+  await Bun.sleep(0);
+  resolvers.png();
+  await done;
+  expect(state.uploads).toBe(1);
+  expect(state.attaches).toBe(1);
+  expect(state.text).toBe("a\n![image](/s/a.png)\n[b.pdf](/att/b.pdf)\nb");
+  expect(state.busy).toBe(0);
+});
+
+test("card-file-drop-ui: an oversized file is refused before any request, a failed one toasts with its name", async () => {
+  const { d, state } = deps(
+    "",
+    async () => ({ path: "/p/x.png" }),
+    async () => {
+      throw new Error("boom");
+    },
+  );
+  const big = new File([new Uint8Array(20 * 1024 * 1024 + 1)], "big.bin", { type: "application/octet-stream" });
+  const log = new File([new Uint8Array(3)], "x.log", { type: "text/plain" });
+  await handleImageTransfer({ preventDefault: () => {} }, { files: [big, log] }, () => ({ start: 0, end: 0 }), d);
+  expect(state.attaches).toBe(1);
+  expect(state.errors).toEqual(["big.bin dépasse 20 Mo", "Impossible de joindre x.log : boom"]);
+  expect(state.text).toBe("");
+});
+
+test("transfer files keep every file, items first", () => {
+  const pdf = new File([new Uint8Array(4)], "a.pdf", { type: "application/pdf" });
+  const png = new File([new Uint8Array(4)], "a.png", { type: "image/png" });
+  expect(transferFiles({ items: [textItem, { kind: "file", type: "application/pdf", getAsFile: () => pdf }], files: [png] })).toEqual([
+    pdf,
+  ]);
+  expect(transferFiles({ items: [textItem], files: [png, pdf] })).toEqual([png, pdf]);
+  expect(transferFiles(null)).toEqual([]);
+});
+
+test("feedback-file-drop: the feedback form and answers attach non-image files", () => {
+  const feedback = readFileSync(join(import.meta.dir, "../src/web/FeedbackForm.tsx"), "utf8");
+  expect(feedback).toContain("attach: (file) => api.uploadCardAttachment(project, cardId, file)");
+  const modal = readFileSync(join(import.meta.dir, "../src/web/CardModal.tsx"), "utf8");
+  expect(modal).toContain("attach={(file) => api.uploadCardAttachment(project, card.id, file)}");
+  expect(modal).toContain("attach: (file) => api.uploadCardAttachment(project, card.id, file)");
+  expect(modal).not.toContain("card.imageUnsupported");
 });
