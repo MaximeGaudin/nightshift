@@ -5,7 +5,15 @@
 
 import { rmSync } from "node:fs";
 import { resolve } from "node:path";
-import { buildPrBody, type MergeStatusKind, mergeStatusLine, parseMergeStatus, section, setSectionPrLine } from "../shared/pullRequests.ts";
+import {
+  buildPrBody,
+  buildPrTitle,
+  type MergeStatusKind,
+  mergeStatusLine,
+  parseMergeStatus,
+  section,
+  setSectionPrLine,
+} from "../shared/pullRequests.ts";
 import type { LogLine } from "../shared/types.ts";
 import { type CodeHost, CodeHostError, type FailedCheck, type PrInfo } from "./codehost/codehost.ts";
 import {
@@ -132,10 +140,10 @@ export class PrFlow {
     const existing = await host.findPr(p.path, el.branch);
     if (existing && existing.state !== "OPEN") return existing;
     if (existing) {
-      if (update) await host.updatePr(p.path, existing.url, { title: card.title, body: buildPrBody(card, existing.body) });
+      if (update) await host.updatePr(p.path, existing.url, { title: buildPrTitle(card), body: buildPrBody(card, existing.body) });
       return existing;
     }
-    const url = await host.createPr(p.path, { base: el.base, head: el.branch, title: card.title, body: buildPrBody(card), draft });
+    const url = await host.createPr(p.path, { base: el.base, head: el.branch, title: buildPrTitle(card), body: buildPrBody(card), draft });
     return (
       (await host.prState(p.path, url)) ?? {
         url,
