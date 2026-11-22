@@ -1,15 +1,16 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Card, Column } from "../src/shared/types.ts";
-import { quiet, removeTempDirs, restoreEnvAfterAll, tempDir, waitFor } from "./helpers.ts";
+import type { Card, Column, LogLine } from "../src/shared/types.ts";
+import { removeTempDirs, restoreEnvAfterAll, tempDir, waitFor } from "./helpers.ts";
 
 // settings.ts and skills.ts capture their paths at the first import and the server keeps one orchestrator per
 // process (see card-models-run.test.ts): the paths come from the imported modules, the environment is put back after.
-restoreEnvAfterAll("NIGHTSHIFT_HOME", "NIGHTSHIFT_USER_SKILLS", "FAKE_DELAY_MS");
+restoreEnvAfterAll("NIGHTSHIFT_HOME", "NIGHTSHIFT_USER_SKILLS", "FAKE_DELAY_MS", "FAKE_HOLD_FILE");
 process.env.NIGHTSHIFT_HOME = tempDir("ns-prog-home-");
 process.env.NIGHTSHIFT_USER_SKILLS = tempDir("ns-prog-skills-");
-process.env.FAKE_DELAY_MS = "1500";
+// Progress only exists while the run is live: every test holds its run with FAKE_HOLD_FILE instead of a long delay.
+process.env.FAKE_DELAY_MS = "50";
 
 const { buildPrompt } = await import("../src/server/orchestrator.ts");
 const { defaultBoard } = await import("../src/server/store.ts");
@@ -38,7 +39,17 @@ const post = (path: string, body: object, method = "POST") =>
   fetch(base + path, { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json());
 const getProject = (path: string) => fetch(`${base}/api/project?project=${encodeURIComponent(path)}`).then((r) => r.json());
 
+/** Card log lines with this exact text. The orchestrator logs an event before it updates the progress, in the same
+ * synchronous handler (handleEvent in orchestrator.ts): once the line is there, the event has been applied. */
+const logged = async (dir: string, id: string, text: string) =>
+  ((await fetch(`${base}/api/cards/${id}/log?project=${encodeURIComponent(dir)}`).then((r) => r.json())) as LogLine[]).filter(
+    (l) => l.text === text,
+  ).length;
+
+/** Opens a board and adds a card whose fake run stays live until `release()`, which then waits for the run to end. */
 async function setup(title: string) {
+  const holdFile = join(tempDir("ns-prog-hold-"), "release");
+  process.env.FAKE_HOLD_FILE = holdFile;
   const dir = tempDir("ns-prog-");
   await post("/api/projects/open", { path: dir });
   const res = await post(
@@ -53,7 +64,12 @@ async function setup(title: string) {
     "PUT",
   );
   const { id } = await post("/api/cards", { project: dir, columnId: res.board.columns[1].id, title });
-  return { dir, id };
+  const release = async () => {
+    writeFileSync(holdFile, "");
+    delete process.env.FAKE_HOLD_FILE;
+    await waitFor(async () => (await getProject(dir)).live[id] === undefined);
+  };
+  return { dir, id, release };
 }
 
 const stripAt = (p: { at?: unknown }) => {
@@ -63,18 +79,19 @@ const stripAt = (p: { at?: unknown }) => {
 };
 
 test("run-progress-live: marker wins over TodoWrite while running", async () => {
-  const { dir, id } = await setup("progress");
+  const { dir, id, release } = await setup("progress");
   await waitFor(async () => !!(await getProject(dir)).progress?.[id]?.source && (await getProject(dir)).progress[id].source === "marker");
-  await quiet(200); // the second TodoWrite must not override the marker
+  // The second TodoWrite must not override the marker: wait until it has been handled.
+  await waitFor(async () => (await logged(dir, id, "TodoWrite")) === 2);
   const s = await getProject(dir);
   expect(stripAt(s.progress[id])).toEqual({ step: 2, total: 3, label: "Deuxième", source: "marker" });
-  await waitFor(async () => (await getProject(dir)).live[id] === undefined);
+  await release();
 });
 
 test("run-progress-cleared: absent after the run, never written to nightshift.json", async () => {
-  const { dir, id } = await setup("progress");
+  const { dir, id, release } = await setup("progress");
   await waitFor(async () => !!(await getProject(dir)).progress?.[id]);
-  await waitFor(async () => (await getProject(dir)).live[id] === undefined);
+  await release();
   const s = await getProject(dir);
   expect(s.progress[id]).toBeUndefined();
   // The fake agent renames the card "progress ✓": check for a progress key/value, not the bare word.
@@ -85,48 +102,52 @@ test("run-progress-cleared: absent after the run, never written to nightshift.js
 });
 
 test("run-progress-todo-fallback: TodoWrite alone gives source todo", async () => {
-  const { dir, id } = await setup("progress-todo");
+  const { dir, id, release } = await setup("progress-todo");
   await waitFor(async () => !!(await getProject(dir)).progress?.[id]);
   const s = await getProject(dir);
   expect(stripAt(s.progress[id])).toEqual({ step: 1, total: 2, label: "Tâche 1 en cours", source: "todo" });
-  await waitFor(async () => (await getProject(dir)).live[id] === undefined);
+  await release();
 });
 
 test("run-progress-ignores-subagents: subagent marker and TodoWrite do not override", async () => {
-  const { dir, id } = await setup("progress-subagent");
+  const { dir, id, release } = await setup("progress-subagent");
   await waitFor(async () => !!(await getProject(dir)).progress?.[id]);
-  await quiet(200); // subagent events must not override the main agent progress
+  // Subagent events must not override the main agent progress: wait until the last one has been handled.
+  await waitFor(async () => (await logged(dir, id, "[nightshift-progress] 5/9 Sous-agent")) === 1);
   const s = await getProject(dir);
   expect(stripAt(s.progress[id])).toEqual({ step: 1, total: 2, label: "Principal", source: "marker" });
-  await waitFor(async () => (await getProject(dir)).live[id] === undefined);
+  await release();
 });
 
 test("run-progress-activity-fallback: tool calls alone give source activity", async () => {
-  const { dir, id } = await setup("progress-none");
+  const { dir, id, release } = await setup("progress-none");
   await waitFor(async () => (await getProject(dir)).progress?.[id]?.label === "Run the tests");
   const s = await getProject(dir);
   expect(stripAt(s.progress[id])).toEqual({ source: "activity", step: 0, total: 0, label: "Run the tests" });
-  await waitFor(async () => (await getProject(dir)).live[id] === undefined);
+  await release();
 });
 
 test("run-progress-marker-beats-activity: a later tool call does not revert a marker", async () => {
-  const { dir, id } = await setup("progress-marker-after-tool");
+  const { dir, id, release } = await setup("progress-marker-after-tool");
   await waitFor(async () => (await getProject(dir)).progress?.[id]?.label === "First tool");
   expect((await getProject(dir)).progress[id].source).toBe("activity");
   await waitFor(async () => (await getProject(dir)).progress?.[id]?.source === "marker");
-  await quiet(900); // the last tool call has been emitted by now
+  // The last tool call comes after the marker: wait until it has been handled (the generic opening tool call is the first "Bash: ls").
+  await waitFor(async () => (await logged(dir, id, "Bash: ls")) === 3);
   const s = await getProject(dir);
   expect(stripAt(s.progress[id])).toEqual({ step: 1, total: 3, label: "A", source: "marker" });
-  await waitFor(async () => (await getProject(dir)).live[id] === undefined);
+  await release();
 });
 
 test("run-progress-activity-ignores-subagents: subagent tool calls leave progress unchanged", async () => {
-  const { dir, id } = await setup("progress-activity-subagent");
+  const { dir, id, release } = await setup("progress-activity-subagent");
   await waitFor(async () => (await getProject(dir)).progress?.[id]?.label === "Main tool");
-  await quiet(800);
+  // The subagent tool call must leave the progress alone: wait until it has been handled (third "Bash: ls", after the
+  // generic opening one and the main one).
+  await waitFor(async () => (await logged(dir, id, "Bash: ls")) === 3);
   const s = await getProject(dir);
   expect(stripAt(s.progress[id])).toEqual({ source: "activity", step: 0, total: 0, label: "Main tool" });
-  await waitFor(async () => (await getProject(dir)).live[id] === undefined);
+  await release();
 });
 
 test("prompt-mentions-marker", () => {

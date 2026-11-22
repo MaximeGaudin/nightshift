@@ -18,7 +18,7 @@ writeFileSync(
 await new Response(Bun.stdin.stream()).text();
 const e = (o) => console.log(JSON.stringify(o));
 e({ type: "system", subtype: "init", session_id: "s-" + Math.random(), model: "fake" });
-await Bun.sleep(150);
+await Bun.sleep(150); // the run itself: no test here waits on its length
 e({ type: "result", is_error: false, session_id: "s", structured_output: { move: "stay", summary: "ok" } });
 `,
 );
@@ -80,10 +80,13 @@ test("draft: stays in Backlog when its dependencies finish, deleted or cleared",
   const d1 = await create("d1", { draft: true, dependsOn: [a.id] });
   const d2 = await create("d2", { draft: true, dependsOn: [b.id] });
   const d3 = await create("d3", { draft: true, dependsOn: [c.id] });
-  await move(a.id, "col_done");
+  const control = await create("control", { dependsOn: [a.id] });
   expect((await srv.call(`/api/cards/${b.id}?${q}`, { method: "DELETE" })).status).toBe(200);
   expect((await patch(d3.id, { dependsOn: [] })).status).toBe(200);
-  await Bun.sleep(400);
+  await move(a.id, "col_done");
+  // Dependency passes run in order, one per change: the pass that releases the non-draft control card comes after
+  // the delete and the clear, so once it is out, the drafts have been looked at.
+  await waitFor(async () => (await find(control.id)).columnId !== "col_backlog");
   for (const id of [d1.id, d2.id, d3.id]) expect((await find(id)).columnId).toBe("col_backlog");
   expect((await find(d1.id)).dependsOn).toEqual([a.id]);
   void dir;
@@ -93,8 +96,10 @@ test("draft: clearing the flag releases a ready card", async () => {
   const { find, create, patch, move } = await setup();
   const a = await create("a");
   const x = await create("x", { draft: true, dependsOn: [a.id] });
+  const control = await create("control", { dependsOn: [a.id] });
   await move(a.id, "col_done");
-  await Bun.sleep(300);
+  // The pass that releases the non-draft control card would release a ready "x" too.
+  await waitFor(async () => (await find(control.id)).columnId !== "col_backlog");
   expect((await find(x.id)).columnId).toBe("col_backlog");
   expect((await patch(x.id, { draft: false })).status).toBe(200);
   await waitFor(async () => (await find(x.id)).columnId !== "col_backlog");
@@ -103,8 +108,10 @@ test("draft: clearing the flag releases a ready card", async () => {
 test("draft: clearing the flag lets fast forward take the card", async () => {
   const { find, create, patch, flow } = await setup();
   const x = await create("x", { draft: true });
+  const control = await create("control");
   await flow("fast-forward/on");
-  await Bun.sleep(300);
+  // The fast forward pass that takes the non-draft control card would take "x" too.
+  await waitFor(async () => (await find(control.id)).columnId !== "col_backlog");
   expect((await find(x.id)).columnId).toBe("col_backlog");
   await patch(x.id, { draft: false });
   await waitFor(async () => (await find(x.id)).columnId !== "col_backlog");
