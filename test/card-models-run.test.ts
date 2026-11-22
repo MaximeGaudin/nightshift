@@ -2,9 +2,10 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Card, LogLine } from "../src/shared/types.ts";
-import { removeTempDirs, tempDir, waitFor } from "./helpers.ts";
+import { removeTempDirs, restoreEnvAfterAll, tempDir, waitFor } from "./helpers.ts";
 
 // See nightshift.test.ts: settings.ts and skills.ts capture their paths at the first import, so read them back.
+restoreEnvAfterAll("NIGHTSHIFT_HOME", "NIGHTSHIFT_USER_SKILLS");
 process.env.NIGHTSHIFT_HOME = tempDir("ns-home-");
 process.env.NIGHTSHIFT_USER_SKILLS = tempDir("ns-skills-");
 const argsLog = join(tempDir("ns-args-"), "args.jsonl");

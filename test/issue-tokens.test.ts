@@ -1,9 +1,10 @@
 import { afterAll, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { removeTempDirs, settingsGlobal, tempDir } from "./helpers.ts";
+import { keepSettingsGlobal, removeTempDirs, settingsGlobal, tempDir } from "./helpers.ts";
 
 const prevHome = process.env.NIGHTSHIFT_HOME;
+const keptSettings = keepSettingsGlobal();
 let n = 0;
 
 // settings.ts reads NIGHTSHIFT_HOME at import; a unique query string gives each case a fresh module instance.
@@ -14,13 +15,14 @@ async function load() {
   try {
     return { home, mod: await import(`../src/server/settings.ts?tokens=${++n}`) };
   } finally {
+    keptSettings.restore();
     if (prevHome === undefined) delete process.env.NIGHTSHIFT_HOME;
     else process.env.NIGHTSHIFT_HOME = prevHome;
   }
 }
 
 afterAll(() => {
-  settingsGlobal().__nightshiftSettings = undefined;
+  keptSettings.restore();
   removeTempDirs();
 });
 

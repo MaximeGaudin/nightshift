@@ -2,9 +2,10 @@ import { afterAll, beforeEach, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Settings } from "../src/shared/types.ts";
-import { removeTempDirs, settingsGlobal, tempDir } from "./helpers.ts";
+import { keepSettingsGlobal, removeTempDirs, settingsGlobal, tempDir } from "./helpers.ts";
 
 const prevHome = process.env.NIGHTSHIFT_HOME;
+const keptSettings = keepSettingsGlobal();
 let n = 0;
 let home = "";
 
@@ -20,6 +21,7 @@ async function load(file?: string) {
   try {
     return await import(`../src/server/settings.ts?case=${++n}`);
   } finally {
+    keptSettings.restore();
     if (prevHome === undefined) delete process.env.NIGHTSHIFT_HOME;
     else process.env.NIGHTSHIFT_HOME = prevHome;
   }
@@ -96,7 +98,10 @@ test("settings-load-corrupt-keeps-backup", async () => {
   expect(existsSync(join(home, "settings.json.bak"))).toBe(true);
 });
 
-afterAll(removeTempDirs);
+afterAll(() => {
+  keptSettings.restore();
+  removeTempDirs();
+});
 
 test("settings-read-only: a --no-agents instance never writes the settings file", async () => {
   const original = `${JSON.stringify({ claudePath: "claude", maxParallel: 3, recentProjects: ["/real"] }, null, 2)}\n`;
