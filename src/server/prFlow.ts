@@ -320,8 +320,13 @@ export class PrFlow {
         if (!r.ok && r.kind === "protected" && REQUIRED_STATUS_PENDING.test(r.message)) return await waitForChecks(pr.url);
         if (!r.ok) return fallback(`pr-${r.kind}`, `gh pr merge ${pr.url} --${mode.mergeMethod} --delete-branch`, r.message);
         if (input.isCancelled()) return { kind: "cancelled" };
-        const merged = (await host.prState(p.path, pr.url)) ?? pr;
-        return await this.finishMerged(p, cardId, el, { ...merged, state: "MERGED" }, input.stopTest);
+        const merged = await host.prState(p.path, pr.url);
+        // A repository with a merge queue only queues the PR: `gh pr merge` succeeds while it is still open. Wait
+        // for the queue like for an auto-merge; the CI watcher finishes the card once GitHub merged it.
+        if (merged && merged.state === "OPEN") {
+          return { kind: "waiting", status: "auto", summary: `PR dans la merge queue : ${pr.url}`, merge: mergeStatusLine(pr.url, "auto") };
+        }
+        return await this.finishMerged(p, cardId, el, { ...(merged ?? pr), state: "MERGED" }, input.stopTest);
       } catch (e) {
         const kind = e instanceof CodeHostError ? e.kind : "other";
         return fallback(`pr-${kind}`, "", messageOf(e));

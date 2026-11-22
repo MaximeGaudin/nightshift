@@ -226,6 +226,20 @@ test("merge: checks green → gh pr merge, remote branch deleted, local base fas
   expect(agentRuns().filter((r) => r.title.includes("pr-merge-ok")).length).toBe(1);
 }, 60_000);
 
+test("merge: a merge queue only queues the PR, so the card waits in Merge instead of going to Done", async () => {
+  fake.setState({ prs: [], nextNumber: 25, mergeQueue: true });
+  const b = await setup();
+  const { id, wt } = await b.card("pr-queue");
+  await waitFor(async () => (await b.get(id)).description.includes("auto-merge programmé"), 30_000);
+  const [pr] = prOf(`nightshift/${id}`);
+  expect(pr.state).toBe("OPEN");
+  expect(pr.queued).toBe(true);
+  const card = await b.get(id);
+  expect(card.columnId).toBe(b.mergeCol.id);
+  expect(card.description).not.toContain("merged (");
+  expect(existsSync(wt)).toBe(true);
+}, 60_000);
+
 test("merge: squash method is passed and the unmerged-looking branch is deleted with -D", async () => {
   fake.setState({ prs: [], nextNumber: 20 });
   const b = await setup({ settings: { mergeMethod: "squash" } });

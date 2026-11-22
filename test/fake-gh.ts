@@ -5,7 +5,7 @@
 // State: { auth?: boolean, remote?: string, nextNumber?: number, mergeError?: string, runLogs?: { [id]: string },
 //          defaultChecks?, defaultMergeable? (given to created PRs),
 //          prs: [{ number, url, head, base, title, body, state, mergeable, checks?, autoMerge?, mergeCommit?, isDraft? }] }
-//        draftError? (makes `pr create --draft` fail)
+//        draftError? (makes `pr create --draft` fail), mergeQueue? (`pr merge` only queues the PR)
 // `pr merge` on a mergeable PR simulates GitHub on the bare `remote`: the base ref moves to the head sha and,
 // with --delete-branch, the head ref is deleted.
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -24,6 +24,7 @@ interface FakePr {
   mergeCommit?: string;
   method?: string;
   isDraft?: boolean;
+  queued?: boolean;
 }
 interface State {
   auth?: boolean;
@@ -32,6 +33,8 @@ interface State {
   mergeError?: string;
   /** Makes `pr create --draft` fail with this message. */
   draftError?: string;
+  /** A merge queue: `pr merge` succeeds and leaves the PR open, queued. */
+  mergeQueue?: boolean;
   runLogs?: Record<string, string>;
   /** Given to each PR `pr create` opens. */
   defaultChecks?: FakePr["checks"];
@@ -163,6 +166,12 @@ if (cmd === "pr" && sub === "merge") {
     pr.autoMerge = true;
     save();
     out(`Pull request o/r#${pr.number} will be automatically merged when all requirements are met`);
+    process.exit(0);
+  }
+  if (state.mergeQueue) {
+    pr.queued = true;
+    save();
+    out(`Pull request o/r#${pr.number} will be added to the merge queue for main when ready`);
     process.exit(0);
   }
   if (state.remote) {
