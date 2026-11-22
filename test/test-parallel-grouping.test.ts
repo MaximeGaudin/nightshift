@@ -1,30 +1,104 @@
 import { expect, test } from "bun:test";
-import { bunVersionError, ciGroups, planGroups } from "../scripts/test-parallel";
+import { bunVersionError, ciGroups, DEFAULT_MS, formatTimings, planGroups, roundTiming, type Timings } from "../scripts/test-parallel";
+import committed from "./timings.json";
 
 const files = ["test/f0.test.ts", "test/f1.test.ts", "test/f2.test.ts", "test/f3.test.ts", "test/f4.test.ts", "test/f5.test.ts"];
 const plan = (over: Partial<Parameters<typeof planGroups>[0]> = {}) =>
-  planGroups({ files, args: [], env: {}, cores: 8, timings: {}, ...over });
+  planGroups({ files, args: [], env: {}, cores: 8, timings: {}, committed: {}, ...over });
 
-test("CI grouping deals sorted files round-robin into 4 groups", () => {
-  expect(plan()).toEqual({
+const span = (groups: string[][], t: Timings) => groups.map((g) => g.reduce((n, f) => n + (t[f] ?? DEFAULT_MS), 0));
+
+test("CI grouping balances by committed duration, longest first", () => {
+  const t = {
+    "test/f0.test.ts": 5000,
+    "test/f1.test.ts": 3000,
+    "test/f2.test.ts": 2000,
+    "test/f3.test.ts": 2000,
+    "test/f4.test.ts": 1000,
+    "test/f5.test.ts": 1000,
+  };
+  expect(plan({ committed: t })).toEqual({
     mode: "ci",
     filters: [],
-    groups: [["test/f0.test.ts", "test/f4.test.ts"], ["test/f1.test.ts", "test/f5.test.ts"], ["test/f2.test.ts"], ["test/f3.test.ts"]],
+    writeTimings: false,
+    groups: [["test/f0.test.ts"], ["test/f1.test.ts"], ["test/f2.test.ts", "test/f4.test.ts"], ["test/f3.test.ts", "test/f5.test.ts"]],
   });
 });
 
-test("CI grouping ignores cores and timings", () => {
-  const ref = plan().groups;
-  for (const cores of [3, 4, 8, 10]) {
-    expect(plan({ cores }).groups).toEqual(ref);
-    expect(plan({ cores, timings: { "test/f0.test.ts": 99999, "test/f3.test.ts": 5 } }).groups).toEqual(ref);
-  }
+test("CI grouping without durations deals equal files to the lowest group, files of a group in code-unit order", () => {
+  expect(plan().groups).toEqual([
+    ["test/f0.test.ts", "test/f4.test.ts"],
+    ["test/f1.test.ts", "test/f5.test.ts"],
+    ["test/f2.test.ts"],
+    ["test/f3.test.ts"],
+  ]);
 });
 
-test("CI grouping sorts by code unit, whatever the input order or locale", () => {
-  const input = ["test/ab.test.ts", "test/a-b.test.ts", "test/B.test.ts"];
-  expect(ciGroups(input, 1)).toEqual([["test/B.test.ts", "test/a-b.test.ts", "test/ab.test.ts"]]);
-  expect(ciGroups([...input].reverse(), 1)).toEqual(ciGroups(input, 1));
+test("CI grouping ignores cores and .test-timings.json", () => {
+  const ref = plan({ committed }).groups;
+  for (const cores of [3, 4, 8, 10]) {
+    expect(plan({ cores, committed }).groups).toEqual(ref);
+    expect(plan({ cores, committed, timings: { "test/f0.test.ts": 99999, "test/f3.test.ts": 5 } }).groups).toEqual(ref);
+  }
+  const real = Object.keys(committed);
+  const groups = planGroups({ files: real, args: [], env: {}, cores: 2, timings: {}, committed }).groups;
+  expect(planGroups({ files: real, args: [], env: {}, cores: 16, timings: { [real[0]]: 123456 }, committed }).groups).toEqual(groups);
+});
+
+test("CI grouping does not depend on the order of the input list, and each group is in code-unit order", () => {
+  const files = Object.keys(committed);
+  const ref = ciGroups(files, committed);
+  expect(ciGroups([...files].reverse(), committed)).toEqual(ref);
+  expect(ciGroups([...files.slice(7), ...files.slice(0, 7)], committed)).toEqual(ref);
+  for (const g of ref) expect(g).toEqual([...g].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)));
+  expect(ref.flat().sort()).toEqual([...files].sort());
+});
+
+test("a file with no committed duration costs exactly DEFAULT_MS", () => {
+  const known = {
+    "test/f0.test.ts": 4000,
+    "test/f1.test.ts": 3000,
+    "test/f2.test.ts": 2000,
+    "test/f3.test.ts": 1500,
+    "test/f4.test.ts": 700,
+  };
+  expect(ciGroups(files, known)).toEqual(ciGroups(files, { ...known, "test/f5.test.ts": DEFAULT_MS }));
+  expect(DEFAULT_MS).toBe(1000);
+});
+
+test("committed durations: the slowest of the 4 CI groups is at most 15% above the average", () => {
+  expect(Object.keys(committed).length).toBeGreaterThan(100);
+  const groups = ciGroups(Object.keys(committed), committed);
+  expect(groups).toHaveLength(4);
+  const spans = span(groups, committed);
+  const avg = spans.reduce((a, b) => a + b, 0) / spans.length;
+  expect(Math.max(...spans)).toBeLessThanOrEqual(avg * 1.15);
+});
+
+test("committed durations are rounded, positive and in the committed format", async () => {
+  for (const ms of Object.values(committed)) {
+    expect(ms).toBeGreaterThanOrEqual(100);
+    expect(ms % 100).toBe(0);
+  }
+  expect(formatTimings(committed)).toBe(await Bun.file(`${import.meta.dir}/timings.json`).text());
+});
+
+test("roundTiming and formatTimings", () => {
+  expect(roundTiming(3)).toBe(100);
+  expect(roundTiming(149)).toBe(100);
+  expect(roundTiming(150)).toBe(200);
+  expect(roundTiming(21971)).toBe(22000);
+  expect(formatTimings({ "test/b.test.ts": 1234, "test/B.test.ts": 40 })).toBe(
+    '{\n  "test/B.test.ts": 100,\n  "test/b.test.ts": 1200\n}\n',
+  );
+});
+
+test("--write-timings needs the whole suite with the CI grouping", () => {
+  expect(plan({ args: ["--write-timings"] })).toMatchObject({ mode: "ci", writeTimings: true });
+  expect(() => plan({ args: ["--write-timings", "f1"] })).toThrow("--write-timings");
+  expect(() => plan({ args: ["--write-timings", "--fast"] })).toThrow("--write-timings");
+  expect(() => plan({ args: ["--jobs", "2", "--write-timings"] })).toThrow("--write-timings");
+  expect(() => plan({ env: { TEST_JOBS: "2" }, args: ["--write-timings"] })).toThrow("--write-timings");
 });
 
 test("--fast, --jobs and TEST_JOBS select the fast grouping", () => {

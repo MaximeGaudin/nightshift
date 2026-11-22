@@ -19,6 +19,7 @@
     "test": "bun test",
     "test:parallel": "bun scripts/test-parallel.ts",
     "test:fast": "bun scripts/test-parallel.ts --fast",
+    "test:timings": "bun scripts/test-parallel.ts --write-timings",
     "lint": "biome check .",
     "format": "biome format --write .",
     "test:coverage": "bun test --coverage",
