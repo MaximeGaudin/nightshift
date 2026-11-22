@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { AgentFeaturesOverride } from "../shared/agentFeatures.ts";
 import type { FlowState } from "../shared/flow.ts";
 import type { IssueSourceInput, IssueSyncPreview, IssueSyncResult } from "../shared/issues.ts";
-import type { PullRequestSettings } from "../shared/pullRequests.ts";
+import type { PrCiStatus, PullRequestSettings } from "../shared/pullRequests.ts";
 import type { CardImageStored, CardImageUpload } from "../shared/screenshots.ts";
 import type {
   LogLine,
@@ -91,6 +91,7 @@ export const api = {
   deleteCard: (project: string, id: string) => call("DELETE", `/api/cards/${id}?${q(project)}`),
   moveCard: (project: string, id: string, columnId: string, index?: number) =>
     call("POST", `/api/cards/${id}/move`, { project, columnId, index }),
+  refreshCi: (project: string, id: string) => call<{ ci: PrCiStatus | null }>("POST", `/api/cards/${id}/ci-refresh`, { project }),
   resumeSession: (project: string, id: string) => call("POST", `/api/cards/${id}/resume`, { project }),
   retry: (project: string, id: string) => call("POST", `/api/cards/${id}/retry`, { project }),
   answer: (project: string, id: string, answers: string[]) => call("POST", `/api/cards/${id}/answer`, { project, answers }),

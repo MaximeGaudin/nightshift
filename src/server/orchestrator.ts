@@ -48,6 +48,7 @@ import { IssueSync } from "./issues/sync.ts";
 import { PrFlow } from "./prFlow.ts";
 import { detectPrMode, prModeLine } from "./prMode.ts";
 import { parseProgressMarker, progressFromTodos } from "./progress.ts";
+import { PR_STATUS_POLL_MS, PrStatusPoller } from "./prStatus.ts";
 import { buildQuickRunPrompt, parseQuickOutput, QUICK_INSTRUCTION_MAX, QUICK_RESULT_SCHEMA } from "./quickrun.ts";
 import { persistScreenshots, removeScreenshots } from "./screenshots.ts";
 import { applySections, diffSections, parseSections } from "./sections.ts";
@@ -543,6 +544,17 @@ export class Orchestrator {
     Number(process.env.NIGHTSHIFT_CI_POLL_MS) || CI_POLL_MS,
   );
 
+  /** CI state of each card's pull request, shown on the board; read-only, so every instance runs it. */
+  readonly prStatus = new PrStatusPoller(
+    {
+      detect: (p) => detectPrMode(p.path, p.board),
+      onChange: (p) => {
+        if (this.projects.get(p.path) === p) this.broadcast({ type: "board", project: p.path, snapshot: this.snapshot(p) });
+      },
+    },
+    Number(process.env.NIGHTSHIFT_PR_STATUS_POLL_MS) || PR_STATUS_POLL_MS,
+  );
+
   /** True when this process runs the project's agents: started with agents and holding the project's lock. */
   canRunAgents(p: Project): boolean {
     return this.agents && !this.lockedBy.has(p.path);
@@ -670,6 +682,7 @@ export class Orchestrator {
       this.issues.start(p);
       this.ci.start(p);
     }
+    this.prStatus.start(p);
     return p;
   }
 
@@ -712,6 +725,7 @@ export class Orchestrator {
     const live = this.liveStatuses(p);
     const lockedBy = this.lockedBy.get(p.path);
     const issueSources = this.issues.status(p);
+    const ci = this.prStatus.status(p);
     const testing = [...this.tests.values()].filter((t) => t.project === p).map((t) => t.cardId);
     const progress: Record<string, RunProgress> = {};
     for (const card of p.board.cards) {
@@ -738,6 +752,7 @@ export class Orchestrator {
           ...(q.status === "running" && q.progress ? { progress: q.progress } : {}),
         })),
       flow: this.flow.get(p),
+      ...(Object.keys(ci).length > 0 ? { ci } : {}),
       proxyWaiting: this.gate.waitingCards(p.path),
       ...(lockedBy ? { lockedBy } : {}),
       ...(this.agents ? {} : { agentsDisabled: true }),
@@ -1908,6 +1923,7 @@ export class Orchestrator {
     clearInterval(this.lockTimer);
     this.issues.shutdown();
     this.ci.shutdown();
+    this.prStatus.shutdown();
     this.quotaPoller.stop();
     const groups = [...this.tests.values()].map((t) => t.proc.pid).filter((pid): pid is number => !!pid);
     // Queued quick runs are dropped; the running ones are stopped like jobs.
