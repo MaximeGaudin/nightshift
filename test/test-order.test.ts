@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 
-// Guards against file-order dependence: on Linux progress-prompts.test.ts runs before nightshift.test.ts and loads
+// Guards against file-order dependence: on Linux progress-prompts.test.ts runs before the nightshift-*.test.ts files and loads
 // settings.ts and skills.ts first, which then capture the preload's home and user skills directories.
-// order-guard.test.ts reproduces the pattern nightshift.test.ts relies on, at a fraction of its cost.
+// order-guard.test.ts reproduces the pattern the nightshift-*.test.ts files rely on, at a fraction of its cost.
 // The child must not inherit NIGHTSHIFT_HOME / NIGHTSHIFT_USER_SKILLS, or preload.ts (`??=`) would reuse ours.
 test("test-order-progress-prompts-first: order-guard.test.ts passes after progress-prompts.test.ts", async () => {
   const env: Record<string, string | undefined> = { ...process.env, ORDER_GUARD_CHILD: "1" };

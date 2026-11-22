@@ -34,19 +34,9 @@ const { port, dir, open, agents } = opts;
 if (!agents) setSettingsReadOnly(true);
 
 const { server, orch } = startServer({ port, agents, development: process.env.NODE_ENV !== "production" });
-const project = resolve(process.env.NIGHTSHIFT_CWD ?? process.cwd(), dir ?? ".");
-let url = `http://localhost:${server.port}/`;
-try {
-  orch.open(project);
-  url += `?project=${encodeURIComponent(project)}`;
-} catch (e) {
-  console.error(e instanceof Error ? e.message : String(e));
-}
-console.log(`Nightshift running at ${url}`);
-// NIGHTSHIFT_NO_OPEN lets an agent start the app for screenshots without popping a browser for the human.
-if (open && !process.env.NIGHTSHIFT_NO_OPEN) openBrowser(url);
 
-// Agents and test commands must not outlive the CLI, whatever ends it.
+// Agents and test commands must not outlive the CLI, whatever ends it. Installed before "Nightshift running" is
+// printed: whoever waits for that line may send a signal at once, and an unhandled SIGHUP kills the process (exit 129).
 let stopping = false;
 const stop = (code: number) => {
   if (stopping) return;
@@ -60,3 +50,14 @@ for (const event of ["uncaughtException", "unhandledRejection"] as const) {
     stop(1);
   });
 }
+const project = resolve(process.env.NIGHTSHIFT_CWD ?? process.cwd(), dir ?? ".");
+let url = `http://localhost:${server.port}/`;
+try {
+  orch.open(project);
+  url += `?project=${encodeURIComponent(project)}`;
+} catch (e) {
+  console.error(e instanceof Error ? e.message : String(e));
+}
+console.log(`Nightshift running at ${url}`);
+// NIGHTSHIFT_NO_OPEN lets an agent start the app for screenshots without popping a browser for the human.
+if (open && !process.env.NIGHTSHIFT_NO_OPEN) openBrowser(url);
