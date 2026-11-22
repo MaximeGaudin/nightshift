@@ -75,6 +75,8 @@ test("teamclaude-quota-gauge: the pool replaces the stream quota while on, and c
   const lastUsage = () => events.filter((e) => e.type === "usage").at(-1) as { usage: QuotaSnapshot | null } | undefined;
   await waitFor(() => !!lastUsage()?.usage && lastUsage()?.usage?.source === undefined);
   ws.close();
+  // The run ends once the processes it left are swept (a `ps` scan): wait for its outcome rather than assume it.
+  await waitFor(async () => !!(await card())?.lastRun);
   expect((await card()).lastRun.status).toBe("success");
 });
 
