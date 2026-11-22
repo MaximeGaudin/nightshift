@@ -43,6 +43,7 @@ import { removeAttachments } from "./attachments.ts";
 import { BackgroundTasks } from "./backgroundTasks.ts";
 import { type AsideHandle, type AsideResult, type AsideRun, Briefing } from "./briefing.ts";
 import { CI_POLL_MS, CiWatcher } from "./ciWatcher.ts";
+import { CpuLoadSampler, cpuBlocks } from "./cpuLoad.ts";
 import { buildEnvironment } from "./environment.ts";
 import { fallbackBlock, tryFastMerge } from "./fastMerge.ts";
 import { FlowController } from "./flow.ts";
@@ -653,8 +654,16 @@ export class Orchestrator {
     onChange: () => this.broadcast({ type: "usage", usage: this.usage() }),
   });
 
+  /** Machine CPU load; each sample re-runs the scheduler, so held cards start once the load drops. */
+  private readonly cpuLoad = new CpuLoadSampler({ onSample: () => this.scheduleTick() });
+  /** Projects whose ready cards were held back by the CPU at the last tick, and the rounded load that held them. */
+  private cpuHeld = new Set<string>();
+  private cpuHeldLoad: number | null = null;
+  private cpuHeldLimit = 0;
+
   constructor({ agents = true }: { agents?: boolean } = {}) {
     this.agents = agents;
+    if (agents) this.cpuLoad.start();
     onSettingsChange((settings) => {
       // Turning teamclaude off while launches wait for it lets them go on directly.
       if (!settings.teamclaudeEnabled) this.gate.releaseAll({ mode: "direct" });
@@ -831,6 +840,9 @@ export class Orchestrator {
       flow: this.flow.get(p),
       ...(Object.keys(ci).length > 0 ? { ci } : {}),
       proxyWaiting: this.gate.waitingCards(p.path),
+      ...(this.cpuHeld.has(p.path) && this.cpuHeldLoad !== null
+        ? { cpuThrottle: { load: this.cpuHeldLoad, limit: getSettings().cpuThrottleMaxPercent } }
+        : {}),
       ...(lockedBy ? { lockedBy } : {}),
       ...(this.agents ? {} : { agentsDisabled: true }),
       ...(issueSources ? { issueSources } : {}),
@@ -963,6 +975,9 @@ export class Orchestrator {
       }
     }
     candidates.sort((a, b) => a.card.enteredColumnAt.localeCompare(b.card.enteredColumnAt));
+    const load = this.cpuLoad.current();
+    const cpuFull = cpuBlocks(getSettings(), load);
+    const held = new Set<string>();
     for (const { p, card } of candidates) {
       // Full project or full column: this card waits, cards of other projects and columns can still start.
       if (full(p)) continue;
@@ -970,10 +985,29 @@ export class Orchestrator {
       if (!column) continue;
       // The per-column limit only concerns skill columns; a job in an inert column (feedback) only counts for its project.
       if (column.type === "skill" && this.runningIn(p, card.columnId) >= columnMaxParallel(column)) continue;
+      // The CPU only holds back cards that the project and column caps would have let start.
+      if (cpuFull) {
+        held.add(p.path);
+        continue;
+      }
       this.start(p, card);
       started = true;
     }
+    const rounded = load === null ? null : Math.round(load);
+    const heldChanged = held.size !== this.cpuHeld.size || [...held].some((path) => !this.cpuHeld.has(path));
+    const limit = getSettings().cpuThrottleMaxPercent;
+    const loadChanged = held.size > 0 && (rounded !== this.cpuHeldLoad || limit !== this.cpuHeldLimit);
+    const touched = new Set([...held, ...this.cpuHeld]);
+    this.cpuHeld = held;
+    this.cpuHeldLoad = rounded;
+    this.cpuHeldLimit = limit;
     if (started) this.broadcastAll();
+    else if (heldChanged || loadChanged) {
+      for (const path of touched) {
+        const p = this.projects.get(path);
+        if (p) this.broadcast({ type: "board", project: p.path, snapshot: this.snapshot(p) });
+      }
+    }
   }
 
   /** Sends a fresh snapshot of every open project (e.g. after a token change, which changes `hasToken`). */
@@ -2101,6 +2135,7 @@ export class Orchestrator {
     this.prStatus.shutdown();
     this.briefing.shutdown();
     this.quotaPoller.stop();
+    this.cpuLoad.stop();
     const groups = [...this.tests.values()].map((t) => t.proc.pid).filter((pid): pid is number => !!pid);
     // Queued quick runs are dropped; the running ones are stopped like jobs.
     for (const q of [...this.quickRuns.values()]) if (q.status === "queued") this.quickRuns.delete(q.id);

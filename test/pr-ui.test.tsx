@@ -20,6 +20,8 @@ const settings = {
   carryMaxAgeMinutes: 5,
   teamclaudeEnabled: false,
   teamclaudeUrl: "http://localhost:3456",
+  cpuThrottleEnabled: true,
+  cpuThrottleMaxPercent: 85,
 } as Settings;
 const auto: PullRequestSettings = { pullRequests: "auto", mergeMethod: "merge", autoMerge: false };
 

@@ -16,6 +16,8 @@ const base: Settings = {
   carryMaxAgeMinutes: 5,
   teamclaudeEnabled: false,
   teamclaudeUrl: "http://localhost:3456",
+  cpuThrottleEnabled: true,
+  cpuThrottleMaxPercent: 85,
 };
 
 const render = (s: Settings, current?: string) =>
@@ -190,4 +192,14 @@ test("teamclaude-settings-ui: switch off by default, URL shown, both count as un
   expect(settingsDirty(base, { ...base, teamclaudeUrl: "http://h:1" })).toBe(true);
   const { en } = await import("../src/web/i18n/en/index.ts");
   expect(en["settings.teamclaude.label"]).toBe("Run agents through teamclaude");
+});
+
+test("cpu-settings-ui: switch and limit shown, limit disabled when off, both count as unsaved changes", () => {
+  const html = render(base);
+  expect(html).toMatch(/aria-checked="true"[^>]*id="set-cpu"/);
+  expect(html).toMatch(/id="set-cpu-limit"[^>]*value="85"/);
+  expect(html).not.toMatch(/id="set-cpu-limit"[^>]*disabled/);
+  expect(render({ ...base, cpuThrottleEnabled: false })).toMatch(/id="set-cpu-limit"[^>]*disabled/);
+  expect(settingsDirty(base, { ...base, cpuThrottleEnabled: false })).toBe(true);
+  expect(settingsDirty(base, { ...base, cpuThrottleMaxPercent: 70 })).toBe(true);
 });

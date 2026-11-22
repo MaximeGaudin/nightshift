@@ -62,6 +62,9 @@ setInterval(() => {}, 1 << 30);
       NIGHTSHIFT_HOME: home,
       NIGHTSHIFT_USER_SKILLS: skills,
       NODE_ENV: "production",
+      // A load file that does not exist means "unknown": no card is held back by the CPU of the machine running the suite.
+      NIGHTSHIFT_CPU_LOAD_FILE: join(tmp, "cpu-load"),
+      NIGHTSHIFT_CPU_SAMPLE_MS: "100",
       CHILD_AGENTS: opts.agents ? "1" : "0",
       CHILD_SETTINGS: JSON.stringify(opts.settings ?? {}),
       ...opts.env,

@@ -14,6 +14,9 @@ const fresh = (prefix: string) => {
 };
 process.env.NIGHTSHIFT_HOME ??= fresh("ns-test-home-");
 process.env.NIGHTSHIFT_USER_SKILLS ??= fresh("ns-test-skills-");
+// The CPU throttle reads the machine's real load otherwise: a busy machine (parallel test groups, other agents)
+// would hold cards back and time out tests that start agents in this process. A missing file means "load unknown".
+process.env.NIGHTSHIFT_CPU_LOAD_FILE ??= join(fresh("ns-test-cpu-"), "cpu-load");
 // A developer shell or an agent running behind teamclaude exports a proxy: fake agents would inherit it and the
 // tests that assert "no proxy variable" would measure the ambient environment instead of what Nightshift injects.
 for (const k of ["HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "https_proxy", "http_proxy", "no_proxy", "ALL_PROXY", "all_proxy"])
