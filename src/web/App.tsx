@@ -445,11 +445,11 @@ export function App() {
           columns={snap.board.columns}
           cards={snap.board.cards}
           initialTitle={newCard.title}
-          onAdd={(title, skip, dependsOn, draft, description, images) => {
+          onAdd={(title, skip, dependsOn, draft, description, images, attachments) => {
             const first = snap.board.columns[0];
             if (!first) return;
             guard(
-              api.createCard(snap.path, first.id, title, description, skip, dependsOn, draft, images).then((r) => {
+              api.createCard(snap.path, first.id, title, description, skip, dependsOn, draft, images, attachments).then((r) => {
                 for (const message of r.imageErrors ?? []) notifyError(message);
               }),
             );
