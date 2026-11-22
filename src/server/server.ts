@@ -3,11 +3,12 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import type { Server, ServerWebSocket } from "bun";
 import { diffAgentFeatures, validateAgentFeaturesStrict } from "../shared/agentFeatures.ts";
+import { base64Size, type CardAttachmentStored, MAX_PENDING_FILES, MAX_PENDING_TOTAL_BYTES } from "../shared/attachments.ts";
 import { dependencyCycle, describeCycle, releaseReason, resolveDependencyRefs, unmetDependencies } from "../shared/dependencies.ts";
 import { describeEffortChanges, diffEfforts, type EffortLevel, isValidEffort, validateEffortsStrict } from "../shared/effort.ts";
 import { effectiveBaseUrl, type IssueSyncResult, matchesLabels, parseGitRemote, providerInfo } from "../shared/issues.ts";
 import { describeModelChanges, diffModels, validateModelsStrict } from "../shared/models.ts";
-import { MAX_PENDING_IMAGES, pendingIds, resolvePending } from "../shared/pendingImages.ts";
+import { MAX_PENDING_IMAGES, type PendingTarget, pendingRefs, resolvePending } from "../shared/pendingImages.ts";
 import { MERGE_METHODS, type MergeMethod, PULL_REQUESTS_SETTINGS, type PullRequestsSetting } from "../shared/pullRequests.ts";
 import { type CardImageStored, cardImageType } from "../shared/screenshots.ts";
 import { normalizeSkipColumnIds, skippedColumns } from "../shared/skip.ts";
@@ -32,6 +33,7 @@ import {
 } from "../shared/types.ts";
 import { safeHttpUrl } from "../shared/urls.ts";
 import index from "../web/index.html";
+import { checkAttachmentData, removeAttachments, storeCardAttachment } from "./attachments.ts";
 import { checkRequest, HttpError } from "./guard.ts";
 import { checkSourceInput, replaceSources } from "./issues/input.ts";
 import { providerFor } from "./issues/registry.ts";
@@ -155,6 +157,36 @@ export function startServer({ port, development, agents = true }: { port: number
     }
     return out;
   };
+  /**
+   * Optional files of a new card, `{ "<N>": { name, data } }` keyed by pending marker id; checked before anything is
+   * written, with the images: at most MAX_PENDING_FILES files, each under 20 MB, and the decoded total of images and
+   * files under MAX_PENDING_TOTAL_BYTES (413).
+   */
+  const optAttachments = (b: Raw, images: Map<number, string> | undefined): Map<number, { name: string; data: string }> | undefined => {
+    const v = b.attachments;
+    let total = [...(images?.values() ?? [])].reduce((sum, data) => sum + base64Size(data), 0);
+    let out: Map<number, { name: string; data: string }> | undefined;
+    if (v != null) {
+      if (!isRaw(v)) throw new Error("attachments must be an object");
+      const entries = Object.entries(v);
+      if (entries.length > MAX_PENDING_FILES) throw new Error(`attachments holds more than ${MAX_PENDING_FILES} entries`);
+      out = new Map();
+      for (const [key, file] of entries) {
+        if (!/^[1-9][0-9]*$/.test(key)) throw new Error("attachments keys must be positive integers");
+        if (!isRaw(file) || typeof file.name !== "string" || typeof file.data !== "string")
+          throw new Error("attachments values must be { name, data } strings");
+        total += checkAttachmentData(file.data);
+        out.set(Number(key), { name: file.name, data: file.data });
+      }
+    }
+    if (total > MAX_PENDING_TOTAL_BYTES) throw new HttpError(413, "Images and files are larger than 90 MB in total");
+    return out;
+  };
+  /** The images and files of a new card, checked together. */
+  const withAttachments = (b: Raw) => {
+    const images = optImages(b);
+    return { images, attachments: optAttachments(b, images) };
+  };
   const reqString = (b: Raw, key: string): string => {
     const v = optString(b, key);
     if (v === undefined) throw new Error(`${key} is required`);
@@ -180,6 +212,7 @@ export function startServer({ port, development, agents = true }: { port: number
       dependsOnInput,
       draft,
       images,
+      attachments,
       imageErrors,
       historyText,
     }: {
@@ -191,6 +224,8 @@ export function startServer({ port, development, agents = true }: { port: number
       draft?: boolean;
       /** Pasted images by pending marker id, stored before the card is visible. */
       images?: Map<number, string>;
+      /** Files pasted or dropped before the card exists, by pending marker id, stored before the card is visible. */
+      attachments?: Map<number, { name: string; data: string }>;
       /** Collects the message of each image that could not be stored (its marker is removed). */
       imageErrors?: string[];
       historyText?: string;
@@ -214,20 +249,27 @@ export function startServer({ port, development, agents = true }: { port: number
         },
         historyText,
       );
-      // Images are written and their markers resolved before the mutation ends: no observer sees `pending:`.
-      if (images) {
-        const paths = new Map<number, string | null>();
-        for (const n of pendingIds(card.description)) {
-          const data = images.get(n);
-          if (data === undefined) continue;
+      // Images and files are written and their markers resolved before the mutation ends: no observer sees `pending:`.
+      if (images || attachments) {
+        const targets = new Map<number, PendingTarget>();
+        for (const ref of pendingRefs(card.description)) {
           try {
-            paths.set(n, storeCardImage(card.id, data));
+            if (ref.kind === "image") {
+              const data = images?.get(ref.id);
+              if (data !== undefined) targets.set(ref.id, storeCardImage(card.id, data));
+            } else {
+              const file = attachments?.get(ref.id);
+              if (file !== undefined) {
+                const stored = storeCardAttachment(card.id, file.name, file.data);
+                targets.set(ref.id, { path: stored.path, label: stored.name });
+              }
+            }
           } catch (e) {
-            paths.set(n, null);
+            targets.set(ref.id, null);
             imageErrors?.push((e as Error).message);
           }
         }
-        card.description = resolvePending(card.description, paths);
+        card.description = resolvePending(card.description, targets);
       }
       // Every dependency already in Done: the card leaves Backlog right away.
       if (!card.draft && card.dependsOn && unmetDependencies(board, card).length === 0)
@@ -382,7 +424,7 @@ export function startServer({ port, development, agents = true }: { port: number
             skipInput: optSkipIds(b),
             dependsOnInput: optDependsOn(b),
             draft: optDraft(b),
-            images: optImages(b),
+            ...withAttachments(b),
             imageErrors,
           });
           return { id: card.id, number: card.number, ...(imageErrors.length > 0 ? { imageErrors } : {}) };
@@ -511,6 +553,7 @@ export function startServer({ port, development, agents = true }: { port: number
           const p = project(b, url);
           p.mutate((board) => p.deleteCard(board, req.params.id));
           removeScreenshots(req.params.id);
+          removeAttachments(req.params.id);
           orch.purgeCard(p, req.params.id);
         }),
       },
@@ -574,6 +617,15 @@ export function startServer({ port, development, agents = true }: { port: number
           if (!card) throw new HttpError(404, "Unknown card");
           if (typeof b.data !== "string") throw new Error("data must be a string");
           return { path: storeCardImage(card.id, b.data) } satisfies CardImageStored;
+        }),
+      },
+      "/api/cards/:id/attachments": {
+        // The file travels as base64 in a JSON body: the CSRF guard only accepts application/json.
+        POST: h((b, url, req) => {
+          const card = project(b, url).card(req.params.id);
+          if (!card) throw new HttpError(404, "Unknown card");
+          const name = reqString(b, "name");
+          return storeCardAttachment(card.id, name, typeof b.data === "string" ? b.data : "") satisfies CardAttachmentStored;
         }),
       },
       "/api/cards/:id/ci-refresh": {

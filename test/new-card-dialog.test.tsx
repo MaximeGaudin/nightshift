@@ -1,7 +1,7 @@
 import { expect, mock, test } from "bun:test";
 import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { pendingMarker } from "../src/shared/pendingImages.ts";
+import { pendingFileMarker, pendingMarker } from "../src/shared/pendingImages.ts";
 
 // The real dialog renders in a portal, which a static render drops: show its content in place.
 mock.module("../src/web/components/app-dialog.tsx", () => ({
@@ -12,9 +12,8 @@ mock.module("../src/web/components/app-dialog.tsx", () => ({
     </div>
   ),
 }));
-const { NewCardDialog, insertPendingImages, pendingImagesInText, pendingToSend, removePendingImage } = await import(
-  "../src/web/NewCardDialog.tsx"
-);
+const { NewCardDialog, admitPending, insertPendingImages, insertPendingMarkers, pendingImagesInText, pendingToSend, removePendingImage } =
+  await import("../src/web/NewCardDialog.tsx");
 
 const image = (id: number) => ({ id, file: new File([new Uint8Array(4)], "p.png", { type: "image/png" }), url: `blob:${id}` });
 
@@ -59,4 +58,45 @@ test("new-card-dialog-send-drops-orphan-markers", () => {
   expect(capped.images.size).toBe(10);
   expect(capped.description).not.toContain("pending:11");
   expect(capped.description).not.toContain("pending:12");
+});
+
+const pdf = (name = "x.log", size = 4) => new File([new Uint8Array(size)], name, { type: "text/plain" });
+
+test("new-card-pending-files", () => {
+  let id = 1;
+  const { admitted, errors } = admitPending([pdf("my log.txt"), image(0).file], [], [], () => id++);
+  expect(errors).toEqual([]);
+  expect(admitted.map((e) => ({ kind: e.kind, id: e.id, name: "name" in e ? e.name : undefined }))).toEqual([
+    { kind: "file", id: 1, name: "my_log.txt" },
+    { kind: "image", id: 2, name: undefined },
+  ]);
+  const ins = insertPendingMarkers("intro", { start: 5, end: 5 }, [pendingFileMarker(1, "my_log.txt"), pendingMarker(2)]);
+  expect(ins.text).toBe(`intro\n${pendingFileMarker(1, "my_log.txt")}\n${pendingMarker(2)}`);
+
+  const files = [{ id: 1, file: pdf("my log.txt"), name: "my_log.txt" }];
+  const out = pendingToSend(ins.text, [image(2)], files);
+  expect([...out.attachments.keys()]).toEqual([1]);
+  expect([...out.images.keys()]).toEqual([2]);
+  expect(out.description).toBe(ins.text);
+
+  // Removing the chip removes the marker: the file is no longer sent.
+  const removed = removePendingImage(ins.text, 1);
+  expect(removed).toBe(`intro\n${pendingMarker(2)}`);
+  expect(pendingToSend(removed, [image(2)], files).attachments.size).toBe(0);
+  // A file marker restored by undo after its chip was removed is dropped, not sent as `pending:`.
+  expect(pendingToSend(ins.text, [image(2)], []).description).toBe(`intro\n${pendingMarker(2)}`);
+});
+
+test("new-card-pending-files-limits", () => {
+  let id = 1;
+  const ten = Array.from({ length: 10 }, () => ({ file: pdf() }));
+  const full = admitPending([pdf("eleven.txt")], [], ten, () => id++);
+  expect(full.admitted).toEqual([]);
+  expect(full.errors).toEqual(["10 fichiers au plus par carte"]);
+  const big = admitPending([pdf("big.bin", 20 * 1024 * 1024 + 1)], [], [], () => id++);
+  expect(big.errors).toEqual(["big.bin dépasse 20 Mo"]);
+  // 80 MB of images already pending: a 15 MB file goes over the 90 MB total.
+  const heavy = Array.from({ length: 10 }, () => ({ file: new Blob([new Uint8Array(8 * 1024 * 1024)]) }));
+  const over = admitPending([pdf("f.bin", 15 * 1024 * 1024)], heavy, [], () => id++);
+  expect(over.errors).toEqual(["f.bin ne rentre pas : images et fichiers sont limités à 90 Mo au total"]);
 });
