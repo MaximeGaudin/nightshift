@@ -10,7 +10,7 @@ const urlA = "https://github.com/o/r/pull/1";
 const urlB = "https://github.com/o/r/pull/2";
 const note = (url?: string) => (url ? `## Review\n\n- PR: ${url}\n` : "just a note");
 
-let hostState: { pr: Record<string, PrInfo["state"]>; checks: Record<string, Awaited<ReturnType<CodeHost["checks"]>>>; throws: boolean };
+let hostState: { pr: Record<string, PrInfo["state"]>; mergeable: Record<string, PrInfo["mergeable"]>; checks: Record<string, Awaited<ReturnType<CodeHost["checks"]>>>; throws: boolean };
 let calls: { prState: number; checks: number; all: (boolean | undefined)[] };
 let cards: { id: string; columnId: string; description: string }[];
 let changes: number;
@@ -21,7 +21,7 @@ const host: CodeHost = {
   prState: async (_cwd, url) => {
     calls.prState++;
     if (hostState.throws) throw new Error("boom");
-    return { url, number: 1, state: hostState.pr[url] ?? "OPEN", body: "", mergeable: "UNKNOWN", baseRefName: "main", isDraft: false };
+    return { url, number: 1, state: hostState.pr[url] ?? "OPEN", body: "", mergeable: hostState.mergeable[url] ?? "UNKNOWN", baseRefName: "main", isDraft: false };
   },
   checks: async (_cwd, url, opts) => {
     calls.checks++;
@@ -54,7 +54,7 @@ const poller = () =>
   );
 
 beforeEach(() => {
-  hostState = { pr: {}, checks: {}, throws: false };
+  hostState = { pr: {}, mergeable: {}, checks: {}, throws: false };
   calls = { prState: 0, checks: 0, all: [] };
   cards = [{ id: "c1", columnId: "col_x", description: note(urlA) }];
   changes = 0;
@@ -156,4 +156,44 @@ test("refresh fetches only a status older than 30 s", async () => {
   await p.refresh(project, "c1");
   expect(calls.checks).toBe(base + 1);
   expect(await p.refresh(project, "unknown")).toBeNull();
+});
+
+test("CONFLICTING wins over the checks, MERGEABLE and UNKNOWN keep the checks state", async () => {
+  hostState.checks[urlA] = { state: "pass", failed: [] };
+  hostState.mergeable[urlA] = "CONFLICTING";
+  const p = poller();
+  await p.pass(project);
+  expect(p.status(project).c1).toMatchObject({ state: "conflict", failed: [] });
+  hostState.mergeable[urlA] = "MERGEABLE";
+  await p.pass(project);
+  expect(p.status(project).c1.state).toBe("pass");
+  hostState.mergeable[urlA] = "UNKNOWN";
+  hostState.checks[urlA] = { state: "pending", failed: [] };
+  await p.pass(project);
+  expect(p.status(project).c1.state).toBe("pending");
+});
+
+test("CONFLICTING also wins over failing checks, without failed checks", async () => {
+  hostState.checks[urlA] = { state: "fail", failed: [{ name: "lint", link: "l" }] };
+  hostState.mergeable[urlA] = "CONFLICTING";
+  const p = poller();
+  await p.pass(project);
+  expect(p.status(project).c1).toMatchObject({ state: "conflict", failed: [] });
+});
+
+test("mergeable to conflicting with unchanged checks fires onChange, and back", async () => {
+  hostState.checks[urlA] = { state: "pass", failed: [] };
+  hostState.mergeable[urlA] = "MERGEABLE";
+  const p = poller();
+  await p.pass(project);
+  expect(p.status(project).c1.state).toBe("pass");
+  changes = 0;
+  hostState.mergeable[urlA] = "CONFLICTING";
+  await p.pass(project);
+  expect(p.status(project).c1.state).toBe("conflict");
+  expect(changes).toBe(1);
+  hostState.mergeable[urlA] = "MERGEABLE";
+  await p.pass(project);
+  expect(p.status(project).c1.state).toBe("pass");
+  expect(changes).toBe(2);
 });

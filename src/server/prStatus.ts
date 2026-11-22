@@ -163,6 +163,7 @@ export class PrStatusPoller {
       let failed: PrCiStatus["failed"] = [];
       if (pr.state === "MERGED") state = "merged";
       else if (pr.state === "CLOSED") state = "closed";
+      else if (pr.mergeable === "CONFLICTING") state = "conflict";
       else {
         const checks = await mode.host.checks(p.path, url, { all: true });
         state = checks.state;

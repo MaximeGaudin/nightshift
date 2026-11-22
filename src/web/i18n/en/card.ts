@@ -64,6 +64,7 @@ export const card = {
   "card.ci.fail": "CI: failing",
   "card.ci.failNamed": "CI: failing ({names})",
   "card.ci.none": "No CI checks",
+  "card.ci.conflict": "Merge conflict with base branch",
   "card.ci.merged": "Pull request merged",
   "card.ci.closed": "Pull request closed",
   "card.ci.failedChecks": "failed checks:",

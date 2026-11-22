@@ -1,5 +1,6 @@
 // CI state of a card's pull request, as the tile and the dialog show it. The status comes from the server snapshot.
 
+import { TriangleAlert } from "lucide-react";
 import { type PrCiState, type PrCiStatus, prUrlOf } from "../shared/pullRequests.ts";
 import { safeHttpUrl } from "../shared/urls.ts";
 import { type MessageKey, useT } from "./i18n/index.ts";
@@ -21,6 +22,7 @@ const LABEL: Record<PrCiState, MessageKey> = {
   pending: "card.ci.pending",
   fail: "card.ci.fail",
   none: "card.ci.none",
+  conflict: "card.ci.conflict",
   merged: "card.ci.merged",
   closed: "card.ci.closed",
 };
@@ -31,6 +33,7 @@ const TONE: Record<PrCiState, { text: string; dot?: string }> = {
   pending: { text: "text-warn", dot: "bg-warn animate-pulse" },
   fail: { text: "text-err", dot: "bg-err" },
   none: { text: "text-muted-foreground", dot: "bg-muted-foreground/50" },
+  conflict: { text: "text-conflict" },
   merged: { text: "text-muted-foreground" },
   closed: { text: "text-muted-foreground" },
 };
@@ -47,6 +50,7 @@ export const ciTextClass = (ci: PrCiStatus | undefined) => (ci ? TONE[ci.state].
 
 /** Small coloured dot of a state, for the tile; nothing for a merged or closed PR. */
 export function CiDot({ ci }: { ci: PrCiStatus }) {
+  if (ci.state === "conflict") return <TriangleAlert data-ci="conflict" size={9} className="card-ci text-conflict" aria-hidden="true" />;
   const dot = TONE[ci.state].dot;
   if (!dot) return null;
   return <span data-ci={ci.state} className={cn("card-ci size-1.5 rounded-full", dot)} aria-hidden="true" />;
@@ -60,6 +64,7 @@ export function CiChip({ ci }: { ci: PrCiStatus }) {
   return (
     <span data-ci={ci.state} className="card-ci-chip ml-2 inline-flex flex-wrap items-center gap-1 text-xs font-normal">
       <span className={cn("inline-flex items-center gap-1", tone.text)}>
+        {ci.state === "conflict" && <TriangleAlert size={11} aria-hidden="true" />}
         {tone.dot && <span className={cn("size-1.5 rounded-full", tone.dot)} aria-hidden="true" />}
         {ci.state === "fail" ? t(LABEL.fail) : label(ci)}
       </span>
