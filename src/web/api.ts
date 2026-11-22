@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { AgentFeaturesOverride } from "../shared/agentFeatures.ts";
+import type { CardAttachmentStored, CardAttachmentUpload } from "../shared/attachments.ts";
 import type { FlowState } from "../shared/flow.ts";
 import type { IssueSourceInput, IssueSyncPreview, IssueSyncResult } from "../shared/issues.ts";
 import type { PullRequestSettings } from "../shared/pullRequests.ts";
@@ -58,6 +59,8 @@ export const api = {
     draft?: boolean,
     /** Images pasted before the card exists, keyed by the id of their `pending:N` marker in `description`. */
     images?: Map<number, Blob>,
+    /** Other files dropped before the card exists, keyed by the id of their `[name](pending:N)` marker. */
+    attachments?: Map<number, File>,
   ) =>
     (async () =>
       call<{ id: string; number: number; imageErrors?: string[] }>("POST", "/api/cards", {
@@ -70,6 +73,13 @@ export const api = {
         ...(draft ? { draft: true } : {}),
         ...(images && images.size > 0
           ? { images: Object.fromEntries(await Promise.all([...images].map(async ([n, blob]) => [String(n), await toBase64(blob)]))) }
+          : {}),
+        ...(attachments && attachments.size > 0
+          ? {
+              attachments: Object.fromEntries(
+                await Promise.all([...attachments].map(async ([n, file]) => [String(n), { name: file.name, data: await toBase64(file) }])),
+              ),
+            }
           : {}),
       }))(),
   updateCard: (
@@ -88,6 +98,13 @@ export const api = {
   /** Stores a pasted image in the card's folder; the answer is its absolute path. */
   uploadCardImage: async (project: string, id: string, image: Blob) =>
     call<CardImageStored>("POST", `/api/cards/${id}/images`, { project, data: await toBase64(image) } satisfies CardImageUpload),
+  /** Stores a non-image file in the card's attachments folder; the answer is its absolute path and stored name. */
+  uploadCardAttachment: async (project: string, id: string, file: File) =>
+    call<CardAttachmentStored>("POST", `/api/cards/${id}/attachments`, {
+      project,
+      name: file.name,
+      data: await toBase64(file),
+    } satisfies CardAttachmentUpload),
   deleteCard: (project: string, id: string) => call("DELETE", `/api/cards/${id}?${q(project)}`),
   moveCard: (project: string, id: string, columnId: string, index?: number) =>
     call("POST", `/api/cards/${id}/move`, { project, columnId, index }),
