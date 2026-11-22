@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Card, Column, HistoryEntry } from "../src/shared/types.ts";
-import { must, quiet, tempDir, waitFor } from "./helpers.ts";
+import { must, tempDir, waitFor } from "./helpers.ts";
 import { startNightshiftServer } from "./nightshift-helpers.ts";
 
 const { base, post, getProject, openSkillBoard, attentionBoard, argsEntries } = await startNightshiftServer();
@@ -88,7 +88,8 @@ test("done column: next from the last user column lands in col_done with no run 
     const runs = argsEntries().length;
     const { id } = await post("/api/cards", { project: b.dir, columnId: work.id, title: "go" });
     await waitFor(async () => (await b.card(id))?.columnId === DONE_COLUMN_ID && (await b.idle(id)));
-    await quiet(150); // no second run may start
+    // No wait for a second run: the tick that would start it is scheduled when the job ends (start().finally) and runs
+    // in a microtask before the server answers the next request; a started run would show as live, not idle.
     expect(argsEntries().length).toBe(runs + 1);
     expect(b.forCard(id)).toEqual([]);
     expect((await b.card(id)).lastRun.columnId).toBe(work.id);

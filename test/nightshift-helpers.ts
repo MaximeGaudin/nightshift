@@ -21,12 +21,14 @@ export const PAST = new Date("2020-01-01T00:00:00Z");
  * Variables restored and temp directories removed after the file's last test.
  */
 export function nightshiftEnv() {
-  restoreEnvAfterAll("NIGHTSHIFT_HOME", "NIGHTSHIFT_USER_SKILLS", "FAKE_ARGS_LOG");
+  restoreEnvAfterAll("NIGHTSHIFT_HOME", "NIGHTSHIFT_USER_SKILLS", "FAKE_ARGS_LOG", "FAKE_DELAY_MS");
   process.env.NIGHTSHIFT_HOME = tempDir("ns-home-");
   process.env.NIGHTSHIFT_USER_SKILLS = tempDir("ns-skills-");
   // Read by the fake claude binary, which inherits the server's environment.
   const argsLog = join(tempDir("ns-args-"), "args.jsonl");
   process.env.FAKE_ARGS_LOG = argsLog;
+  // Short fake runs: a test that acts while a run is live uses a "slow" card (FAKE_SLOW_MS), never this delay.
+  process.env.FAKE_DELAY_MS = "50";
   afterAll(removeTempDirs);
   return { argsLog };
 }

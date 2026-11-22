@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { quiet, waitFor } from "./helpers.ts";
+import { waitFor } from "./helpers.ts";
 import { startNightshiftServer } from "./nightshift-helpers.ts";
 
 const { post, getProject, attentionBoard } = await startNightshiftServer();
@@ -64,7 +64,8 @@ test("attention: manual move into inert column emits nothing", async () => {
     const [inbox, done] = b.cols;
     const { id } = await post("/api/cards", { project: b.dir, columnId: inbox.id, title: "manual" });
     await post(`/api/cards/${id}/move`, { project: b.dir, columnId: done.id });
-    await quiet(); // a manual move emits no attention event
+    // No wait: attention is only broadcast when a run finishes (Orchestrator.finish), and the passes a move triggers run
+    // in microtasks before the server answers the next request.
     expect((await b.card(id)).columnId).toBe(done.id);
     expect(b.forCard(id)).toEqual([]);
   } finally {
@@ -91,7 +92,8 @@ test("attention: cancelled run emits nothing", async () => {
     await waitFor(() => running(moved.id));
     await post(`/api/cards/${moved.id}/move`, { project: b.dir, columnId: done.id });
     await waitFor(() => b.idle(moved.id), 4000);
-    await quiet(200); // a cancelled or moved run emits no attention event
+    // No wait: a run's attention is broadcast in Orchestrator.finish, before its job is removed (start().finally), so an
+    // idle card has already emitted whatever it would.
     expect(b.forCard(cancelled.id)).toEqual([]);
     expect(b.forCard(moved.id)).toEqual([]);
   } finally {
@@ -112,7 +114,7 @@ test("attention: move into a skill column emits nothing; stay without questions 
     await waitFor(async () => (await b.card(stay.id))?.lastRun?.status === "attention" && (await b.idle(stay.id)));
     await waitFor(async () => (await b.card(flow.id))?.columnId === done.id && (await b.idle(flow.id)));
     await waitFor(() => b.forCard(flow.id).length > 0);
-    await quiet(100);
+    // No wait: both cards are idle, and attention is broadcast in Orchestrator.finish before the job is removed.
     expect((await b.card(stay.id)).columnId).toBe(a.id);
     expect(b.forCard(stay.id)).toEqual([{ type: "attention", project: b.dir, cardId: stay.id, kind: "error" }]);
     expect(b.forCard(flow.id)).toEqual([{ type: "attention", project: b.dir, cardId: flow.id, kind: "inert" }]);

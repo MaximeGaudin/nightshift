@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Card } from "../src/shared/types.ts";
-import { must, quiet, tempDir, waitFor } from "./helpers.ts";
+import { must, tempDir, waitFor } from "./helpers.ts";
 import { startNightshiftServer } from "./nightshift-helpers.ts";
 
 const { srv, base, home, post, openSkillBoard } = await startNightshiftServer();
@@ -77,7 +77,8 @@ test("a project locked by another live process runs no agents", async () => {
   expect(snap.lockedBy).toBe(process.ppid);
   const res = await post("/api/board", { project: locked, columns: [{ name: "Enrich", type: "skill", skill: "enrich" }] }, "PUT");
   await post("/api/cards", { project: locked, columnId: res.board.columns[1].id, title: "x" });
-  await quiet(400); // no agent may start in a project locked by another process
+  // No wait: the tick of the new card runs in a microtask before the server answers the next request, and it skips
+  // projects locked by another process (Orchestrator.tick).
   const s = await fetch(`${base}/api/project?project=${encodeURIComponent(locked)}`).then((r) => r.json());
   expect(Object.values(s.live)).not.toContain("running");
   expect(s.board.cards[0].lastRun).toBeUndefined();

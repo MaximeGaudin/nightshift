@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Card, Column, HistoryEntry } from "../src/shared/types.ts";
-import { must, quiet, tempDir } from "./helpers.ts";
+import { must, tempDir } from "./helpers.ts";
 import { nightshiftEnv, PAST } from "./nightshift-helpers.ts";
 
 nightshiftEnv();
@@ -320,7 +320,8 @@ test("--no-agents instance never runs agents nor takes the lock", async () => {
   );
   const passive = new Orchestrator({ agents: false });
   const p = passive.open(dir);
-  await quiet(); // a passive orchestrator never starts the card
+  // Lets the microtask-scheduled tick run: with agents off it returns at once (Orchestrator.tick), nothing else can start it.
+  await Bun.sleep(0);
   expect(must(p.card("k")).lastRun).toBeUndefined();
   expect(passive.snapshot(p).agentsDisabled).toBe(true);
   expect(passive.snapshot(p).live).toEqual({ k: "queued" });
@@ -348,7 +349,8 @@ test("--no-agents instance records queued but never started", async () => {
   const passive = new Orchestrator({ agents: false });
   const p = passive.open(dir);
   p.mutate((board) => p.moveCard(board, "k", "s", undefined, "Moved by user"));
-  await quiet(); // nothing may start
+  // Lets the microtask-scheduled tick run: with agents off it returns at once (Orchestrator.tick), nothing else can start it.
+  await Bun.sleep(0);
   const kinds = must(p.card("k")).history.map((h) => h.kind);
   expect(kinds).toContain("queued");
   expect(kinds).not.toContain("started");
