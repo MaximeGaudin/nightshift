@@ -587,6 +587,9 @@ export function startServer({ port, development, agents = true }: { port: number
           return { flow: orch.flow.get(p) };
         }),
       },
+      "/api/resume-interrupted": {
+        POST: h((b, url) => ({ resumed: orch.resumeInterrupted(project(b, url)) })),
+      },
       "/api/flow/play": {
         POST: h((b, url) => {
           const p = project(b, url);
@@ -661,7 +664,10 @@ export function startServer({ port, development, agents = true }: { port: number
         POST: h((b, url, req) => ({ stopped: orch.stopTest(project(b, url), req.params.id) })),
       },
       "/api/cards/:id/cancel": {
-        POST: h((b, url, req) => ({ cancelled: orch.cancel(project(b, url), req.params.id) })),
+        POST: h((b, url, req) => {
+          const was = orch.cancel(project(b, url), req.params.id);
+          return was ? { cancelled: true, was } : { cancelled: false };
+        }),
       },
       "/api/cards/:id/log": {
         GET: h((b, url, req) => orch.getLog(project(b, url), req.params.id)),

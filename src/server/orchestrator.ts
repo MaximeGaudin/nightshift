@@ -1066,12 +1066,48 @@ export class Orchestrator {
     } catch {}
   }
 
-  cancel(p: Project, cardId: string) {
-    const job = this.jobs.get(this.key(p, cardId));
-    if (!job) return false;
-    this.log(p, cardId, "info", "Run cancelled by user.");
-    this.kill(job);
-    return true;
+  /**
+   * Stops the card's run ("running"), or takes a card waiting for a slot out of the queue ("queued"): it then does not
+   * start when a slot frees up, until Retry or Resume session. False when the card neither runs nor waits.
+   */
+  cancel(p: Project, cardId: string): "running" | "queued" | false {
+    const key = this.key(p, cardId);
+    const job = this.jobs.get(key);
+    if (job) {
+      this.log(p, cardId, "info", "Run cancelled by user.");
+      this.kill(job);
+      return "running";
+    }
+    const card = p.card(cardId);
+    if (!card || !this.canRunAgents(p) || !needsRun(p.board, card)) return false;
+    p.mutate(() => {
+      // An answer or feedback waiting to be sent is dropped, but its session is kept so Resume session still works.
+      const sessionId = card.pendingAnswer?.sessionId ?? (card.lastRun?.columnId === card.columnId ? card.lastRun.sessionId : undefined);
+      this.writeStopped(p, card, {
+        columnId: card.columnId,
+        sessionId,
+        skill: this.sessionSkill(p, card),
+        interrupted: false,
+        summary: "Cancelled before it started",
+      });
+    });
+    this.explicitRetries.delete(key);
+    this.log(p, cardId, "info", "Removed from the queue by user.");
+    return "queued";
+  }
+
+  /** Resumes every card interrupted by a shutdown or a crash: its session when it has one, else a retry. */
+  resumeInterrupted(p: Project): number {
+    if (!this.agents) throw new HttpError(409, "Agents are disabled on this instance");
+    if (this.lockedBy.has(p.path)) throw new HttpError(409, "This project's agents are run by another Nightshift process");
+    const cards = p.board.cards.filter(
+      (c) => c.lastRun?.interrupted && c.lastRun.columnId === c.columnId && !this.jobs.has(this.key(p, c.id)),
+    );
+    for (const c of cards) {
+      if (c.lastRun?.sessionId) this.resumeSession(p, c.id);
+      else this.retry(p, c.id);
+    }
+    return cards.length;
   }
 
   // ---- quick runs --------------------------------------------------------
