@@ -3,6 +3,7 @@ export const shortcuts = {
   "shortcuts.description": "Single-key shortcuts are ignored in input fields.",
   "shortcuts.palette": "Open the command palette",
   "shortcuts.newCard": "New card in the first column",
+  "shortcuts.briefing": "Open the briefing, or go back to the board",
   "shortcuts.help": "Show this help",
   "shortcuts.tab": "Switch to project tab 1 to 9",
   "shortcuts.close": "Close the dialog or the palette",

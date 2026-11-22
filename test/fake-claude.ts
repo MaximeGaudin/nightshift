@@ -19,6 +19,11 @@
 // FAKE_SMART_LOG and answer in --output-format json. The card title drives them: "smart-fail" (error result),
 // "smart-slow" (sleeps 10 s), "smart-invalid" (effort max); otherwise mcp on, effort high, cost 0.0012.
 // A card title containing FAKE_KEEP_DESC leaves the description alone; FAKE_SECTIONS adds a "Result" section instead.
+// Briefing calls (prompt starting with <nightshift-briefing-…>) write { kind, argv, prompt } to FAKE_BRIEFING_LOG. Triage: a card
+// whose title contains "easy" is easy, cards sharing a "[group]" tag form one topic, "triage-fail" fails the call. First turn of
+// a topic: one question per card (options A/B, A recommended), or ready at once when a title contains "no-questions";
+// "brief-fail" fails it, "brief-slow" sleeps FAKE_SLOW_MS first. Later turns: ready with a decision per answer and an
+// Acceptance note per card, unless the owner's message contains FAKE_BRIEF_ASK (one more question) or FAKE_BRIEF_FAIL.
 import { appendFileSync } from "node:fs";
 
 // Nightshift sends the prompt on stdin (never argv).
@@ -47,6 +52,99 @@ if (prompt.startsWith("<nightshift-smart>")) {
         },
       };
   console.log(JSON.stringify(result));
+  process.exit(0);
+}
+const briefingKind = /^<nightshift-briefing-(triage|topic|turn)>/.exec(prompt)?.[1];
+if (briefingKind) {
+  if (process.env.FAKE_BRIEFING_LOG) {
+    appendFileSync(process.env.FAKE_BRIEFING_LOG, `${JSON.stringify({ kind: briefingKind, argv: process.argv.slice(2), prompt })}\n`);
+  }
+  const out = (o: unknown) => console.log(JSON.stringify(o));
+  const cards = [...prompt.matchAll(/<card ref="(#\d+)"[^>]*>\n<title>([\s\S]*?)<\/title>/g)].map((m) => ({
+    ref: m[1] ?? "",
+    title: m[2] ?? "",
+  }));
+  const session = briefingKind === "triage" ? "sess-triage" : `sess-brief-${cards.map((c) => c.ref.slice(1)).join("-") || "turn"}`;
+  const resumeIndex = process.argv.indexOf("--resume");
+  out({ type: "system", subtype: "init", session_id: resumeIndex >= 0 ? process.argv[resumeIndex + 1] : session, model: "fake" });
+  out({ type: "assistant", message: { content: [{ type: "tool_use", name: "Read", input: { file_path: "README.md" } }] } });
+  const all = cards.map((c) => c.title).join(" ");
+  if (all.includes("brief-slow") && briefingKind === "topic") await Bun.sleep(Number(process.env.FAKE_SLOW_MS ?? 5000));
+  else await Bun.sleep(Number(process.env.FAKE_DELAY_MS ?? 200));
+  const done = (structured_output: unknown) =>
+    out({
+      type: "result",
+      is_error: false,
+      session_id: resumeIndex >= 0 ? process.argv[resumeIndex + 1] : session,
+      total_cost_usd: 0.002,
+      structured_output,
+    });
+  if (briefingKind === "triage") {
+    if (all.includes("triage-fail")) out({ type: "result", is_error: true, result: "triage boom" });
+    else {
+      const groups = new Map<string, string[]>();
+      for (const c of cards) {
+        const tag = /\[([^\]]+)\]/.exec(c.title)?.[1];
+        if (tag && !c.title.includes("easy")) groups.set(tag, [...(groups.get(tag) ?? []), c.ref]);
+      }
+      done({
+        cards: cards.map((c) => ({
+          ref: c.ref,
+          verdict: c.title.includes("easy") ? "easy" : "decide",
+          reason: c.title.includes("easy") ? "fake: nothing to decide" : "fake: needs a decision",
+          ...(c.title.includes("easy") ? { plan: `fake plan for ${c.ref}` } : {}),
+        })),
+        topics: [...groups].map(([tag, refs]) => ({ title: `Topic ${tag}`, refs, why: `fake: all about ${tag}` })),
+      });
+    }
+  } else if (briefingKind === "topic") {
+    if (all.includes("brief-fail")) out({ type: "result", is_error: true, result: "brief boom", session_id: session });
+    else if (all.includes("no-questions")) {
+      done({
+        reply: "Nothing to decide.",
+        questions: [],
+        decisions: [],
+        ready: true,
+        notes: cards.map((c) => ({ ref: c.ref, sections: [{ heading: "Acceptance", content: "- works" }] })),
+      });
+    } else {
+      done({
+        reply: `Context for ${cards.map((c) => c.ref).join(", ")}.`,
+        questions: cards.map((c, i) => ({
+          id: `q${i + 1}`,
+          question: `Which way for ${c.ref}?`,
+          why: "fake: changes the behaviour",
+          options: [{ label: "A", detail: "the simple way" }, { label: "B" }],
+          recommended: 0,
+          cards: [c.ref],
+        })),
+        decisions: [],
+        ready: false,
+      });
+    }
+  } else {
+    const refs = [...new Set(prompt.match(/#\d+/g) ?? [])];
+    const answers = [...prompt.matchAll(/- \[(\w+)\] (.*)\n {2}Answer: (.*)/g)].map((m) => ({ question: m[2] ?? "", answer: m[3] ?? "" }));
+    if (prompt.includes("FAKE_BRIEF_FAIL")) out({ type: "result", is_error: true, result: "turn boom" });
+    else if (prompt.includes("FAKE_BRIEF_ASK")) {
+      done({
+        reply: "One more thing.",
+        questions: [{ id: "q9", question: "And the colour?", options: [{ label: "Red" }, { label: "Blue" }], recommended: 1 }],
+        decisions: answers.map((a) => ({ ...a, cards: refs })),
+        ready: false,
+      });
+    } else {
+      done({
+        reply: "All settled.",
+        questions: [],
+        decisions: prompt.includes("settle the rest yourself")
+          ? [{ question: "Everything left", answer: "Agent's call: A", cards: refs }]
+          : answers.map((a) => ({ ...a, cards: refs })),
+        ready: true,
+        notes: refs.map((ref) => ({ ref, sections: [{ heading: "Acceptance", content: `- ${ref} works as decided` }] })),
+      });
+    }
+  }
   process.exit(0);
 }
 // Quick runs (no card): the prompt carries an instruction block or "no instruction", and the instruction drives the behaviour.

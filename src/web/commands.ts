@@ -9,6 +9,7 @@ export type CommandAction =
   | { type: "openCard"; cardId: string }
   | { type: "newCard" }
   | { type: "openModal"; modal: "columns" | "skills" | "settings" }
+  | { type: "view"; view: "board" | "briefing" }
   | { type: "openProject"; path: string }
   | { type: "fastForward"; on: boolean }
   | { type: "pause"; paused: boolean }
@@ -36,6 +37,8 @@ export interface CommandContext {
   recentProjects: string[];
   /** Skills available to the project; only the favorite ones become entries. */
   skills: SkillInfo[];
+  /** What the panel shows; absent = the board. */
+  view?: "board" | "briefing";
 }
 
 /** Heading of each palette group, resolved at render so it follows the language. */
@@ -56,7 +59,7 @@ const words = (key: MessageKey) => t(key).split(",");
 /** Start of the "create a card" item value in the active language; paletteFilter keeps that item for any free text. */
 const newCardPrefix = () => t("palette.newCardPrefix");
 
-export function buildCommands({ snap, recentProjects, skills }: CommandContext): PaletteCommand[] {
+export function buildCommands({ snap, recentProjects, skills, view = "board" }: CommandContext): PaletteCommand[] {
   const { columns, cards } = snap.board;
   const columnName = (id: string) => columns.find((c) => c.id === id)?.name ?? "";
   const out: PaletteCommand[] = [];
@@ -86,6 +89,16 @@ export function buildCommands({ snap, recentProjects, skills }: CommandContext):
       action: { type: "newCard" },
     });
   }
+
+  const viewLabel = view === "briefing" ? t("briefing.palette.board") : t("briefing.palette.open");
+  out.push({
+    id: "view",
+    group: "actions",
+    label: viewLabel,
+    value: viewLabel,
+    keywords: words("briefing.palette.keywords"),
+    action: { type: "view", view: view === "briefing" ? "board" : "briefing" },
+  });
 
   const { fastForward, paused } = snap.flow;
   const flowDisabled = !!snap.agentsDisabled || !!snap.lockedBy;

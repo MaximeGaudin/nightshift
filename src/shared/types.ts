@@ -1,6 +1,7 @@
 // Types shared by the server and the web client.
 
 import type { AgentFeaturesOverride } from "./agentFeatures.ts";
+import type { BriefingState } from "./briefing.ts";
 import type { FlowState } from "./flow.ts";
 import type { CardExternal, IssueSource, IssueSourceStatus } from "./issues.ts";
 import type { MergeMethod, PrCiStatus, PullRequestsSetting } from "./pullRequests.ts";
@@ -503,4 +504,5 @@ export type ServerEvent =
   | { type: "usage"; usage: QuotaSnapshot | null }
   | { type: "attention"; project: string; cardId: string; kind: AttentionKind }
   | { type: "quickrun"; project: string; result: QuickRunResult }
+  | { type: "briefing"; project: string; briefing: BriefingState | null }
   | { type: "teamclaude"; wait: TeamclaudeWait | null };

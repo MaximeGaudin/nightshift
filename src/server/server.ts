@@ -802,6 +802,76 @@ export function startServer({ port, development, agents = true }: { port: number
           return { ok: true };
         }),
       },
+      "/api/briefing": {
+        GET: h((b, url) => ({ briefing: orch.briefing.state(project(b, url)) })),
+      },
+      "/api/briefing/start": {
+        POST: h((b, url) => {
+          const p = project(b, url);
+          orch.briefing.start(p);
+          return { briefing: orch.briefing.state(p) };
+        }),
+      },
+      "/api/briefing/end": {
+        POST: h((b, url) => {
+          const p = project(b, url);
+          orch.briefing.end(p);
+          return { briefing: orch.briefing.state(p) };
+        }),
+      },
+      "/api/briefing/launch-easy": {
+        POST: h((b, url) => {
+          const p = project(b, url);
+          const ids = b.cardIds;
+          if (ids != null && (!Array.isArray(ids) || ids.some((x) => typeof x !== "string")))
+            throw new Error("cardIds must be an array of strings");
+          const launched = orch.briefing.launchEasy(p, ids ?? undefined);
+          return { briefing: orch.briefing.state(p), launched };
+        }),
+      },
+      "/api/briefing/discuss": {
+        POST: h((b, url) => {
+          const p = project(b, url);
+          const topicId = orch.briefing.discuss(p, reqString(b, "cardId"));
+          return { briefing: orch.briefing.state(p), topicId };
+        }),
+      },
+      "/api/briefing/topics/:id/:action": {
+        POST: h((b, url, req) => {
+          const p = project(b, url);
+          const { id, action } = req.params as { id: string; action: string };
+          switch (action) {
+            case "say": {
+              const raw = b.answers ?? {};
+              if (!isRaw(raw) || Object.values(raw).some((v) => typeof v !== "string"))
+                throw new Error("answers must map question ids to strings");
+              orch.briefing.say(p, id, raw as Record<string, string>, optString(b, "text") ?? "");
+              break;
+            }
+            case "finalize":
+              orch.briefing.finalize(p, id);
+              break;
+            case "launch":
+              orch.briefing.launchTopic(p, id);
+              break;
+            case "skip":
+              orch.briefing.skip(p, id);
+              break;
+            case "reopen":
+              orch.briefing.reopen(p, id);
+              break;
+            case "retry":
+              orch.briefing.retry(p, id);
+              break;
+            case "focus":
+              orch.briefing.focus(p, id);
+              break;
+            default:
+              throw new HttpError(404, "Unknown briefing action");
+          }
+          return { briefing: orch.briefing.state(p) };
+        }),
+      },
       "/api/quick-runs": {
         POST: h((b, url) => {
           const p = project(b, url);

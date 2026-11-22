@@ -1,11 +1,13 @@
 import { Columns3, FastForward, Info, Pause, Play, Settings as SettingsIcon, Sparkles, TriangleAlert } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { briefingCounts } from "../shared/briefing.ts";
 import { pullRequestSettingsOf } from "../shared/pullRequests.ts";
 import { type ProjectSnapshot, type SkillInfo, worktreePolicyOf } from "../shared/types.ts";
 import { AgentSky } from "./AgentSky.tsx";
-import { api, useServerEvents, useSettings } from "./api.ts";
+import { api, useBriefing, useServerEvents, useSettings } from "./api.ts";
 import { Board } from "./Board.tsx";
+import { BriefingView, ViewSwitch } from "./BriefingView.tsx";
 import { CardModal } from "./CardModal.tsx";
 import { ColumnsEditor } from "./ColumnsEditor.tsx";
 import { CommandPalette } from "./CommandPalette.tsx";
@@ -106,6 +108,9 @@ export function App() {
   const [palette, setPalette] = useState(false);
   const [help, setHelp] = useState(false);
   const [newCard, setNewCard] = useState<{ title: string } | null>(null);
+  // Board (the factory) or briefing (the working session on the Backlog).
+  const [view, setView] = useState<"board" | "briefing">("board");
+  const briefing = useBriefing(snap?.path);
   const settings = useSettings(notifyError);
   const language = settings?.language;
   useEffect(() => {
@@ -166,6 +171,7 @@ export function App() {
     setModal(null);
     setPalette(false);
     setNewCard(null);
+    setView("board");
   }, [project]);
 
   /** Shows a tab; clicking the active one again retries a failed open. */
@@ -248,6 +254,7 @@ export function App() {
       e.preventDefault();
       if (action === "palette") setPalette(true);
       else if (action === "newCard") setNewCard({ title: "" });
+      else if (action === "briefing") setView((v) => (v === "briefing" ? "board" : "briefing"));
       else setHelp(true);
     };
     window.addEventListener("keydown", onKey);
@@ -266,6 +273,9 @@ export function App() {
         break;
       case "openModal":
         setModal(action.modal);
+        break;
+      case "view":
+        setView(action.view);
         break;
       case "openProject":
         setProject(action.path);
@@ -346,6 +356,7 @@ export function App() {
             </span>
             {questions > 0 && <span className="questions-pill">{tn("board.app.questions", questions)}</span>}
           </div>
+          <ViewSwitch view={view} yourTurn={briefing ? briefingCounts(briefing).yourTurn : 0} onChange={setView} />
           <IssueSyncIndicator sources={snap.board.issueSources ?? []} status={snap.issueSources} onOpen={() => setModal("settings")} />
           <QuotaIndicator />
           <nav className="flex items-center gap-0.5">
@@ -383,7 +394,11 @@ export function App() {
             )}
           </div>
         )}
-        <Board key={snap.path} snap={snap} onOpen={setOpenCard} onEditColumns={() => setModal("columns")} guard={guard} />
+        {view === "briefing" ? (
+          <BriefingView key={snap.path} snap={snap} briefing={briefing} onOpenCard={setOpenCard} onBack={() => setView("board")} />
+        ) : (
+          <Board key={snap.path} snap={snap} onOpen={setOpenCard} onEditColumns={() => setModal("columns")} guard={guard} />
+        )}
       </div>
 
       {card && (
@@ -435,7 +450,7 @@ export function App() {
       )}
       {palette && (
         <CommandPalette
-          commands={buildCommands({ snap, recentProjects: settings?.recentProjects ?? [], skills: paletteSkills })}
+          commands={buildCommands({ snap, recentProjects: settings?.recentProjects ?? [], skills: paletteSkills, view })}
           onRun={runAction}
           onClose={() => setPalette(false)}
         />

@@ -40,6 +40,7 @@ import { canSendFeedback, cardRef, columnMaxParallel, isDoneColumn } from "../sh
 import { safeHttpUrl } from "../shared/urls.ts";
 import type { QuotaSnapshot } from "../shared/usage.ts";
 import { removeAttachments } from "./attachments.ts";
+import { type AsideHandle, type AsideResult, type AsideRun, Briefing } from "./briefing.ts";
 import { CI_POLL_MS, CiWatcher } from "./ciWatcher.ts";
 import { buildEnvironment } from "./environment.ts";
 import { fallbackBlock, tryFastMerge } from "./fastMerge.ts";
@@ -123,6 +124,8 @@ interface RunTarget {
   features: ResolvedAgentFeatures;
   effort: EffortLevel | undefined;
   effortSource: EffortSource;
+  /** Tools denied on top of AskUserQuestion (a read-only run denies the file-editing ones). */
+  disallowedTools?: string[];
   log(kind: LogLine["kind"], text: string): void;
   setProgress(v: { step: number; total: number; label: string }, source: RunProgress["source"]): void;
   /** How the run is listed while it waits for the teamclaude proxy. */
@@ -164,6 +167,12 @@ interface Job extends Runner {
   /** Session the run resumed at launch (carried, answered, fed back or recovered); undefined for a new session. */
   resumedFrom?: string;
 }
+
+/** Tools a read-only run (briefing) never gets. */
+const READ_ONLY_DENIED = ["Edit", "Write", "NotebookEdit"];
+/** Sent when a run outside the card queue stops without its structured output. */
+const ASIDE_RECOVER_PROMPT =
+  "Your previous turn stopped before returning the structured output. Return it now, exactly once, for the current state.";
 
 const MAX_LOG_LINES = 3000;
 const LOCK_RECHECK_MS = 5000;
@@ -530,6 +539,17 @@ export class Orchestrator {
     },
   });
 
+  /** Briefing: backlog triage and decision conversations, run outside the card queue. */
+  readonly briefing = new Briefing({
+    canRun: (p) => this.canRunAgents(p),
+    onState: (p, briefing) => {
+      if (this.projects.get(p.path) === p) this.broadcast({ type: "briefing", project: p.path, briefing });
+    },
+    run: (p, run) => this.runAside(p, run),
+  });
+  /** `claude` processes of the briefing: outside the jobs, so they take no column or project slot. */
+  private asides = new Set<Runner>();
+
   /** Pull request flow (push and PR after review, merge through the PR), one operation at a time per card. */
   readonly prFlow = new PrFlow({ log: (p, cardId, kind, text) => this.log(p, cardId, kind, text) });
 
@@ -676,7 +696,9 @@ export class Orchestrator {
       this.flow.schedule(p);
       this.scheduleDependencies(p);
       this.issues.scheduleWriteBack(p);
+      this.briefing.schedule(p);
     });
+    this.briefing.load(p);
     rememberProject(path);
     this.scheduleTick();
     this.scheduleDependencies(p);
@@ -1115,6 +1137,68 @@ export class Orchestrator {
     this.scheduleTick();
   }
 
+  // ---- runs outside the card queue ------------------------------------------
+  // The briefing talks with the user: its agents start at once, whatever the column and project caps.
+
+  /** Runs one `claude -p` to its structured output. `done` never rejects; `cancel` stops the process. */
+  runAside(p: Project, run: AsideRun): AsideHandle {
+    const job: Runner = { project: p, cancelled: false };
+    this.asides.add(job);
+    const done = this.aside(job, run)
+      .catch((e): AsideResult => ({ ok: false, error: e instanceof Error ? e.message : String(e), cancelled: job.cancelled, costUsd: 0 }))
+      .finally(() => this.asides.delete(job));
+    return { done, cancel: () => this.kill(job) };
+  }
+
+  private async aside(job: Runner, run: AsideRun): Promise<AsideResult> {
+    const settings = getSettings();
+    const model = settings.model.trim() || undefined;
+    const effort = run.effort ? { effort: run.effort, source: "default" as const } : resolveQuickEffort("", settings);
+    const off = { enabled: false, source: "default" as const };
+    const target: RunTarget = {
+      name: run.name,
+      schema: run.schema,
+      model,
+      modelSource: model ? "settings" : "default",
+      features: run.lean ? { mcp: off, chrome: off, hooks: off, userSettings: off } : resolveAgentFeatures({ settings }),
+      effort: effort.effort,
+      effortSource: effort.source,
+      ...(run.readOnly ? { disallowedTools: READ_ONLY_DENIED } : {}),
+      log: (kind, text) => run.onLog?.(kind, text),
+      setProgress: () => {},
+      waitEntry: { project: job.project.path, title: run.title },
+      startMessage: (m, permissionMode, source, e, effortSource, features) =>
+        `Starting "${run.name}" (permission mode: ${permissionMode}, model: ${modelLabel(m, source)}, effort: ${effortLabel(e, effortSource)}, ${features}).`,
+    };
+    let prompt = run.prompt;
+    let resumeId = run.resumeId;
+    let costUsd = 0;
+    // One automatic recovery, as for a card run: a turn that ends without its structured output is asked for it once.
+    for (let attempt = 0; ; attempt++) {
+      job.sessionId = undefined;
+      const r = await this.spawnAgent(job, target, prompt, resumeId);
+      if ("startError" in r) return { ok: false, error: r.startError, cancelled: false, costUsd };
+      const result = r.result;
+      costUsd += Number(result?.total_cost_usd) || 0;
+      const sessionId: string | undefined = result?.session_id ?? job.sessionId;
+      const session = sessionId ? { sessionId } : {};
+      if (job.cancelled) return { ok: false, error: "Cancelled", cancelled: true, ...session, costUsd };
+      const out = result?.structured_output;
+      if (result && !result.is_error && isRaw(out)) return { ok: true, output: out, ...session, costUsd };
+      const error = !result
+        ? `Agent exited without a result (${r.exit}).${r.stderr.trim() ? ` ${r.stderr.trim()}` : ""}`
+        : result.is_error
+          ? String(result.result || result.subtype || (r.stderr.trim() ? r.stderr.trim() : "Agent returned an error"))
+          : "Agent finished without returning its structured result.";
+      if (attempt === 0 && sessionId && result && !result.is_error) {
+        prompt = ASIDE_RECOVER_PROMPT;
+        resumeId = sessionId;
+        continue;
+      }
+      return { ok: false, error: error.slice(0, 2000), cancelled: false, ...session, costUsd };
+    }
+  }
+
   /** Forces a new run of a card in its current column. */
   retry(p: Project, cardId: string) {
     p.mutate(() => {
@@ -1547,7 +1631,7 @@ export class Orchestrator {
       "-p",
       ...(resumeId ? ["--resume", resumeId] : []),
       "--disallowedTools",
-      "AskUserQuestion",
+      ["AskUserQuestion", ...(target.disallowedTools ?? [])].join(","),
       "--output-format",
       "stream-json",
       "--verbose",
@@ -1926,11 +2010,12 @@ export class Orchestrator {
     this.issues.shutdown();
     this.ci.shutdown();
     this.prStatus.shutdown();
+    this.briefing.shutdown();
     this.quotaPoller.stop();
     const groups = [...this.tests.values()].map((t) => t.proc.pid).filter((pid): pid is number => !!pid);
     // Queued quick runs are dropped; the running ones are stopped like jobs.
     for (const q of [...this.quickRuns.values()]) if (q.status === "queued") this.quickRuns.delete(q.id);
-    const jobs: Runner[] = [...this.jobs.values(), ...this.quickRuns.values()];
+    const jobs: Runner[] = [...this.jobs.values(), ...this.quickRuns.values(), ...this.asides];
     for (const t of this.tests.values()) this.stopTest(t.project, t.cardId);
     for (const job of jobs) this.kill(job);
     const groupAlive = (pid: number) => {

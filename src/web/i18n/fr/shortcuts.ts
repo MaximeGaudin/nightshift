@@ -5,6 +5,7 @@ export const shortcuts: Record<keyof typeof enShortcuts, string> = {
   "shortcuts.description": "Les raccourcis à une touche sont ignorés dans les champs de saisie.",
   "shortcuts.palette": "Ouvrir la palette de commandes",
   "shortcuts.newCard": "Nouvelle carte dans la première colonne",
+  "shortcuts.briefing": "Ouvrir le briefing, ou revenir au kanban",
   "shortcuts.help": "Afficher cette aide",
   "shortcuts.tab": "Aller à l'onglet de projet 1 à 9",
   "shortcuts.close": "Fermer la fenêtre ou la palette",
