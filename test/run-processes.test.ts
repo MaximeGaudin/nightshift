@@ -103,3 +103,12 @@ test("stop-with-nothing-left-resolves-fast", async () => {
   await stopRunProcesses({ token: newRunToken(), rootPid: 999_999, tracked: [] }, 5000);
   expect(Date.now() - start).toBeLessThan(2000);
 });
+
+test("collect-never-returns-pid-0-or-1", () => {
+  // kernel_task (0) and launchd/init (1), as `ps -A` lists them when the server runs as root.
+  const table = [p(0, 0, 0), p(1, 0, 1), p(50, 1, 50)];
+  const unknownRoot = { token: "t", rootPid: 0, tracked: [{ pid: 1, pgid: 1, startedAt: T }] };
+  expect(collectRunProcesses(table, unknownRoot, [0, 1], new Set())).toEqual([]);
+  // Even as a tracked group leader's member, pid 1's children are not pulled in through it.
+  expect(collectRunProcesses(table, { token: "t", rootPid: 1, tracked: [] }, [], new Set())).toEqual([]);
+});

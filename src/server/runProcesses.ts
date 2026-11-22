@@ -35,6 +35,11 @@ export interface RunHandle {
   rootStartedAt?: string;
   /** Latest snapshot of the root's descendants, kept by the run registry's tracker. */
   tracked: TrackedProc[];
+  /**
+   * The root is a child this process spawned (a live run): when `ps` fails, signalling it blindly is safe. Never set
+   * for the runs of a dead server, whose root pid may have been reused.
+   */
+  owned?: boolean;
 }
 
 export const RUN_TOKEN_ENV = "NIGHTSHIFT_RUN_TOKEN";
@@ -50,7 +55,8 @@ export function newRunToken(): string {
   return out;
 }
 
-const PS_ENV = { ...process.env, LC_ALL: "C", LANG: "C" };
+// UTC: lstart is compared as text, so it must not change with DST or with the TZ of the process that wrote it.
+const PS_ENV = { ...process.env, LC_ALL: "C", LANG: "C", TZ: "UTC0" };
 const PS_LINE = /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(\S+)\s+(.+?)\s*$/;
 
 /** Parses `ps -o pid=,ppid=,pgid=,stat=,lstart=` output. */
@@ -142,10 +148,11 @@ export function protectedPids(table: ProcInfo[]): Set<number> {
 export function collectRunProcesses(table: ProcInfo[], h: RunHandle, tokenPids: number[], exclude: Set<number>): ProcInfo[] {
   const byPid = new Map(table.map((p) => [p.pid, p]));
   const set = new Map<number, ProcInfo>();
+  // pid 0 and 1 (kernel, init/launchd) are never a run's: signalling 0 would hit this process's own group.
   const add = (p: ProcInfo | undefined) => {
-    if (p && !p.zombie && !exclude.has(p.pid)) set.set(p.pid, p);
+    if (p && p.pid > 1 && !p.zombie && !exclude.has(p.pid)) set.set(p.pid, p);
   };
-  const root = byPid.get(h.rootPid);
+  const root = h.rootPid > 1 ? byPid.get(h.rootPid) : undefined;
   if (root && (h.rootStartedAt === undefined || root.startedAt === h.rootStartedAt)) add(root);
   for (const t of h.tracked) {
     const p = byPid.get(t.pid);
@@ -167,6 +174,8 @@ export function collectRunProcesses(table: ProcInfo[], h: RunHandle, tokenPids: 
 }
 
 function signal(pid: number, sig: NodeJS.Signals) {
+  // 0, 1, -1: this process's group, init, every process of the user. Never.
+  if (Math.abs(pid) <= 1) return;
   try {
     process.kill(pid, sig);
   } catch {}
@@ -194,7 +203,8 @@ export async function stopRunProcesses(h: RunHandle, graceMs = STOP_GRACE_MS): P
   try {
     const first = await snapshot(h);
     if (first.table.length === 0) {
-      if (h.rootPid <= 1) return;
+      // A dead server's root pid may have been reused: without `ps` to check its start time, leave it alone.
+      if (!h.owned || h.rootPid <= 1) return;
       // `ps` failed: the root and its group (it leads one, being spawned detached) are all that can be reached.
       for (const sig of ["SIGTERM", "SIGKILL"] as const) {
         signal(-h.rootPid, sig);
