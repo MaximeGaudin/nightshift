@@ -10,7 +10,12 @@ const urlA = "https://github.com/o/r/pull/1";
 const urlB = "https://github.com/o/r/pull/2";
 const note = (url?: string) => (url ? `## Review\n\n- PR: ${url}\n` : "just a note");
 
-let hostState: { pr: Record<string, PrInfo["state"]>; mergeable: Record<string, PrInfo["mergeable"]>; checks: Record<string, Awaited<ReturnType<CodeHost["checks"]>>>; throws: boolean };
+let hostState: {
+  pr: Record<string, PrInfo["state"]>;
+  mergeable: Record<string, PrInfo["mergeable"]>;
+  checks: Record<string, Awaited<ReturnType<CodeHost["checks"]>>>;
+  throws: boolean;
+};
 let calls: { prState: number; checks: number; all: (boolean | undefined)[] };
 let cards: { id: string; columnId: string; description: string }[];
 let changes: number;
@@ -21,7 +26,15 @@ const host: CodeHost = {
   prState: async (_cwd, url) => {
     calls.prState++;
     if (hostState.throws) throw new Error("boom");
-    return { url, number: 1, state: hostState.pr[url] ?? "OPEN", body: "", mergeable: hostState.mergeable[url] ?? "UNKNOWN", baseRefName: "main", isDraft: false };
+    return {
+      url,
+      number: 1,
+      state: hostState.pr[url] ?? "OPEN",
+      body: "",
+      mergeable: hostState.mergeable[url] ?? "UNKNOWN",
+      baseRefName: "main",
+      isDraft: false,
+    };
   },
   checks: async (_cwd, url, opts) => {
     calls.checks++;
