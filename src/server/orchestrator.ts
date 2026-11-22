@@ -659,6 +659,7 @@ export class Orchestrator {
   /** Projects whose ready cards were held back by the CPU at the last tick, and the rounded load that held them. */
   private cpuHeld = new Set<string>();
   private cpuHeldLoad: number | null = null;
+  private cpuHeldLimit = 0;
 
   constructor({ agents = true }: { agents?: boolean } = {}) {
     this.agents = agents;
@@ -994,10 +995,12 @@ export class Orchestrator {
     }
     const rounded = load === null ? null : Math.round(load);
     const heldChanged = held.size !== this.cpuHeld.size || [...held].some((path) => !this.cpuHeld.has(path));
-    const loadChanged = held.size > 0 && rounded !== this.cpuHeldLoad;
+    const limit = getSettings().cpuThrottleMaxPercent;
+    const loadChanged = held.size > 0 && (rounded !== this.cpuHeldLoad || limit !== this.cpuHeldLimit);
     const touched = new Set([...held, ...this.cpuHeld]);
     this.cpuHeld = held;
     this.cpuHeldLoad = rounded;
+    this.cpuHeldLimit = limit;
     if (started) this.broadcastAll();
     else if (heldChanged || loadChanged) {
       for (const path of touched) {
