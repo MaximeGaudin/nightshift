@@ -302,7 +302,6 @@ export const RESULT_SCHEMA = {
 /** Put before a column's prompt when it continues the card's session from an earlier column. */
 export const CONTINUE_PREFIX = `New step for this card. The messages above are its earlier steps, in other columns: keep their context, but follow only the instructions below for this step, and return this step's structured output.`;
 
-/** Sent when resuming a session that stopped before returning its structured result. */
 /**
  * How agents run long commands and wait for them. `claude -p` asks for the structured output as soon as a turn ends,
  * so an agent that ends its turn to wait for a background command is forced to answer before the command is done.
@@ -327,6 +326,7 @@ ${PROGRESS_RULE}
 When resuming, re-emit the marker of the step currently in progress before anything else.`;
 }
 
+/** Sent when resuming a session that stopped before returning its structured result. */
 export const RECOVER_PROMPT = `Your previous run in this session stopped before returning Nightshift's structured output (it may have been interrupted, or it only returned interim results while background work was running).
 Check the actual state of your work first (worktrees, branches, commits, background tasks). If work remains, finish it. Then return the structured output exactly once, describing the final state.
 ${PROGRESS_RULE}
