@@ -4,8 +4,9 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Card, Column, LogLine } from "../src/shared/types.ts";
-import { installFakeGh, removeTempDirs, tempDir, waitFor } from "./helpers.ts";
+import { installFakeGh, removeTempDirs, restoreEnvAfterAll, tempDir, waitFor } from "./helpers.ts";
 
+restoreEnvAfterAll("NIGHTSHIFT_HOME", "NIGHTSHIFT_USER_SKILLS");
 process.env.NIGHTSHIFT_HOME = tempDir("ns-home-");
 process.env.NIGHTSHIFT_USER_SKILLS = tempDir("ns-skills-");
 const argsLog = join(tempDir("ns-args-"), "args.jsonl");

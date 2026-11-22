@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from "bun:test";
 import { existsSync, mkdirSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Card, Column, HistoryEntry, LogLine, Settings } from "../src/shared/types.ts";
-import { must, quiet, removeTempDirs, settingsGlobal, tempDir, waitFor } from "./helpers.ts";
+import { must, quiet, removeTempDirs, restoreEnvAfterAll, settingsGlobal, tempDir, waitFor } from "./helpers.ts";
 
 /** An mtime long ago: a file that is rewritten gets a later one. */
 const PAST = new Date("2020-01-01T00:00:00Z");
@@ -11,6 +11,7 @@ const PAST = new Date("2020-01-01T00:00:00Z");
 // NIGHTSHIFT_USER_SKILLS once, at the first import. If another file (e.g. progress-prompts.test.ts, through
 // orchestrator.ts) imported them first, the paths set below are ignored. So the home and the user skills
 // directory used by this file are read back from the modules, never from the variables set here.
+restoreEnvAfterAll("NIGHTSHIFT_HOME", "NIGHTSHIFT_USER_SKILLS");
 process.env.NIGHTSHIFT_HOME = tempDir("ns-home-");
 process.env.NIGHTSHIFT_USER_SKILLS = tempDir("ns-skills-");
 // Read by the fake claude binary, which inherits the server's environment.
