@@ -59,7 +59,8 @@ export function startServer({ port, development, agents = true }: { port: number
   // `bun --hot` re-runs this module on every change. Reuse the orchestrator from the previous run:
   // a new one would schedule every card a second time next to the old one, which keeps its watchers.
   const g = globalThis as { __nightshift?: { orch: Orchestrator; sockets: Set<ServerWebSocket<unknown>>; opened: Set<string> } };
-  if (!g.__nightshift) {
+  // An orchestrator that was shut down starts nothing any more: a later server in the same process (tests) gets a new one.
+  if (!g.__nightshift || g.__nightshift.orch.stopped) {
     const orch = new Orchestrator({ agents });
     const sockets = new Set<ServerWebSocket<unknown>>();
     orch.on((e: ServerEvent) => {

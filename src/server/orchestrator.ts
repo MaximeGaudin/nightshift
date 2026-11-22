@@ -584,6 +584,11 @@ export class Orchestrator {
   private readonly registry = new RunRegistry(NIGHTSHIFT_HOME);
   /** Set once shutdown() has begun: nothing starts any more. */
   private stopping = false;
+
+  /** True once shutdown() has begun: this orchestrator never starts a run again. */
+  get stopped(): boolean {
+    return this.stopping;
+  }
   /** Resolves once the processes left by dead servers (crash) are stopped; exposed for tests. */
   readonly reaped: Promise<void> = Promise.resolve();
   private lastTestLines = new Map<string, LogLine[]>();
