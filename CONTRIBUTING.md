@@ -20,7 +20,9 @@ Run the full check. It runs Biome, the TypeScript compiler and the tests, and CI
 bun run check
 ```
 
-Run it before every push. It splits the test files into 4 groups, sorted by name and ignoring `.test-timings.json`, so the groups are the same on any machine and in CI: a test that depends on the order of files fails locally too. `bun run test:fast` (groups balanced by the previous run's timings) is for iterating and does not match the CI.
+Run it before every push. It splits the test files into 4 groups balanced by the durations committed in `test/timings.json` (longest file first into the lightest group, files of a group in name order). The groups depend only on the file list and that file, so they are the same on any machine and in CI: a test that depends on the order of files fails locally too. `bun run test:fast` (groups balanced by the previous run's timings) is for iterating and does not match the CI.
+
+Run `bun run test:timings` to refresh `test/timings.json`: after adding or removing a test file, after a test file gets noticeably slower or faster, when `bun run check` prints a `hint:` about missing or stale durations, or when the balance test in `test/test-parallel-grouping.test.ts` fails. It runs the whole suite and rewrites the file only if everything passes. Commit the refreshed file with the change that caused it. A file with no entry counts 1000 ms, so forgetting to refresh never breaks `bun run check`, it only makes the groups less even.
 
 Use `bun run format` to fix formatting. Keep pull requests focused, and add or update tests for behavior changes.
 
