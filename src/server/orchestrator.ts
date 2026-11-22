@@ -2138,6 +2138,8 @@ export class Orchestrator {
   }
 
   startTest(p: Project, cardId: string) {
+    // shutdown() has already collected the test commands to stop: one started now would be orphaned.
+    if (this.stopping) throw new HttpError(409, "Nightshift is stopping");
     const card = p.card(cardId);
     if (!card?.test) throw new Error("This card has no test command");
     const key = this.key(p, cardId);
