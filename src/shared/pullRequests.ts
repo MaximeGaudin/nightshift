@@ -56,14 +56,21 @@ export function field(body: string, key: string): string | undefined {
   return m ? m[1].replace(/`/g, "").trim() : undefined;
 }
 
-const PR_LINE = /^\s*[-*]\s*PR\s*:.*$/i;
-
 /**
  * Sets the single `- PR: <value>` line of a section: replaces the first one, drops any other, or appends one.
  * Creates the section at the end of the note when it is missing. Every other line stays byte for byte.
  */
 export function setSectionPrLine(description: string, heading: string, value: string): string {
-  const line = `- PR: ${value}`;
+  return setSectionField(description, heading, "PR", value);
+}
+
+/**
+ * Same as `setSectionPrLine` for any `- <key>: <value>` line (key matched case-insensitively). `frenchColon` writes
+ * `- <key> : <value>`, the French typography of the lines written in French.
+ */
+export function setSectionField(description: string, heading: string, key: string, value: string, frenchColon = false): string {
+  const keyLine = new RegExp(`^\\s*[-*]\\s*${key}\\s*:.*$`, "i");
+  const line = `- ${key}${frenchColon ? " " : ""}: ${value}`;
   const lines = description.split("\n");
   const start = lines.findIndex((l) => l.trim() === `## ${heading}`);
   if (start < 0) {
@@ -73,11 +80,11 @@ export function setSectionPrLine(description: string, heading: string, value: st
   let end = lines.findIndex((l, i) => i > start && /^## /.test(l));
   if (end < 0) end = lines.length;
   const body = lines.slice(start + 1, end);
-  const first = body.findIndex((l) => PR_LINE.test(l));
+  const first = body.findIndex((l) => keyLine.test(l));
   let next: string[];
   if (first >= 0) {
-    next = body.filter((l, i) => i === first || !PR_LINE.test(l));
-    next[next.findIndex((l) => PR_LINE.test(l))] = line;
+    next = body.filter((l, i) => i === first || !keyLine.test(l));
+    next[next.findIndex((l) => keyLine.test(l))] = line;
   } else {
     // Insert after the last non-blank line of the section.
     let last = body.length - 1;
@@ -143,6 +150,11 @@ export function parseMergeStatus(description: string): { url: string; status: Me
   if (!m) return undefined;
   const kind = (Object.keys(MERGE_STATUS_TEXT) as Exclude<MergeStatusKind, "merged">[]).find((k) => MERGE_STATUS_TEXT[k] === m[2].trim());
   return kind ? { url: m[1], status: kind } : undefined;
+}
+
+/** Writes (or replaces) the single `- Problème : <text>` line of `## Merge`: why the CI watcher started a new merge cycle. */
+export function writeMergeProblem(description: string, text: string): string {
+  return setSectionField(description, "Merge", "Problème", text, true);
 }
 
 /** Writes (or replaces) the PR status line of `## Merge`, creating the section when needed. */
