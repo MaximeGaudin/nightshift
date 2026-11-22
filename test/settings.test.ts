@@ -151,3 +151,24 @@ test("settings-teamclaude-validation: an invalid URL in the file keeps the defau
   expect((await load(JSON.stringify({ teamclaudeUrl: "ftp://x" }))).getSettings().teamclaudeUrl).toBe("http://localhost:3456");
   expect((await load(JSON.stringify({ teamclaudeUrl: "https://tc.local:9/" }))).getSettings().teamclaudeUrl).toBe("https://tc.local:9");
 });
+
+test("cpu-settings-defaults: a file without CPU keys gets the throttle on at 85", async () => {
+  const { getSettings } = await load(JSON.stringify({ model: "m" }));
+  expect(getSettings().cpuThrottleEnabled).toBe(true);
+  expect(getSettings().cpuThrottleMaxPercent).toBe(85);
+});
+
+test("cpu-settings-validate: the limit is an integer from 10 to 100, the switch a boolean", async () => {
+  const { updateSettings, getSettings } = await load();
+  for (const bad of [9, 101, 50.5, "80", null]) {
+    expect(() => updateSettings({ cpuThrottleMaxPercent: bad as never })).toThrow(
+      "cpuThrottleMaxPercent must be an integer from 10 to 100",
+    );
+  }
+  expect(() => updateSettings({ cpuThrottleEnabled: "yes" as never })).toThrow("cpuThrottleEnabled must be a boolean");
+  updateSettings({ cpuThrottleMaxPercent: 60, cpuThrottleEnabled: false });
+  expect(getSettings().cpuThrottleMaxPercent).toBe(60);
+  const file = JSON.parse(readFileSync(join(home, "settings.json"), "utf8"));
+  expect(file.cpuThrottleMaxPercent).toBe(60);
+  expect(file.cpuThrottleEnabled).toBe(false);
+});
