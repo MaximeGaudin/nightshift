@@ -39,6 +39,7 @@ import type {
 import { canSendFeedback, cardRef, columnMaxParallel, isDoneColumn } from "../shared/types.ts";
 import { safeHttpUrl } from "../shared/urls.ts";
 import type { QuotaSnapshot } from "../shared/usage.ts";
+import { removeAttachments } from "./attachments.ts";
 import { CI_POLL_MS, CiWatcher } from "./ciWatcher.ts";
 import { buildEnvironment } from "./environment.ts";
 import { fallbackBlock, tryFastMerge } from "./fastMerge.ts";
@@ -523,6 +524,7 @@ export class Orchestrator {
     },
     purge: (p, cardId) => {
       removeScreenshots(cardId);
+      removeAttachments(cardId);
       this.purgeCard(p, cardId);
     },
   });

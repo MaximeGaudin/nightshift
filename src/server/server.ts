@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import type { Server, ServerWebSocket } from "bun";
 import { diffAgentFeatures, validateAgentFeaturesStrict } from "../shared/agentFeatures.ts";
+import type { CardAttachmentStored } from "../shared/attachments.ts";
 import { dependencyCycle, describeCycle, releaseReason, resolveDependencyRefs, unmetDependencies } from "../shared/dependencies.ts";
 import { describeEffortChanges, diffEfforts, type EffortLevel, isValidEffort, validateEffortsStrict } from "../shared/effort.ts";
 import { effectiveBaseUrl, type IssueSyncResult, matchesLabels, parseGitRemote, providerInfo } from "../shared/issues.ts";
@@ -32,6 +33,7 @@ import {
 } from "../shared/types.ts";
 import { safeHttpUrl } from "../shared/urls.ts";
 import index from "../web/index.html";
+import { removeAttachments, storeCardAttachment } from "./attachments.ts";
 import { checkRequest, HttpError } from "./guard.ts";
 import { checkSourceInput, replaceSources } from "./issues/input.ts";
 import { providerFor } from "./issues/registry.ts";
@@ -511,6 +513,7 @@ export function startServer({ port, development, agents = true }: { port: number
           const p = project(b, url);
           p.mutate((board) => p.deleteCard(board, req.params.id));
           removeScreenshots(req.params.id);
+          removeAttachments(req.params.id);
           orch.purgeCard(p, req.params.id);
         }),
       },
@@ -574,6 +577,15 @@ export function startServer({ port, development, agents = true }: { port: number
           if (!card) throw new HttpError(404, "Unknown card");
           if (typeof b.data !== "string") throw new Error("data must be a string");
           return { path: storeCardImage(card.id, b.data) } satisfies CardImageStored;
+        }),
+      },
+      "/api/cards/:id/attachments": {
+        // The file travels as base64 in a JSON body: the CSRF guard only accepts application/json.
+        POST: h((b, url, req) => {
+          const card = project(b, url).card(req.params.id);
+          if (!card) throw new HttpError(404, "Unknown card");
+          const name = reqString(b, "name");
+          return storeCardAttachment(card.id, name, typeof b.data === "string" ? b.data : "") satisfies CardAttachmentStored;
         }),
       },
       "/api/cards/:id/resume": {
