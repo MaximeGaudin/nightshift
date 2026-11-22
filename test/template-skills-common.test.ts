@@ -48,7 +48,8 @@ test("template-skills-size-cap: the column skills stay under the size cap", () =
 });
 
 // Rare cases live in references/, read on demand: only the SKILL.md counts against these caps.
-const SKILL_CAPS: Record<string, number> = { "nightshift-implement": 10_496, "nightshift-review": 7_296 };
+// Card #88 added the long-command rule (background start, explicit timeout, wait in the turn) to both: +64 and +192 bytes.
+const SKILL_CAPS: Record<string, number> = { "nightshift-implement": 10_560, "nightshift-review": 7_488 };
 
 test("template-skills-on-demand: implement and review stay small and point at their references", () => {
   for (const [dir, cap] of Object.entries(SKILL_CAPS)) {
