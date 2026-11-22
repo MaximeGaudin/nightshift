@@ -5,7 +5,7 @@ import type { ChecksSummary, CodeHost, MergeResult, PrInfo, PrMergeable, PrState
 import { CodeHostError } from "./codehost.ts";
 import { type GhResult, gh } from "./gh.ts";
 
-const PR_FIELDS = "url,number,state,body,mergeable,mergeCommit,baseRefName,isDraft,headRefOid";
+const PR_FIELDS = "url,number,state,body,mergeable,mergeCommit,baseRefName,isDraft,headRefOid,autoMergeRequest";
 
 function errorOf(r: GhResult, what: string): CodeHostError {
   const text = `${r.stderr}\n${r.stdout}`.trim() || `exit ${r.code}`;
@@ -31,6 +31,8 @@ function parsePr(stdout: string): PrInfo {
     baseRefName: String(j.baseRefName ?? ""),
     isDraft: j.isDraft === true,
     ...(typeof j.headRefOid === "string" && j.headRefOid ? { headSha: j.headRefOid } : {}),
+    // `autoMergeRequest` is an object while auto-merge is enabled and null otherwise; a missing key says nothing.
+    ...("autoMergeRequest" in j ? { autoMerge: j.autoMergeRequest !== null && typeof j.autoMergeRequest === "object" } : {}),
   };
 }
 
