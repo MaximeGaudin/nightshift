@@ -2,6 +2,7 @@ import { afterAll } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { acquireStateLock, writeStateAtomic } from "./fake-gh-lock.ts";
 
 // bun test runs every file in one process with one module cache: settings.ts reads NIGHTSHIFT_HOME at import,
 // skills.ts reads NIGHTSHIFT_USER_SKILLS at import, and startServer reuses globalThis.__nightshift. Any test that
@@ -201,7 +202,15 @@ export function installFakeGh(initial: Record<string, unknown> = { prs: [] }) {
     env: { FAKE_GH_STATE: statePath, FAKE_GH_LOG: logPath },
     // biome-ignore lint/suspicious/noExplicitAny: test state is free-form JSON
     state: (): any => JSON.parse(readFileSync(statePath, "utf8")),
-    setState: (s: unknown) => writeFileSync(statePath, JSON.stringify(s)),
+    /** Under the state lock: never interleaved with a gh call that is rewriting the state. */
+    setState: (s: unknown) => {
+      const release = acquireStateLock(statePath);
+      try {
+        writeStateAtomic(statePath, JSON.stringify(s));
+      } finally {
+        release();
+      }
+    },
     calls: (): { args: string[]; stdin?: string }[] =>
       existsSync(logPath)
         ? readFileSync(logPath, "utf8")

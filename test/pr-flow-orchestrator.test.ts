@@ -459,6 +459,26 @@ const isCreate = (head: string) => (a: string[]) => a[1] === "create" && a.inclu
 const isReady = (url: string) => (a: string[]) => a[1] === "ready" && a[2] === url && !a.includes("--undo");
 const isUndo = (url: string) => (a: string[]) => a[1] === "ready" && a[2] === url && a.includes("--undo");
 
+/**
+ * What a timed-out wait on a card's PR shows: the card's column and last run, its PR log lines, the gh calls about its
+ * branch or PRs, and the PRs of the fake gh state.
+ */
+async function prDiagnostic(b: Awaited<ReturnType<typeof setup>>, id: string) {
+  const head = `nightshift/${id}`;
+  const card = await b.get(id);
+  const prs = fake.state().prs as { head: string; number: number; url: string; isDraft?: boolean; state: string }[];
+  const urls = prs.filter((p) => p.head === head).map((p) => p.url);
+  const calls = fake.calls();
+  return {
+    column: card.columnId,
+    lastRun: card.lastRun,
+    prLog: (await b.logOf(id)).filter((l) => /PR/.test(l.text)).map((l) => `${l.kind}: ${l.text}`),
+    ghCalls: calls.filter((c) => c.args.some((a) => a.includes(head) || urls.includes(a))).map((c) => c.args.join(" ")),
+    ghCallCount: calls.length,
+    prs: prs.map((p) => ({ head: p.head, number: p.number, state: p.state, isDraft: p.isDraft === true })),
+  };
+}
+
 test("review: a draft PR opens when the card enters Review, then is updated and marked ready", async () => {
   fake.setState({ prs: [], nextNumber: 100, defaultChecks: PENDING });
   const b = await setup();
@@ -475,13 +495,18 @@ test("review: a draft PR opens when the card enters Review, then is updated and 
   expect(ready).toBeGreaterThan(edit);
   expect((await b.get(id)).description).toContain(`- PR: ${pr.url}`);
 
-  // Back to Review: the ready PR becomes a draft again, then ready after the review.
+  // Back to Review: the ready PR becomes a draft again, then ready after the review. A gh call is logged before it
+  // writes the state: wait for the write too, or its late write lands in the next test.
   const before = fake.calls().length - 1;
   await post(`/api/cards/${id}/move`, { project: b.dir, columnId: b.reviewCol.id });
-  await waitFor(async () => {
-    const undo = callIndex(isUndo(pr.url), before);
-    return undo >= 0 && callIndex(isReady(pr.url), undo) >= 0;
-  }, 30_000);
+  await waitFor(
+    async () => {
+      const undo = callIndex(isUndo(pr.url), before);
+      return undo >= 0 && callIndex(isReady(pr.url), undo) >= 0 && prOf(head)[0]?.isDraft === false;
+    },
+    30_000,
+    () => prDiagnostic(b, id),
+  );
   expect(prOf(head)[0].isDraft).toBe(false);
   expect(prOf(head).length).toBe(1);
 }, 90_000);
@@ -490,9 +515,10 @@ test("review: a failed review leaves the PR in draft", async () => {
   fake.setState({ prs: [], nextNumber: 110, defaultChecks: PENDING });
   const b = await setup();
   const { id } = await b.card("fail", { exact: true });
-  await waitFor(async () => (await b.get(id)).lastRun?.status === "error", 30_000);
+  const diag = () => prDiagnostic(b, id);
+  await waitFor(async () => (await b.get(id)).lastRun?.status === "error", 30_000, diag);
   const head = `nightshift/${id}`;
-  await waitFor(async () => prOf(head).length === 1, 20_000);
+  await waitFor(async () => prOf(head).length === 1, 20_000, diag);
   const [pr] = prOf(head);
   expect(pr.isDraft).toBe(true);
   expect(callIndex(isReady(pr.url))).toBe(-1);

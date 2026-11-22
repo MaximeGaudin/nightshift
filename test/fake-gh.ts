@@ -10,7 +10,8 @@
 //        none (404 / empty rules), or an HTTP 500)
 // `pr merge` on a mergeable PR simulates GitHub on the bare `remote`: the base ref moves to the head sha and,
 // with --delete-branch, the head ref is deleted.
-import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
+import { acquireStateLock, writeStateAtomic } from "./fake-gh-lock.ts";
 
 interface FakePr {
   number: number;
@@ -46,13 +47,21 @@ interface State {
 
 const args = process.argv.slice(2);
 const statePath = process.env.FAKE_GH_STATE ?? "";
-const state: State = statePath && existsSync(statePath) ? JSON.parse(readFileSync(statePath, "utf8")) : { prs: [] };
-state.prs ??= [];
+// Stdin first: the test process can be the one that feeds it, and it cannot while it waits for the lock in setState.
 const usesStdin = args.includes("--body-file");
 const stdin = usesStdin ? await new Response(Bun.stdin.stream()).text() : undefined;
+// The commands that write the state hold its lock from the read below to their exit (see fake-gh-lock.ts).
+const writes = args[0] === "pr" && ["create", "edit", "ready", "merge"].includes(args[1]);
+if (statePath && writes) process.on("exit", acquireStateLock(statePath));
+const state: State = statePath && existsSync(statePath) ? JSON.parse(readFileSync(statePath, "utf8")) : { prs: [] };
+state.prs ??= [];
 if (process.env.FAKE_GH_LOG) appendFileSync(process.env.FAKE_GH_LOG, `${JSON.stringify({ args, ...(usesStdin ? { stdin } : {}) })}\n`);
+// FAKE_GH_DELAY_MS: a slow gh, between reading the state and writing it (widens the window of concurrent calls).
+// FAKE_GH_DELAY_SUB limits the delay to one sub-command (for example `ready`).
+const delayMs = Number(process.env.FAKE_GH_DELAY_MS) || 0;
+if (delayMs > 0 && (!process.env.FAKE_GH_DELAY_SUB || process.env.FAKE_GH_DELAY_SUB === args[1])) await Bun.sleep(delayMs);
 
-const save = () => statePath && writeFileSync(statePath, JSON.stringify(state, null, 2));
+const save = () => statePath && writeStateAtomic(statePath, JSON.stringify(state, null, 2));
 const out = (s: string) => process.stdout.write(s.endsWith("\n") ? s : `${s}\n`);
 const fail = (msg: string, code = 1): never => {
   process.stderr.write(`${msg}\n`);
