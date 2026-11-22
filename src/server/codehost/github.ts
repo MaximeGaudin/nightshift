@@ -5,7 +5,7 @@ import type { ChecksSummary, CodeHost, MergeResult, PrInfo, PrMergeable, PrState
 import { CodeHostError } from "./codehost.ts";
 import { type GhResult, gh } from "./gh.ts";
 
-const PR_FIELDS = "url,number,state,body,mergeable,mergeCommit,baseRefName,isDraft";
+const PR_FIELDS = "url,number,state,body,mergeable,mergeCommit,baseRefName,isDraft,headRefOid";
 
 function errorOf(r: GhResult, what: string): CodeHostError {
   const text = `${r.stderr}\n${r.stdout}`.trim() || `exit ${r.code}`;
@@ -30,6 +30,7 @@ function parsePr(stdout: string): PrInfo {
     ...(mc?.oid ? { mergeCommit: mc.oid } : {}),
     baseRefName: String(j.baseRefName ?? ""),
     isDraft: j.isDraft === true,
+    ...(typeof j.headRefOid === "string" && j.headRefOid ? { headSha: j.headRefOid } : {}),
   };
 }
 
@@ -139,6 +140,27 @@ export const github: CodeHost = {
     if (failed.length > 0) return { state: "fail", failed };
     if (rows.some((c) => c.bucket === "pending")) return { state: "pending", failed: [] };
     return { state: "pass", failed: [] };
+  },
+
+  async requiredChecks(cwd, base) {
+    const branch = encodeURI(base);
+    const json = async (path: string): Promise<unknown> => {
+      const r = await gh(cwd, ["api", path]);
+      if (r.code !== 0) return undefined;
+      try {
+        return JSON.parse(r.stdout);
+      } catch {
+        return undefined;
+      }
+    };
+    // Classic branch protection: a 404 ("Branch not protected") means no required check.
+    const classic = (await json(`repos/{owner}/{repo}/branches/${branch}/protection/required_status_checks`)) as
+      | { contexts?: unknown[]; checks?: unknown[] }
+      | undefined;
+    if ((classic?.contexts?.length ?? 0) > 0 || (classic?.checks?.length ?? 0) > 0) return true;
+    // Rulesets: the rules that apply to the branch.
+    const rules = await json(`repos/{owner}/{repo}/rules/branches/${branch}`);
+    return Array.isArray(rules) && rules.some((r) => (r as { type?: unknown } | null)?.type === "required_status_checks");
   },
 
   async mergePr(_cwd, url, { method, auto }): Promise<MergeResult> {
