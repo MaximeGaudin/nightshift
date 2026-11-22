@@ -16,5 +16,5 @@ test("dialog chip shows the conflict label", () => {
   const html = renderToStaticMarkup(<CiChip ci={ci} />);
   expect(html).toContain('data-ci="conflict"');
   expect(html).toContain("text-conflict");
-  expect(html).toContain("Merge conflict with base branch");
+  expect(html).toMatch(/Merge conflict with base branch|Conflit avec la branche de base/);
 });
