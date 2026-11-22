@@ -18,6 +18,7 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "test:parallel": "bun scripts/test-parallel.ts",
+    "test:fast": "bun scripts/test-parallel.ts --fast",
     "lint": "biome check .",
     "format": "biome format --write .",
     "test:coverage": "bun test --coverage",
