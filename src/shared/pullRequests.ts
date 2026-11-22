@@ -98,6 +98,21 @@ export function prUrlOf(description: string): string | undefined {
   return undefined;
 }
 
+// ---- CI status of a card's pull request ------------------------------------------------------------------------
+
+export type PrCiState = "pass" | "pending" | "fail" | "none" | "merged" | "closed";
+
+/** Display-only CI status of a PR: in memory on the server, pushed to the clients in the snapshot. */
+export interface PrCiStatus {
+  /** The PR URL this status belongs to. */
+  url: string;
+  state: PrCiState;
+  /** Failed checks; non-empty only when `state` is `fail`. */
+  failed: { name: string; link: string }[];
+  /** ISO time of the last successful fetch. */
+  checkedAt: string;
+}
+
 // ---- merge status ----------------------------------------------------------------------------------------------
 
 export type MergeStatusKind = "pending" | "auto" | "ready" | "closed" | "merged";
