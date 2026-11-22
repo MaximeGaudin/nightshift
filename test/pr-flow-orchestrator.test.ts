@@ -83,8 +83,11 @@ const agentRuns = (): { title: string; fastMerge: boolean; prompt: string }[] =>
         .map((l) => JSON.parse(l))
     : [];
 
-/** A board with Backlog, Review, Merge and Done; origin is GitHub (`github`) or the bare path. */
-async function setup({ github = true, settings = {} as Record<string, unknown> } = {}) {
+/**
+ * A board with Backlog, Review, Merge and Done; origin is GitHub (`github`) or the bare path. `workflows` commits a
+ * GitHub Actions workflow, so a PR without any check waits for its CI.
+ */
+async function setup({ github = true, settings = {} as Record<string, unknown>, workflows = false } = {}) {
   const root = tempDir("ns-pr-");
   const remote = join(root, "remote.git");
   g(root, "init", "-q", "--bare", "-b", "main", remote);
@@ -93,6 +96,10 @@ async function setup({ github = true, settings = {} as Record<string, unknown> }
   g(dir, "init", "-q", "-b", "main");
   commit(dir, ".gitignore", "nightshift.json\n.claude/\n");
   commit(dir, "shared.txt", "one\n");
+  if (workflows) {
+    mkdirSync(join(dir, ".github", "workflows"), { recursive: true });
+    commit(dir, ".github/workflows/ci.yml", "on: [pull_request]\n");
+  }
   if (github) {
     g(dir, "remote", "add", "origin", GH_URL);
     g(dir, "config", `url.${remote}.insteadOf`, GH_URL);
@@ -237,7 +244,7 @@ test("merge: squash method is passed and the unmerged-looking branch is deleted 
 }, 60_000);
 
 test("merge: pending checks with auto-merge on schedule gh pr merge --auto", async () => {
-  fake.setState({ prs: [], nextNumber: 30, defaultChecks: PENDING });
+  fake.setState({ prs: [], nextNumber: 30, requiredChecks: true, defaultChecks: PENDING });
   const b = await setup({ settings: { autoMerge: true } });
   const { id } = await b.card("pr-auto");
   await waitFor(async () => (await b.get(id)).description.includes("auto-merge programmé"), 30_000);
@@ -294,14 +301,76 @@ test("mode off (origin not on GitHub): gh is never called and the local fast mer
 }, 60_000);
 
 const LINK = "https://github.com/o/r/actions/runs/42/job/1";
-const setChecks = (head: string, bucket: string) => {
+const setChecks = (head: string, bucket: string, { required = true } = {}) => {
   const s = fake.state();
-  for (const p of s.prs) if (p.head === head) p.checks = [{ name: "ci", state: bucket.toUpperCase(), bucket, link: LINK }];
+  for (const p of s.prs) {
+    if (p.head === head)
+      p.checks = [{ name: "ci", state: bucket.toUpperCase(), bucket, link: LINK, ...(required ? {} : { required: false }) }];
+  }
   fake.setState(s);
 };
+const mergeCalls = (url: string) =>
+  fake.calls().filter((c) => c.args[1] === "merge" && c.args[2] === url && !c.args.includes("--disable-auto"));
+const OPTIONAL_FAIL = [{ name: "ci", state: "FAILURE", bucket: "fail", link: LINK, required: false }];
+const OPTIONAL_PENDING = [{ name: "ci", state: "PENDING", bucket: "pending", link: LINK, required: false }];
+
+test("e2e: a failing non-required check on an unprotected base sends the card back to Review", async () => {
+  fake.setState({ prs: [], nextNumber: 200, defaultChecks: OPTIONAL_FAIL, runLogs: { "42": "error: red" } });
+  const b = await setup();
+  const { id } = await b.card("e2e-optional-fail");
+  await waitFor(async () => (await b.get(id)).description.includes("## CI"), 30_000);
+  const card = await b.get(id);
+  expect(card.description).toContain(`## CI\n\n- ci : ${LINK}`);
+  expect(mergeCalls(prOf(`nightshift/${id}`)[0].url)).toEqual([]);
+}, 60_000);
+
+test("e2e: a running non-required check with auto-merge on an unprotected base waits without --auto", async () => {
+  fake.setState({ prs: [], nextNumber: 210, defaultChecks: OPTIONAL_PENDING });
+  const b = await setup({ settings: { autoMerge: true } });
+  const { id } = await b.card("e2e-optional-pending");
+  await waitFor(async () => (await b.get(id)).description.includes("checks en attente"), 30_000);
+  expect((await b.get(id)).columnId).toBe(b.mergeCol.id);
+  expect(mergeCalls(prOf(`nightshift/${id}`)[0].url)).toEqual([]);
+}, 60_000);
+
+test("e2e: CI workflows and no check reported yet: the card waits instead of merging", async () => {
+  fake.setState({ prs: [], nextNumber: 220 });
+  const b = await setup({ workflows: true });
+  const { id } = await b.card("e2e-no-checks-yet");
+  await waitFor(async () => (await b.get(id)).description.includes("checks en attente"), 30_000);
+  expect((await b.get(id)).columnId).toBe(b.mergeCol.id);
+  expect(mergeCalls(prOf(`nightshift/${id}`)[0].url)).toEqual([]);
+}, 60_000);
+
+test("e2e: CI watcher, a failing non-required check sends the card back to Review", async () => {
+  fake.setState({ prs: [], nextNumber: 230, defaultChecks: OPTIONAL_PENDING, runLogs: { "42": "error: red" } });
+  const b = await setup();
+  const { id } = await b.card("e2e-watch-optional-fail");
+  await waitFor(async () => (await b.get(id)).description.includes("checks en attente"), 30_000);
+  setChecks(`nightshift/${id}`, "fail", { required: false });
+  await srv.orch.ci.pass(srv.orch.open(b.dir));
+  const card = await b.get(id);
+  expect(card.description).toContain(`## CI\n\n- ci : ${LINK}`);
+  expect(card.history.some((h) => h.kind === "moved" && h.text.startsWith("CI:"))).toBe(true);
+  expect(mergeCalls(prOf(`nightshift/${id}`)[0].url)).toEqual([]);
+}, 60_000);
+
+test("e2e: CI watcher, auto-merge on and no required check: green checks are merged by Nightshift", async () => {
+  fake.setState({ prs: [], nextNumber: 240, defaultChecks: OPTIONAL_PENDING });
+  const b = await setup({ settings: { autoMerge: true } });
+  const { id, sha } = await b.card("e2e-watch-self-merge");
+  await waitFor(async () => (await b.get(id)).description.includes("checks en attente"), 30_000);
+  setChecks(`nightshift/${id}`, "pass", { required: false });
+  await srv.orch.ci.pass(srv.orch.open(b.dir));
+  const card = await b.get(id);
+  const url = prOf(`nightshift/${id}`)[0].url;
+  expect(mergeCalls(url).map((c) => c.args)).toEqual([["pr", "merge", url, "--merge", "--delete-branch"]]);
+  expect(card.columnId).toBe(b.doneCol.id);
+  expect(card.description).toContain(`- PR: ${url} merged (${sha.slice(0, 7)})`);
+}, 60_000);
 
 test("CI watcher: a failed check disables auto-merge, writes ## CI and sends the card back to Review", async () => {
-  fake.setState({ prs: [], nextNumber: 60, defaultChecks: PENDING, runLogs: { "42": "step 1\nerror: boom" } });
+  fake.setState({ prs: [], nextNumber: 60, requiredChecks: true, defaultChecks: PENDING, runLogs: { "42": "step 1\nerror: boom" } });
   const b = await setup({ settings: { autoMerge: true } });
   const { id } = await b.card("ci-fail");
   await waitFor(async () => (await b.get(id)).description.includes("auto-merge programmé"), 30_000);
@@ -322,7 +391,7 @@ test("CI watcher: a failed check disables auto-merge, writes ## CI and sends the
 }, 90_000);
 
 test("CI watcher: a PR merged by auto-merge is cleaned up and the card moves to Done", async () => {
-  fake.setState({ prs: [], nextNumber: 70, defaultChecks: PENDING });
+  fake.setState({ prs: [], nextNumber: 70, requiredChecks: true, defaultChecks: PENDING });
   const b = await setup({ settings: { autoMerge: true } });
   const { id, wt, sha } = await b.card("ci-auto-merged");
   await waitFor(async () => (await b.get(id)).description.includes("auto-merge programmé"), 30_000);
