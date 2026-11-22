@@ -6,7 +6,7 @@ import { quiet, removeTempDirs, tempDir, waitFor } from "./helpers.ts";
 
 // The server, orchestrator and settings modules keep process-wide singletons (NIGHTSHIFT_HOME is read at
 // import, settings live on globalThis) and `bun test` shares them across files. To avoid clobbering
-// nightshift.test.ts, the scenarios run in a child `bun test` of this very file with its own home.
+// the nightshift-*.test.ts files, the scenarios run in a child `bun test` of this very file with its own home.
 const CHILD = process.env.RUN_PROGRESS_CHILD === "1";
 
 if (!CHILD) {
