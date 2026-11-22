@@ -1,3 +1,4 @@
+import { afterAll } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -154,6 +155,35 @@ export function must<T>(value: T | null | undefined, what = "value"): T {
 
 /** The settings module keeps its state on globalThis (shared across `bun --hot` reloads); tests reset it between cases. */
 export const settingsGlobal = () => globalThis as { __nightshiftSettings?: { current: unknown; listeners: Set<unknown> } };
+
+/**
+ * Snapshot of `globalThis.__nightshiftSettings` taken now: `restore()` puts back the very object found (modules already
+ * in the cache captured it in `const shared`), so a file that resets the global to get a fresh settings.ts instance
+ * never leaves `undefined` or a foreign object for the files that follow in the same `bun test` process.
+ */
+export function keepSettingsGlobal(): { restore(): void } {
+  const saved = settingsGlobal().__nightshiftSettings;
+  return {
+    restore() {
+      settingsGlobal().__nightshiftSettings = saved;
+    },
+  };
+}
+
+/**
+ * Call at the top of a test file, BEFORE it sets any of `names` in `process.env`: registers an `afterAll` that puts
+ * each variable back to the value it had now (deleted when it was unset), so the next file in the process sees the
+ * environment it started with.
+ */
+export function restoreEnvAfterAll(...names: string[]) {
+  const saved = names.map((name) => [name, process.env[name]] as const);
+  afterAll(() => {
+    for (const [name, value] of saved) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  });
+}
 
 /** A fake `gh` (test/fake-gh.ts) in its own folder, with its JSON state and call log. Prepend `dir` to PATH to use it. */
 export function installFakeGh(initial: Record<string, unknown> = { prs: [] }) {
