@@ -58,7 +58,7 @@ export function CiChip({ ci }: { ci: PrCiStatus }) {
   const label = useCiText();
   const tone = TONE[ci.state];
   return (
-    <span data-ci={ci.state} className="card-ci-chip inline-flex flex-wrap items-center gap-1 text-xs font-normal">
+    <span data-ci={ci.state} className="card-ci-chip ml-2 inline-flex flex-wrap items-center gap-1 text-xs font-normal">
       <span className={cn("inline-flex items-center gap-1", tone.text)}>
         {tone.dot && <span className={cn("size-1.5 rounded-full", tone.dot)} aria-hidden="true" />}
         {ci.state === "fail" ? t(LABEL.fail) : label(ci)}
