@@ -1,7 +1,7 @@
 // Pull request settings rows and PR link on the card tile and in the card dialog.
 import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { PullRequestSettings } from "../src/shared/pullRequests.ts";
+import type { PrCiStatus, PullRequestSettings } from "../src/shared/pullRequests.ts";
 import type { Card, Settings } from "../src/shared/types.ts";
 import { CardPrLink } from "../src/web/CardModal.tsx";
 import { CardTile } from "../src/web/CardTile.tsx";
@@ -79,4 +79,50 @@ test("the PR link shows on the tile and in the dialog, only for an http(s) URL",
     expect(renderToStaticMarkup(<CardTile project="/p" card={card(d)} onOpen={() => {}} />)).not.toContain("card-pr");
     expect(renderToStaticMarkup(<CardPrLink card={card(d)} />)).toBe("");
   }
+});
+
+const prUrl = "https://github.com/o/r/pull/3";
+const withPr = () => card(`## Review\n\n- PR: ${prUrl}\n`);
+const ciStatus = (state: PrCiStatus["state"], failed: PrCiStatus["failed"] = [], url = prUrl): PrCiStatus => ({
+  url,
+  state,
+  failed,
+  checkedAt: "2026-01-01T00:00:00.000Z",
+});
+
+test("the tile shows a CI dot per state, and the failed check names in the tooltip", () => {
+  for (const state of ["pass", "pending", "fail", "none"] as const) {
+    const html = renderToStaticMarkup(<CardTile project="/p" card={withPr()} ci={ciStatus(state)} onOpen={() => {}} />);
+    expect(html).toContain(`data-ci="${state}"`);
+  }
+  const failed = [
+    { name: "lint", link: "https://github.com/o/r/actions/runs/1/job/2" },
+    { name: "unit", link: "" },
+  ];
+  const html = renderToStaticMarkup(<CardTile project="/p" card={withPr()} ci={ciStatus("fail", failed)} onOpen={() => {}} />);
+  expect(html).toMatch(/title="CI ?: [^"]*\(lint, unit\)/);
+  // Merged or closed: no dot; a status of another URL, or none, shows nothing new.
+  for (const ci of [ciStatus("merged"), ciStatus("closed"), ciStatus("pass", [], "https://github.com/o/r/pull/9"), undefined]) {
+    expect(renderToStaticMarkup(<CardTile project="/p" card={withPr()} ci={ci} onOpen={() => {}} />)).not.toContain("data-ci");
+  }
+  expect(renderToStaticMarkup(<CardTile project="/p" card={card("")} ci={ciStatus("pass")} onOpen={() => {}} />)).not.toContain("data-ci");
+});
+
+test("the dialog chip links each failed check to its run", () => {
+  const link = "https://github.com/o/r/actions/runs/1/job/2";
+  const html = renderToStaticMarkup(
+    <CardPrLink
+      card={withPr()}
+      ci={ciStatus("fail", [
+        { name: "lint", link },
+        { name: "unit", link: "javascript:alert(1)" },
+      ])}
+    />,
+  );
+  expect(html).toContain(`href="${link}"`);
+  expect(html).toContain(">lint<");
+  expect(html).toContain("unit");
+  expect(html).not.toContain("javascript:");
+  expect(renderToStaticMarkup(<CardPrLink card={withPr()} ci={ciStatus("pass")} />)).toMatch(/CI ?: (passing|succès)/);
+  expect(renderToStaticMarkup(<CardPrLink card={withPr()} />)).not.toContain("data-ci");
 });

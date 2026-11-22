@@ -2,7 +2,7 @@ import { ArrowRight, ChevronsRight, GitPullRequest } from "lucide-react";
 import type { HTMLAttributes, KeyboardEvent, Ref } from "react";
 import { providerLabel } from "../shared/issues.ts";
 import { resolveModel } from "../shared/models.ts";
-import { prUrlOf } from "../shared/pullRequests.ts";
+import { type PrCiStatus, prUrlOf } from "../shared/pullRequests.ts";
 import { type Card, type Column, cardRef, type LiveStatus, type RunProgress as RunProgressData, type Settings } from "../shared/types.ts";
 import { safeHttpUrl } from "../shared/urls.ts";
 import { CardThumbnail } from "./CardThumbnail.tsx";
@@ -13,6 +13,7 @@ import { useT } from "./i18n/index.ts";
 import { ProviderIcon, StatusIcon } from "./icons.tsx";
 import { cn } from "./lib/utils.ts";
 import { toPlainText } from "./markdown.tsx";
+import { CiDot, ciOf, ciTextClass, useCiText } from "./prCi.tsx";
 import { RunProgress } from "./RunProgress.tsx";
 
 /** The card waits for the project to leave pause. */
@@ -51,6 +52,7 @@ export function CardTile({
   column,
   columns,
   settings,
+  ci,
 }: {
   project: string;
   card: Card;
@@ -75,10 +77,14 @@ export function CardTile({
   /** The board columns, to compute the card chronos; without them the tile shows none. */
   columns?: Column[];
   settings?: Pick<Settings, "model"> | null;
+  /** CI status of the card's pull request, from the project snapshot. */
+  ci?: PrCiStatus;
 }) {
   const { t, tn } = useT();
   const override = cardModelOverride(column, settings, card);
   const prHref = safeHttpUrl(prUrlOf(card.description));
+  const prCi = ciOf(card, ci);
+  const ciText = useCiText();
   const lr = card.lastRun?.columnId === card.columnId ? card.lastRun : undefined;
   const status = live ?? lr?.status;
   const excerpt = card.description ? toPlainText(card.description).slice(0, 160) : "";
@@ -135,13 +141,14 @@ export function CardTile({
             href={prHref}
             target="_blank"
             rel="noreferrer"
-            className="card-pr inline-flex items-center hover:text-foreground"
-            title={t("card.pr.open")}
+            className={cn("card-pr inline-flex items-center gap-0.5 hover:text-foreground", ciTextClass(prCi))}
+            title={prCi ? `${ciText(prCi)} · ${t("card.pr.open")}` : t("card.pr.open")}
             aria-label={t("card.pr.open")}
             onClick={(e) => e.stopPropagation()}
             onKeyDown={(e) => e.stopPropagation()}
           >
             <GitPullRequest size={11} aria-hidden="true" />
+            {prCi && <CiDot ci={prCi} />}
           </a>
         )}
         {override && (
