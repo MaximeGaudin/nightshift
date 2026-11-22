@@ -8,6 +8,7 @@ export const board: Record<keyof typeof enboard, string> = {
   "board.status.error": "Erreur",
   "board.status.cancelled": "Annulé",
   "board.status.question": "Question pour vous",
+  "board.status.attention": "À reprendre",
   "board.card.skippedColumns": "Colonnes sautées : {names}",
   "board.card.waiting": "attend {refs}",
   "board.card.waitingTitle": "Quitte Backlog quand ces cartes sont dans Done : {refs}",

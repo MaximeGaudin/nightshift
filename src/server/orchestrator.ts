@@ -40,6 +40,7 @@ import { canSendFeedback, cardRef, columnMaxParallel, isDoneColumn } from "../sh
 import { safeHttpUrl } from "../shared/urls.ts";
 import type { QuotaSnapshot } from "../shared/usage.ts";
 import { removeAttachments } from "./attachments.ts";
+import { BackgroundTasks } from "./backgroundTasks.ts";
 import { type AsideHandle, type AsideResult, type AsideRun, Briefing } from "./briefing.ts";
 import { CI_POLL_MS, CiWatcher } from "./ciWatcher.ts";
 import { buildEnvironment } from "./environment.ts";
@@ -108,6 +109,8 @@ interface Runner {
   markerSeen?: boolean;
   /** A TodoWrite was seen in the current process: tool activity no longer overwrites it. */
   todoSeen?: boolean;
+  /** Background commands the current process started and that have not ended; reset at each spawn. */
+  background?: BackgroundTasks;
   /** Set while the launch waits in the teamclaude gate: removes it from there. */
   abortWait?: () => void;
 }
@@ -299,6 +302,30 @@ export const RESULT_SCHEMA = {
 /** Put before a column's prompt when it continues the card's session from an earlier column. */
 export const CONTINUE_PREFIX = `New step for this card. The messages above are its earlier steps, in other columns: keep their context, but follow only the instructions below for this step, and return this step's structured output.`;
 
+/**
+ * How agents run long commands and wait for them. `claude -p` asks for the structured output as soon as a turn ends,
+ * so an agent that ends its turn to wait for a background command is forced to answer before the command is done.
+ */
+export const LONG_COMMANDS_RULE = [
+  "- Any command that can run longer than 2 minutes (test suites, builds, `scripts/run_test*`) starts with `run_in_background: true` and an explicit `timeout` from the first call: its expected duration plus margin, up to 7200000 ms (2 h). Never rely on the 120 s default and never start it in a plain foreground call.",
+  "- Never end your turn while a background command you need is still running: wait for it inside the turn with foreground calls that block (for example Bash with `timeout: 600000` waiting on its output file), repeated until it ends; only then return the structured output.",
+  '- `move: "stay"` with no questions means the work is not finished: the board shows the card as needing attention.',
+].join("\n");
+
+/** Opening phrase of the prompt sent when a run returned while its background commands were still running. */
+export const BACKGROUND_PROMPT_LEAD =
+  "Your previous turn returned the structured output while background commands you started were still running";
+
+/** Resumes a session whose result came back while background commands it started were still running. */
+export function buildBackgroundPrompt(commands: string[]): string {
+  return `${BACKGROUND_PROMPT_LEAD}:
+${commands.map((c) => `- ${c.slice(0, 200)}`).join("\n")}
+The session ended since, so they are no longer running. Run again the ones you still need, following the rules below, wait for them inside your turn, check their result, then return the structured output exactly once, describing the final state.
+${LONG_COMMANDS_RULE}
+${PROGRESS_RULE}
+When resuming, re-emit the marker of the step currently in progress before anything else.`;
+}
+
 /** Sent when resuming a session that stopped before returning its structured result. */
 export const RECOVER_PROMPT = `Your previous run in this session stopped before returning Nightshift's structured output (it may have been interrupted, or it only returned interim results while background work was running).
 Check the actual state of your work first (worktrees, branches, commits, background tasks). If work remains, finish it. Then return the structured output exactly once, describing the final state.
@@ -340,6 +367,30 @@ export function descriptionBlock(description: string, seen?: string): string {
   return `<description-changes>\n${changes}\n</description-changes>`;
 }
 
+/** The agent's summary for a status line, or "no summary". */
+function summaryOf(out: Raw): string {
+  return typeof out.summary === "string" && out.summary.trim() ? out.summary.trim() : "no summary";
+}
+
+/** The column an agent's `move` resolves to: "next", a column id or name; undefined for "stay" or an unknown target. */
+function moveTarget(p: Project, card: Card, move: unknown): Column | undefined {
+  const m = String(move ?? "stay").trim();
+  if (m === "next") return p.nextColumnFor(card);
+  if (m === "stay") return undefined;
+  return p.board.columns.find((c) => c.id === m || c.name === m);
+}
+
+/**
+ * True when an agent's `move` keeps the card where it is: missing, "stay", or the card's own column (id or name).
+ * A "next" with no next column, or an unknown column, is not a stay: the agent meant to move on.
+ */
+export function isStayMove(p: Project, card: Card, move: unknown): boolean {
+  const m = String(move ?? "stay").trim();
+  if (m === "stay") return true;
+  if (m === "next") return false;
+  return moveTarget(p, card, m)?.id === card.columnId;
+}
+
 export function buildPrompt(
   board: Board,
   card: Card,
@@ -374,6 +425,7 @@ ${CARD_UPDATE_RULE}
 ${PROGRESS_RULE}
 - Never edit nightshift.json yourself; the board is updated from your structured output.
 ${SHARED_RULES}
+${LONG_COMMANDS_RULE}
 - Never kill processes by name or pattern (pkill -f, killall, kill $(pgrep …)): other agents run on this machine and their processes can match. Only kill PIDs you started yourself.
 - Return the structured output exactly once, at the very end. If you started background work (subagents, background shells), wait until all of it has finished first. Never return an interim or "in progress" result.
 - When finished, return the structured output:
@@ -431,6 +483,7 @@ ${PROGRESS_RULE}
 When resuming, re-emit the marker of the step currently in progress before anything else.
 - Never edit nightshift.json yourself; the board is updated from your structured output.
 ${SHARED_RULES}
+${LONG_COMMANDS_RULE}
 - Never kill processes by name or pattern (pkill -f, killall, kill $(pgrep …)): other agents run on this machine and their processes can match. Only kill PIDs you started yourself.
 - Return the structured output exactly once, at the very end. If you started background work (subagents, background shells), wait until all of it has finished first. Never return an interim or "in progress" result.
 - When finished, return the structured output:
@@ -1470,10 +1523,41 @@ export class Orchestrator {
               .filter(Boolean)
           : [];
         const output: AgentOutput = { ...out, questions };
-        const status = questions.length > 0 ? "question" : "success";
+        // A result given while a background command it started still runs is not final: the agent did not wait.
+        // Resumed once (the run's single recovery) to run it again and wait; a second time, it needs attention.
+        const open = questions.length === 0 ? (job.background?.openCommands() ?? []) : [];
+        if (open.length > 0) {
+          if (attempt === 0 && sessionId) {
+            this.log(
+              p,
+              card.id,
+              "info",
+              `Returned while a background command was still running (${open.length}). Resuming the session once to wait for it.`,
+            );
+            prompt = buildBackgroundPrompt(open);
+            resumeId = sessionId;
+            continue;
+          }
+          this.finish(job, "attention", {
+            output,
+            costUsd,
+            error: `Returned while a background command was still running: ${open.map((c) => c.slice(0, 200)).join("; ")}`.slice(0, 2000),
+            ...(sessionId ? { sessionId } : {}),
+          });
+          return;
+        }
+        // "stay" with no questions is how every skill says "stopped, not finished": never let it look done.
+        // Feedback runs are driven by the user (staying is legitimate there), and inert columns have no work to finish.
+        const unfinished =
+          questions.length === 0 &&
+          answer?.kind !== "feedback" &&
+          column.type === "skill" &&
+          isStayMove(p, p.card(card.id) ?? card, out.move);
+        const status = questions.length > 0 ? "question" : unfinished ? "attention" : "success";
         this.finish(job, status, {
           output,
           costUsd,
+          ...(unfinished ? { error: `Stopped in ${column.name} without finishing: ${summaryOf(out)}`.slice(0, 2000) } : {}),
           ...(sessionId ? { sessionId } : {}),
         });
         // Pull request mode: a successful review pushes the branch and opens or updates the PR, in the background.
@@ -1620,6 +1704,7 @@ export class Orchestrator {
   ): Promise<{ startError: string } | { result: StreamEvent | null; stderr: string; exit: string }> {
     const p = job.project;
     job.progress = undefined;
+    job.background = new BackgroundTasks();
     job.markerSeen = false;
     job.todoSeen = false;
     const settings = getSettings();
@@ -1762,6 +1847,7 @@ export class Orchestrator {
   }
 
   private handleEvent(job: Runner, target: RunTarget, ev: StreamEvent) {
+    job.background?.onEvent(ev);
     if (ev.type === "assistant") {
       // Subagent messages carry parent_tool_use_id: they are logged but never drive the card's progress.
       const own = !ev.parent_tool_use_id;
@@ -1820,7 +1906,9 @@ export class Orchestrator {
     }
     if (data.error) this.log(p, job.cardId, "error", data.error);
     // Decided inside the mutation, broadcast only once it has been applied.
-    let attention: AttentionKind | undefined = status === "error" ? "error" : status === "question" ? "question" : undefined;
+    // A run that needs attention rings like an error: same sound, same notification.
+    let attention: AttentionKind | undefined =
+      status === "error" || status === "attention" ? "error" : status === "question" ? "question" : undefined;
     p.mutate((board) => {
       const now = new Date().toISOString();
       const out = data.output;
@@ -1850,7 +1938,9 @@ export class Orchestrator {
           ? `${colName}: ${out?.summary ?? "done"}`
           : status === "question"
             ? `${colName}: ${out?.questions.length ?? 0} question(s) for the user`
-            : `${colName}: ${status}${data.error ? ` (${data.error.slice(0, 200)})` : ""}`,
+            : status === "attention"
+              ? `${colName}: needs attention${data.error ? ` (${data.error.slice(0, 200)})` : ""}`
+              : `${colName}: ${status}${data.error ? ` (${data.error.slice(0, 200)})` : ""}`,
       );
       // The description as this session believes it is: what it saw at launch (or last time, for a resume without
       // the description), plus its own edits. Not card.description: a human edit made during the run was never seen.
@@ -1860,7 +1950,7 @@ export class Orchestrator {
       const rememberSeen = () => {
         if (sessionId && seenText !== undefined) card.seenDescription = { sessionId, text: seenText };
       };
-      if ((status !== "success" && status !== "question") || !out) return rememberSeen();
+      if ((status !== "success" && status !== "question" && status !== "attention") || !out) return rememberSeen();
       if (typeof out.title === "string" && out.title.trim()) card.title = out.title.trim();
       if (typeof out.description === "string") {
         card.description = persistScreenshots(card.id, out.description);
@@ -1902,11 +1992,10 @@ export class Orchestrator {
         });
         return;
       }
+      // Not finished: the output is applied, but the card never leaves its column.
+      if (status === "attention") return;
       this.log(p, job.cardId, "info", `Done: ${out.summary ?? ""}`);
-      const move = String(out.move ?? "stay").trim();
-      let target: Column | undefined;
-      if (move === "next") target = p.nextColumnFor(card);
-      else if (move !== "stay") target = board.columns.find((c) => c.id === move || c.name === move);
+      const target = moveTarget(p, card, out.move);
       if (target && target.id !== card.columnId) {
         p.moveCard(board, card.id, target.id, undefined, "Agent");
         this.log(p, job.cardId, "info", `Moved to "${target.name}".`);

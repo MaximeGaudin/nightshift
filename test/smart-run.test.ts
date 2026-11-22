@@ -94,7 +94,7 @@ async function setup(column: object = {}) {
 test("smart-run: chosen config applied and logged, cost added to the run", async () => {
   const { enrich, card, logOf, create } = await setup();
   const { id } = await create("stay", "plain card");
-  await waitFor(async () => (await card(id)).lastRun?.status === "success");
+  await waitFor(async () => (await card(id)).lastRun?.status === "attention");
   expect(smartCalls("stay").length).toBeGreaterThanOrEqual(1);
   const call = must(smartCalls("stay").at(-1));
   expect(call.argv.slice(0, 4)).toEqual(["-p", "--model", "haiku", "--effort"]);
@@ -116,7 +116,7 @@ test("smart-run: chosen config applied and logged, cost added to the run", async
 test("smart-run: column override wins over the smart choice", async () => {
   const { card, create } = await setup({ agentFeatures: { mcp: false }, effort: "low" });
   const { id } = await create("stay", "column override");
-  await waitFor(async () => (await card(id)).lastRun?.status === "success");
+  await waitFor(async () => (await card(id)).lastRun?.status === "attention");
   const argv = must(agentRuns("stay").at(-1)).argv;
   expect(argv).toContain("--strict-mcp-config");
   expect(argv[argv.indexOf("--effort") + 1]).toBe("low");
@@ -157,16 +157,18 @@ test("smart-run: no smart call on answer and feedback; the session keeps its con
 test("smart-run: a retry reads the cache; a new description calls again", async () => {
   const { card, logOf, create, dir } = await setup();
   const { id } = await create("stay", "first");
-  await waitFor(async () => (await card(id)).lastRun?.status === "success");
+  await waitFor(async () => (await card(id)).lastRun?.status === "attention");
   const before = smartCalls("stay").length;
   await send(`/api/cards/${id}/retry`, { project: dir });
   await waitFor(async () => (await logOf(id)).some((l) => l.text.startsWith("Smart (cached): ")));
-  await waitFor(async () => (await card(id)).lastRun?.status === "success" && !(await logOf(id)).some((l) => l.text.startsWith("Smart: ")));
+  await waitFor(
+    async () => (await card(id)).lastRun?.status === "attention" && !(await logOf(id)).some((l) => l.text.startsWith("Smart: ")),
+  );
   expect(smartCalls("stay").length).toBe(before);
   const retried = must(agentRuns("stay").at(-1)).argv;
   expect(retried[retried.indexOf("--effort") + 1]).toBe("high");
   await send(`/api/cards/${id}`, { project: dir, description: "second" }, "PATCH");
-  await waitFor(async () => (await card(id)).lastRun?.status === "success");
+  await waitFor(async () => (await card(id)).lastRun?.status === "attention");
   await send(`/api/cards/${id}/retry`, { project: dir });
   await waitFor(() => smartCalls("stay").length === before + 1);
 });
@@ -175,7 +177,7 @@ test("smart-run: a failed call drops the stale cache entry, so a later answer ru
   const { enrich, card, create, dir } = await setup();
   const { id } = await create("stay", "cached first");
   await waitFor(async () => !!(await card(id)).smartChoices?.[enrich.id]);
-  await waitFor(async () => (await card(id)).lastRun?.status === "success");
+  await waitFor(async () => (await card(id)).lastRun?.status === "attention");
   await send(`/api/cards/${id}`, { project: dir, title: "smart-fail now" }, "PATCH");
   await send(`/api/cards/${id}/retry`, { project: dir });
   await waitFor(async () => (await card(id)).smartChoices === undefined && (await card(id)).lastRun?.status === "success");
@@ -184,7 +186,7 @@ test("smart-run: a failed call drops the stale cache entry, so a later answer ru
 test("smart-run: off globally or on the column", async () => {
   const col = await setup({ smartMode: false });
   const a = await col.create("stay", "column off");
-  await waitFor(async () => (await col.card(a.id)).lastRun?.status === "success");
+  await waitFor(async () => (await col.card(a.id)).lastRun?.status === "attention");
   expect((await col.logOf(a.id)).some((l) => l.text === "Smart off for this column.")).toBe(true);
   expect(smartCalls("stay").every((c) => !c.prompt.includes("column off"))).toBe(true);
 
@@ -192,7 +194,7 @@ test("smart-run: off globally or on the column", async () => {
   try {
     const g = await setup();
     const b = await g.create("stay", "global off");
-    await waitFor(async () => (await g.card(b.id)).lastRun?.status === "success");
+    await waitFor(async () => (await g.card(b.id)).lastRun?.status === "attention");
     expect((await g.logOf(b.id)).some((l) => l.text === "Smart off for this column.")).toBe(true);
     expect(smartCalls("stay").every((c) => !c.prompt.includes("global off"))).toBe(true);
   } finally {

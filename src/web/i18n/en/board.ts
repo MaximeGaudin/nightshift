@@ -6,6 +6,7 @@ export const board = {
   "board.status.error": "Error",
   "board.status.cancelled": "Cancelled",
   "board.status.question": "Question for you",
+  "board.status.attention": "Needs attention",
   "board.card.skippedColumns": "Skipped columns: {names}",
   "board.card.waiting": "waiting {refs}",
   "board.card.waitingTitle": "Leaves Backlog once these cards are in Done: {refs}",
