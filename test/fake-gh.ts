@@ -43,13 +43,14 @@ interface State {
 
 const args = process.argv.slice(2);
 const statePath = process.env.FAKE_GH_STATE ?? "";
+// Stdin first: the test process can be the one that feeds it, and it cannot while it waits for the lock in setState.
+const usesStdin = args.includes("--body-file");
+const stdin = usesStdin ? await new Response(Bun.stdin.stream()).text() : undefined;
 // The commands that write the state hold its lock from the read below to their exit (see fake-gh-lock.ts).
 const writes = args[0] === "pr" && ["create", "edit", "ready", "merge"].includes(args[1]);
 if (statePath && writes) process.on("exit", acquireStateLock(statePath));
 const state: State = statePath && existsSync(statePath) ? JSON.parse(readFileSync(statePath, "utf8")) : { prs: [] };
 state.prs ??= [];
-const usesStdin = args.includes("--body-file");
-const stdin = usesStdin ? await new Response(Bun.stdin.stream()).text() : undefined;
 if (process.env.FAKE_GH_LOG) appendFileSync(process.env.FAKE_GH_LOG, `${JSON.stringify({ args, ...(usesStdin ? { stdin } : {}) })}\n`);
 // FAKE_GH_DELAY_MS: a slow gh, between reading the state and writing it (widens the window of concurrent calls).
 // FAKE_GH_DELAY_SUB limits the delay to one sub-command (for example `ready`).

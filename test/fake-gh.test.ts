@@ -1,5 +1,6 @@
 // The fake gh state file under concurrent writers: overlapping `gh` calls and `fake.setState` never lose a write.
 import { afterAll, expect, test } from "bun:test";
+import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { installFakeGh, removeTempDirs, waitFor } from "./helpers.ts";
 
@@ -32,4 +33,21 @@ test("fake gh: setState during a slow write is not overwritten by the stale stat
   fake.setState({ prs: [], nextNumber: 500 });
   expect(await done).toBe(0);
   expect(fake.state()).toEqual({ prs: [], nextNumber: 500 });
+});
+
+test("fake gh: setState does not wait on a gh call whose stdin the test process has not written yet", async () => {
+  const fake = installFakeGh({ prs: [], nextNumber: 1 });
+  // Like src/server/codehost/gh.ts: node spawn, the body written to stdin asynchronously.
+  const proc = spawn(join(fake.dir, "gh"), ["pr", "create", "--base", "main", "--head", "piped", "--body-file", "-"], {
+    env: { ...process.env, ...fake.env },
+    stdio: ["pipe", "ignore", "ignore"],
+  });
+  const exited = new Promise<number | null>((r) => proc.on("close", r));
+  await Bun.sleep(300);
+  proc.stdin?.end("body");
+  const t0 = Date.now();
+  fake.setState({ prs: [], nextNumber: 7 });
+  expect(Date.now() - t0).toBeLessThan(2000);
+  expect(await exited).toBe(0);
+  expect(fake.state().prs.map((p: { head: string; number: number }) => [p.head, p.number])).toEqual([["piped", 7]]);
 });
