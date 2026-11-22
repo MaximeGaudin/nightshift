@@ -69,7 +69,7 @@ export const settings = {
   "settings.mergeMethod.rebase": "Rebase",
   "settings.autoMerge.label": "Auto-merge",
   "settings.autoMerge.help":
-    "When required checks are still running at merge time, schedule GitHub's auto-merge instead of waiting for a manual retry. A failed check sends the card back to Review.",
+    "When checks are still running at merge time, merge as soon as they are all green instead of waiting for a manual retry (through GitHub's auto-merge when the base requires checks, by Nightshift otherwise). A failed check sends the card back to Review.",
   "settings.recent.title": "Recent projects",
   "settings.recent.description": "Recently opened projects. Opening one replaces the displayed board.",
   "settings.recent.empty": "No recent project yet.",
