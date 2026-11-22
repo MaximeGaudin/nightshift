@@ -19,7 +19,8 @@ interface FakePr {
   body: string;
   state: "OPEN" | "CLOSED" | "MERGED";
   mergeable?: string;
-  checks?: { name: string; state: string; bucket: string; link: string }[];
+  /** `required: false` checks are left out of `pr checks --required` (default: required). */
+  checks?: { name: string; state: string; bucket: string; link: string; required?: boolean }[];
   autoMerge?: boolean;
   mergeCommit?: string;
   method?: string;
@@ -141,8 +142,9 @@ if (cmd === "pr" && sub === "ready") {
 }
 if (cmd === "pr" && sub === "checks") {
   const pr = find(args[2]) ?? fail("no pull request");
-  if (!pr.checks || pr.checks.length === 0) fail(`no required checks reported on the '${pr.head}' branch`);
-  const checks = pr.checks ?? [];
+  const onlyRequired = args.includes("--required");
+  const checks = (pr.checks ?? []).filter((c) => !onlyRequired || c.required !== false);
+  if (checks.length === 0) fail(`no ${onlyRequired ? "required " : ""}checks reported on the '${pr.head}' branch`);
   out(JSON.stringify(checks));
   process.exit(checks.some((c) => c.bucket === "fail") ? 1 : checks.some((c) => c.bucket === "pending") ? 8 : 0);
 }

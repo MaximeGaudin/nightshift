@@ -3,7 +3,7 @@
 import type { AgentFeaturesOverride } from "./agentFeatures.ts";
 import type { FlowState } from "./flow.ts";
 import type { CardExternal, IssueSource, IssueSourceStatus } from "./issues.ts";
-import type { MergeMethod, PullRequestsSetting } from "./pullRequests.ts";
+import type { MergeMethod, PrCiStatus, PullRequestsSetting } from "./pullRequests.ts";
 import type { SmartEntry } from "./smart.ts";
 import type { QuotaSnapshot } from "./usage.ts";
 
@@ -485,6 +485,8 @@ export interface ProjectSnapshot {
   issueSources?: Record<string, IssueSourceStatus>;
   /** Cards of this project whose run waits for the teamclaude proxy. */
   proxyWaiting: string[];
+  /** CI status of the pull request of each card (by card id); a card absent from it has no known status. */
+  ci?: Record<string, PrCiStatus>;
 }
 
 /** Why a card needs a human: it reached an inert column, asks questions, or its run failed. */

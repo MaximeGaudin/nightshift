@@ -89,6 +89,24 @@ test("checks: none, pending, fail, pass", async () => {
   expect(await github.failedLogs(cwd, "https://example.com/x", 2)).toBe("");
 });
 
+test("checks all vs required: a failing non-required check", async () => {
+  const url = "https://github.com/o/r/pull/1";
+  const s = fake.state();
+  const saved = structuredClone(s);
+  const link = "https://github.com/o/r/actions/runs/42/job/1";
+  s.prs[0].checks = [
+    { name: "build", state: "SUCCESS", bucket: "pass", link },
+    { name: "lint", state: "FAILURE", bucket: "fail", link, required: false },
+  ];
+  fake.setState(s);
+  expect((await github.checks(cwd, url)).state).toBe("pass");
+  expect(await github.checks(cwd, url, { all: true })).toEqual({ state: "fail", failed: [{ name: "lint", link }] });
+  s.prs[0].checks = [];
+  fake.setState(s);
+  expect(await github.checks(cwd, url, { all: true })).toEqual({ state: "none", failed: [] });
+  fake.setState(saved);
+});
+
 test("merge: method flags, auto, conflict, protected", async () => {
   const url = "https://github.com/o/r/pull/1";
   const s = fake.state();

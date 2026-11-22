@@ -1,7 +1,7 @@
 import { GitPullRequest, Loader2 } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { providerLabel } from "../shared/issues.ts";
-import { prUrlOf } from "../shared/pullRequests.ts";
+import { type PrCiStatus, prUrlOf } from "../shared/pullRequests.ts";
 import {
   BACKLOG_COLUMN_ID,
   type Board,
@@ -38,6 +38,7 @@ import { cn } from "./lib/utils.ts";
 import { Markdown } from "./markdown.tsx";
 import { NextColumnButton } from "./NextColumnButton.tsx";
 import { notifyError } from "./notify.ts";
+import { CiChip, ciOf, isCiStale } from "./prCi.tsx";
 import { RunProgress } from "./RunProgress.tsx";
 import { SaveStatus, useSaveStatus } from "./SaveStatus.tsx";
 import { renderCardImage } from "./Screenshot.tsx";
@@ -217,6 +218,8 @@ type CardModalProps = {
   board: Board;
   live?: LiveStatus;
   progress?: RunProgressData;
+  /** CI status of the card's pull request, from the project snapshot. */
+  ci?: PrCiStatus;
   testing: boolean;
   onClose: () => void;
   /** Opens another card of the board (a dependency). */
@@ -251,16 +254,22 @@ export function useCardDraft(project: string, card: Card) {
 export type CardDraft = ReturnType<typeof useCardDraft>;
 
 export function CardModal(props: CardModalProps) {
-  const { project, card, board, live, onClose, onError } = props;
+  const { project, card, board, live, ci, onClose, onError } = props;
   const { t } = useT();
   const draft = useCardDraft(project, card);
+  // Opening a card refreshes the CI status of its PR when it is missing or older than CI_STALE_MS; the answer comes
+  // back in the next snapshot, and a failure just leaves the indicator as it was.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once per opened card, not on every snapshot
+  useEffect(() => {
+    if (prUrlOf(card.description) && isCiStale(ciOf(card, ci))) void api.refreshCi(project, card.id).catch(() => {});
+  }, [project, card.id]);
   const column = board.columns.find((c) => c.id === card.columnId);
   return (
     <AppDialog
       size="xl"
       title={
         <span>
-          {t("card.heading")} <CopyRef card={card} /> <CardSourceLink card={card} /> <CardPrLink card={card} />{" "}
+          {t("card.heading")} <CopyRef card={card} /> <CardSourceLink card={card} /> <CardPrLink card={card} ci={ci} />{" "}
           {live === "paused" && <PausedBadge />}{" "}
           <span className="font-normal text-muted-foreground">
             · {column && columnEmoji(column) ? `${columnEmoji(column)} ` : ""}
@@ -752,21 +761,25 @@ export function CardSourceLink({ card }: { card: Card }) {
 }
 
 /** Link to the card's pull request (`- PR: <url>` under `## Review`); nothing without one. */
-export function CardPrLink({ card }: { card: Pick<Card, "description"> }) {
+export function CardPrLink({ card, ci }: { card: Pick<Card, "description">; ci?: PrCiStatus }) {
   const { t } = useT();
   const href = safeHttpUrl(prUrlOf(card.description));
   if (!href) return null;
+  const status = ciOf(card, ci);
   return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noreferrer"
-      className="card-pr-link inline-flex items-center gap-1 text-xs font-normal text-muted-foreground hover:text-foreground hover:underline"
-      title={t("card.pr.open")}
-    >
-      <GitPullRequest size={12} aria-hidden="true" />
-      <span>{t("card.pr.label")}</span>
-    </a>
+    <>
+      <a
+        href={href}
+        target="_blank"
+        rel="noreferrer"
+        className="card-pr-link inline-flex items-center gap-1 text-xs font-normal text-muted-foreground hover:text-foreground hover:underline"
+        title={t("card.pr.open")}
+      >
+        <GitPullRequest size={12} aria-hidden="true" />
+        <span>{t("card.pr.label")}</span>
+      </a>
+      {status && <CiChip ci={status} />}
+    </>
   );
 }
 
