@@ -33,9 +33,16 @@ const entry = (project: string, cardId: string, kind: "card" | "quick" | "test" 
   tracked: [],
 });
 
-function writeRegistry(h: string, name: string, serverPid: number, entries: unknown[], serverStartedAtMs = Date.now()) {
+function writeRegistry(
+  h: string,
+  name: string,
+  serverPid: number,
+  entries: unknown[],
+  serverStartedAtMs = Date.now(),
+  heartbeatAt = Date.now(),
+) {
   mkdirSync(join(h, "runs"), { recursive: true });
-  writeFileSync(join(h, "runs", name), JSON.stringify({ version: 1, serverPid, serverStartedAtMs, entries }));
+  writeFileSync(join(h, "runs", name), JSON.stringify({ version: 1, serverPid, serverStartedAtMs, heartbeatAt, entries }));
 }
 
 test("registry-dead-detection", async () => {
@@ -47,7 +54,9 @@ test("registry-dead-detection", async () => {
   const sleeper = Bun.spawn(["sleep", "30"]);
   try {
     writeRegistry(h, `${sleeper.pid}-bbbbbb.json`, sleeper.pid, [entry(project, "reused")], 0);
-    // A live server started in this boot is left alone.
+    // A live pid whose heartbeat stopped: the server died and its pid was reused, the server is dead.
+    writeRegistry(h, `${sleeper.pid}-dddddd.json`, sleeper.pid, [entry(project, "stale")], Date.now(), Date.now() - 120_000);
+    // A live server started in this boot, with a fresh heartbeat, is left alone.
     writeRegistry(h, `${sleeper.pid}-cccccc.json`, sleeper.pid, [entry(project, "live")]);
     // Another instance in this very process is never dead.
     const other = new RunRegistry(h);
@@ -57,7 +66,7 @@ test("registry-dead-detection", async () => {
       .readDeadEntries()
       .map((e) => e.cardId)
       .sort();
-    expect(ids).toEqual(["dead", "reused"]);
+    expect(ids).toEqual(["dead", "reused", "stale"]);
     other.close();
   } finally {
     sleeper.kill("SIGKILL");
@@ -107,6 +116,7 @@ test("registry-tracks-descendants-and-removes-file", async () => {
     expect(files.length).toBe(1);
     const data = JSON.parse(readFileSync(join(h, "runs", files[0] as string), "utf8"));
     expect(data.serverPid).toBe(process.pid);
+    expect(Date.now() - data.heartbeatAt).toBeLessThan(5000);
     const tracked: { pid: number }[] = data.entries[0].tracked;
     expect(tracked.some((t) => t.pid === sh.pid)).toBe(true);
     expect(tracked.length).toBeGreaterThanOrEqual(2);

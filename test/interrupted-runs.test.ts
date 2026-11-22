@@ -155,7 +155,10 @@ test("reap-ignores-live-server, no-agents-does-not-reap", async () => {
     tracked: [{ pid: victim.pid, pgid: victim.pid, startedAt: started }],
   };
   const file = join(home, "runs", `${liveServer.pid}-aaaaaa.json`);
-  writeFileSync(file, JSON.stringify({ version: 1, serverPid: liveServer.pid, serverStartedAtMs: Date.now(), entries: [entry] }));
+  writeFileSync(
+    file,
+    JSON.stringify({ version: 1, serverPid: liveServer.pid, serverStartedAtMs: Date.now(), heartbeatAt: Date.now(), entries: [entry] }),
+  );
 
   // A live server's runs are left alone.
   const a = await server("/dev/null", { reuse: { tmp } });

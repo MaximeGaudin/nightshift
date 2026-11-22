@@ -41,6 +41,11 @@ interface RegistryFile {
   serverPid: number;
   /** Epoch ms the server process started: a file from before the last boot belongs to a dead server. */
   serverStartedAtMs: number;
+  /**
+   * Epoch ms of the tracker's last tick (every TRACK_INTERVAL_MS while the file exists). A stale one means the pid now
+   * belongs to another process: the server died and its pid was reused.
+   */
+  heartbeatAt?: number;
   entries: RunEntry[];
 }
 
@@ -52,8 +57,10 @@ export type NewRunEntry = Omit<RunEntry, "id" | "tracked" | "rootStartedAt" | "t
 /** Margin on the boot time computed from uptime (clock adjustments). */
 const BOOT_SLACK_MS = 60_000;
 
-/** How often the tracker snapshots the descendants of the live runs. */
+/** How often the tracker snapshots the descendants of the live runs (and refreshes the heartbeat). */
 export const TRACK_INTERVAL_MS = 2000;
+/** A live server rewrites its heartbeat every TRACK_INTERVAL_MS: one this old belongs to a dead server. */
+export const HEARTBEAT_STALE_MS = 60_000;
 
 function isAlive(pid: number) {
   try {
@@ -81,7 +88,10 @@ export class RunRegistry {
   private timer: ReturnType<typeof setInterval> | undefined;
   private readonly serverStartedAtMs = Date.now() - process.uptime() * 1000;
   private lastWritten = "";
+  private lastWriteAt = 0;
   private closed = false;
+  /** The tracker tick in progress: ticks run one at a time, so an older snapshot never overwrites a newer one. */
+  private tracking: Promise<void> = Promise.resolve();
 
   constructor(home: string) {
     this.dir = join(home, "runs");
@@ -90,7 +100,9 @@ export class RunRegistry {
 
   /** Registers a spawned process; the returned handle is what stopRunProcesses needs. Never throws. */
   add(e: NewRunEntry, token: string, rootPid: number): LiveRun {
-    const handle: LiveRun = { id: randomBytes(6).toString("hex"), token, rootPid, tracked: [] };
+    const handle: LiveRun = { id: randomBytes(6).toString("hex"), token, rootPid, tracked: [], owned: true };
+    // Closed (shutting down): the handle still stops the process, but nothing is written any more.
+    if (this.closed) return handle;
     this.runs.set(handle.id, { entry: { ...e, id: handle.id, token, rootPid, tracked: [] }, handle });
     this.write();
     // Read asynchronously: a synchronous spawn crashes Bun 1.2.15 while other processes are being spawned.
@@ -120,13 +132,20 @@ export class RunRegistry {
   }
 
   /** Snapshots the descendants of every live run into the file (the tracker's tick; exposed for tests). */
-  async track() {
+  track(): Promise<void> {
+    this.tracking = this.tracking.then(() => this.trackOnce()).catch(() => {});
+    return this.tracking;
+  }
+
+  private async trackOnce() {
     if (this.runs.size === 0 || this.closed) return;
     const table = await readProcessTable();
-    if (table.length === 0 || this.closed) return;
-    const exclude = protectedPids(table);
-    for (const { handle } of this.runs.values()) {
-      handle.tracked = collectRunProcesses(table, handle, [], exclude).map(({ pid, pgid, startedAt }) => ({ pid, pgid, startedAt }));
+    if (this.closed) return;
+    if (table.length > 0) {
+      const exclude = protectedPids(table);
+      for (const { handle } of this.runs.values()) {
+        handle.tracked = collectRunProcesses(table, handle, [], exclude).map(({ pid, pgid, startedAt }) => ({ pid, pgid, startedAt }));
+      }
     }
     this.write();
   }
@@ -186,17 +205,20 @@ export class RunRegistry {
         version: 1,
         serverPid: process.pid,
         serverStartedAtMs: this.serverStartedAtMs,
+        heartbeatAt: Date.now(),
         entries: [...this.runs.values()].map(({ entry, handle }) => ({
           ...entry,
           ...(handle.rootStartedAt ? { rootStartedAt: handle.rootStartedAt } : {}),
           tracked: handle.tracked,
         })),
       };
-      const text = JSON.stringify(data);
-      if (text === this.lastWritten) return;
+      const text = JSON.stringify({ ...data, heartbeatAt: 0 });
+      // Unchanged runs: rewrite only to refresh the heartbeat, at most once per tracker tick.
+      if (text === this.lastWritten && Date.now() - this.lastWriteAt < TRACK_INTERVAL_MS / 2) return;
       mkdirSync(this.dir, { recursive: true });
       writeAtomic(this.file, data);
       this.lastWritten = text;
+      this.lastWriteAt = Date.now();
     } catch (e) {
       console.error(`Could not write the run registry ${this.file}: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -232,8 +254,11 @@ export class RunRegistry {
       const pid = data?.serverPid ?? Number(name.split("-")[0]);
       if (!Number.isInteger(pid) || pid <= 0) continue;
       if (pid === process.pid) continue;
-      // Alive: the same server, unless it started before the last boot (the pid was reused after a reboot).
-      if (isAlive(pid) && !(typeof data?.serverStartedAtMs === "number" && data.serverStartedAtMs < bootTimeMs())) continue;
+      // Alive: the same server, unless the pid was reused: the file is from before the last boot, or its heartbeat
+      // stopped (a live server refreshes it every TRACK_INTERVAL_MS).
+      const beforeBoot = typeof data?.serverStartedAtMs === "number" && data.serverStartedAtMs < bootTimeMs();
+      const stale = typeof data?.heartbeatAt === "number" && Date.now() - data.heartbeatAt > HEARTBEAT_STALE_MS;
+      if (isAlive(pid) && !beforeBoot && !stale) continue;
       out.push({ path, data });
     }
     return out;
