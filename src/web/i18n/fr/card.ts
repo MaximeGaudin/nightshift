@@ -66,6 +66,7 @@ export const card: Record<keyof typeof enCard, string> = {
   "card.ci.fail": "CI : en échec",
   "card.ci.failNamed": "CI : en échec ({names})",
   "card.ci.none": "Aucun check CI",
+  "card.ci.conflict": "Conflit avec la branche de base",
   "card.ci.merged": "Pull request mergée",
   "card.ci.closed": "Pull request fermée",
   "card.ci.failedChecks": "checks en échec :",

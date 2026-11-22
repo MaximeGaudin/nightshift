@@ -37,6 +37,7 @@
   --warn-soft: rgb(181 131 43 / 0.13);
   --err: #cf5050;
   --err-soft: rgb(207 80 80 / 0.12);
+  --conflict: #c9682a;
   /* Night identity: the lighter indigo of the logo, and the elevation of a card at rest and lifted. */
   --glow: #5e6ad2;
   --card-shadow: 0 1px 2px rgb(22 27 60 / 0.06), 0 0 0 0.5px rgb(22 27 60 / 0.04);
@@ -73,6 +74,7 @@
     --warn-soft: rgb(214 162 74 / 0.15);
     --err: #e5676b;
     --err-soft: rgb(229 103 107 / 0.15);
+    --conflict: #e0864f;
     --glow: #8f99ff;
     --card-shadow: 0 1px 2px rgb(0 0 0 / 0.4), inset 0 1px 0 rgb(255 255 255 / 0.03);
     --card-shadow-lift: 0 10px 24px -8px rgb(0 0 0 / 0.7), 0 0 0 1px rgb(143 153 255 / 0.1), inset 0 1px 0 rgb(255 255 255 / 0.05);
@@ -123,6 +125,7 @@
   --color-warn-soft: var(--warn-soft);
   --color-err: var(--err);
   --color-err-soft: var(--err-soft);
+  --color-conflict: var(--conflict);
 
   --radius-sm: calc(var(--radius) - 2px);
   --radius-md: var(--radius);

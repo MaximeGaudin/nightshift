@@ -100,7 +100,7 @@ export function prUrlOf(description: string): string | undefined {
 
 // ---- CI status of a card's pull request ------------------------------------------------------------------------
 
-export type PrCiState = "pass" | "pending" | "fail" | "none" | "merged" | "closed";
+export type PrCiState = "pass" | "pending" | "fail" | "none" | "conflict" | "merged" | "closed";
 
 /** Display-only CI status of a PR: in memory on the server, pushed to the clients in the snapshot. */
 export interface PrCiStatus {
