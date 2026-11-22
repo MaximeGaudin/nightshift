@@ -140,6 +140,23 @@ test("prState: headSha is the PR head on the remote", async () => {
   expect((await github.prState(cwd, saved.prs[0].url))?.headSha).toBeUndefined();
 });
 
+test("prState: autoMerge from autoMergeRequest (object, null, missing)", async () => {
+  const url = "https://github.com/o/r/pull/1";
+  const s = fake.state();
+  delete s.prs[0].autoMerge;
+  fake.setState(s);
+  expect(await github.prState(cwd, url)).not.toHaveProperty("autoMerge");
+  s.prs[0].autoMerge = true;
+  fake.setState(s);
+  expect((await github.prState(cwd, url))?.autoMerge).toBe(true);
+  s.prs[0].autoMerge = false;
+  fake.setState(s);
+  expect((await github.prState(cwd, url))?.autoMerge).toBe(false);
+  expect(fake.calls().at(-1)?.args.at(-1)).toContain("autoMergeRequest");
+  delete s.prs[0].autoMerge;
+  fake.setState(s);
+});
+
 test("merge: method flags, auto, conflict, protected", async () => {
   const url = "https://github.com/o/r/pull/1";
   const s = fake.state();

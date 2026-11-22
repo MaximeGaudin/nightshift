@@ -116,6 +116,8 @@ export const board: Record<keyof typeof enboard, string> = {
   "board.quota.duration.hm": "{h} h {m}",
   "board.quota.duration.dh": "{d} j {h} h",
   "board.app.queued": "{count} en attente",
+  "board.app.cpuThrottled": "CPU {load} %",
+  "board.app.cpuThrottledTip": "Nouveaux agents en attente : charge CPU {load} % \u2265 seuil {limit} %.",
   "board.flow.fastForwardOn": "Avance rapide : active (cliquer pour couper)",
   "board.flow.fastForwardOff":
     "Avance rapide : inactive (cliquer pour sortir toutes les cartes prêtes du Backlog et relancer les runs annulés)",

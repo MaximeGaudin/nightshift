@@ -146,6 +146,20 @@ export function SettingsContent({
       </Section>
 
       <Section title={t("settings.agents.title")} description={t("settings.agents.description")}>
+        <Row id="set-cpu" label={t("settings.cpu.label")} help={t("settings.cpu.help")}>
+          <Switch id="set-cpu" checked={s.cpuThrottleEnabled} onCheckedChange={(v) => onChange({ ...s, cpuThrottleEnabled: v })} />
+        </Row>
+        <Row id="set-cpu-limit" label={t("settings.cpuLimit.label")} help={t("settings.cpuLimit.help")}>
+          <Input
+            id="set-cpu-limit"
+            type="number"
+            min={10}
+            max={100}
+            disabled={!s.cpuThrottleEnabled}
+            value={s.cpuThrottleMaxPercent}
+            onChange={(e) => onChange({ ...s, cpuThrottleMaxPercent: Number(e.target.value) })}
+          />
+        </Row>
         <Row id="set-sound" label={t("settings.sound.label")} help={t("settings.sound.help")}>
           <Switch id="set-sound" checked={s.soundNotifications} onCheckedChange={(v) => onChange({ ...s, soundNotifications: v })} />
         </Row>
@@ -377,6 +391,8 @@ const EDITABLE = [
   "carryMaxAgeMinutes",
   "teamclaudeEnabled",
   "teamclaudeUrl",
+  "cpuThrottleEnabled",
+  "cpuThrottleMaxPercent",
 ] as const;
 
 /** True when the form differs from the saved settings on any editable field, or the project cap changed. */

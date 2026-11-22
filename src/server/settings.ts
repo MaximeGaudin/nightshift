@@ -3,7 +3,16 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { validateAgentFeaturesStrict } from "../shared/agentFeatures.ts";
 import { isValidEffortSetting } from "../shared/effort.ts";
-import { DEFAULT_PROJECT_PARALLEL, LANGUAGE_SETTINGS, normalizeProjectParallel, PERMISSION_MODES, type Settings } from "../shared/types.ts";
+import {
+  DEFAULT_CPU_THROTTLE_PERCENT,
+  DEFAULT_PROJECT_PARALLEL,
+  LANGUAGE_SETTINGS,
+  MAX_CPU_THROTTLE_PERCENT,
+  MIN_CPU_THROTTLE_PERCENT,
+  normalizeProjectParallel,
+  PERMISSION_MODES,
+  type Settings,
+} from "../shared/types.ts";
 import { writeFileAtomic } from "./fsutil.ts";
 
 export const NIGHTSHIFT_HOME = process.env.NIGHTSHIFT_HOME ?? join(homedir(), ".nightshift");
@@ -29,6 +38,8 @@ export const DEFAULT_SETTINGS: Settings = {
   carryMaxAgeMinutes: 5,
   teamclaudeEnabled: false,
   teamclaudeUrl: "http://localhost:3456",
+  cpuThrottleEnabled: true,
+  cpuThrottleMaxPercent: DEFAULT_CPU_THROTTLE_PERCENT,
 };
 
 /** A valid http(s) URL without its trailing slashes, or null. */
@@ -89,6 +100,7 @@ function checkField(key: keyof Settings, value: unknown): string | null {
     case "soundNotifications":
     case "smartMode":
     case "teamclaudeEnabled":
+    case "cpuThrottleEnabled":
       return typeof value === "boolean" ? null : `${key} must be a boolean`;
     case "teamclaudeUrl":
       return normalizeTeamclaudeUrl(value) !== null ? null : "teamclaudeUrl must be an http(s) URL";
@@ -100,6 +112,10 @@ function checkField(key: keyof Settings, value: unknown): string | null {
       return Number.isInteger(value) && (value as number) >= 0 ? null : "carryMaxTokens must be an integer of 0 or more";
     case "carryMaxAgeMinutes":
       return Number.isInteger(value) && (value as number) >= 1 ? null : "carryMaxAgeMinutes must be an integer of 1 or more";
+    case "cpuThrottleMaxPercent":
+      return Number.isInteger(value) && (value as number) >= MIN_CPU_THROTTLE_PERCENT && (value as number) <= MAX_CPU_THROTTLE_PERCENT
+        ? null
+        : `cpuThrottleMaxPercent must be an integer from ${MIN_CPU_THROTTLE_PERCENT} to ${MAX_CPU_THROTTLE_PERCENT}`;
     case "recentProjects":
       return isStringArray(value) ? null : "recentProjects must be an array of strings";
   }

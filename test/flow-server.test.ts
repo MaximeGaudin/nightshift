@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, setDefaultTimeout, test } from "bun:test";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Card, Column, ProjectSnapshot } from "../src/shared/types.ts";
-import { type ChildServer, must, quiet, removeTempDirs, startChildServer, tempDir, waitFor } from "./helpers.ts";
+import { type ChildServer, must, removeTempDirs, startChildServer, tempDir, waitFor } from "./helpers.ts";
 
 const columns: Column[] = [
   { id: "col_backlog", name: "Backlog", type: "inert" },
@@ -12,18 +12,29 @@ const columns: Column[] = [
   { id: "col_done", name: "Done", type: "inert" },
 ];
 
-// Stand-in for `claude`: "fail" errors, "ask" asks once, "slow" takes 2 s; resumed sessions stay quickly, others move next.
+// Stand-in for `claude`: "fail" errors, "ask" asks once; "slow" stays running until the test calls release(title), 30 s at
+// most; resumed sessions stay quickly, others move next.
 const tmp = tempDir("ns-flow-");
+const releaseFile = (title: string) => join(tmp, `release-${title.replace(/\W/g, "_")}`);
+/** Lets the held "slow" runs of this title finish, and every later one pass straight through. */
+const release = (...titles: string[]) => {
+  for (const t of titles) writeFileSync(releaseFile(t), "");
+};
 const fake = join(tmp, "fake-claude.ts");
 writeFileSync(
   fake,
   `#!/usr/bin/env bun
 const prompt = await new Response(Bun.stdin.stream()).text();
 const title = prompt.match(/<title>([\\s\\S]*?)<\\/title>/)?.[1] ?? "";
+const { existsSync } = await import("node:fs");
 const resumed = process.argv.includes("--resume") && !prompt.startsWith("New step for this card.");
 const e = (o) => console.log(JSON.stringify(o));
 e({ type: "system", subtype: "init", session_id: "s-" + Math.random(), model: "fake" });
-await Bun.sleep(!resumed && title.includes("slow") ? 2000 : 150);
+if (!resumed && title.includes("slow")) {
+  const file = ${JSON.stringify(tmp)} + "/release-" + title.replace(/\\W/g, "_");
+  const end = Date.now() + 30000;
+  while (!existsSync(file) && Date.now() < end) await Bun.sleep(20);
+} else await Bun.sleep(150); // the run itself: no test waits on its length
 if (title.includes("fail")) e({ type: "result", is_error: true, result: "boom", session_id: "s" });
 else if (title.includes("ask") && !resumed) e({ type: "result", is_error: false, session_id: "s", structured_output: { move: "stay", summary: "q", questions: ["Why?"] } });
 else e({ type: "result", is_error: false, session_id: "s", structured_output: { move: resumed ? "stay" : "next", summary: "ok" } });
@@ -98,13 +109,13 @@ test("fast forward moves every ready card at once", async () => {
     );
   expect(moved).toHaveLength(3);
   expect(Math.max(...moved) - Math.min(...moved)).toBeLessThan(50);
+  release("slow a", "slow b", "slow c");
 });
 
 test("fast forward picks cards added later and skips inert columns", async () => {
   const dir = await open(live);
   const { snap, find, create, flow } = api(live, dir);
   await flow("fast-forward/on");
-  await quiet(100);
   const { id } = await create("later");
   await waitFor(async () => (await find(id)).columnId !== "col_backlog");
   expect((await find(id)).skipColumnIds).toContain("col_totest");
@@ -116,8 +127,10 @@ test("fast forward release gets inert skips", async () => {
   const { find, create, move, flow } = api(live, dir);
   const dep = await create("dep", "col_totest");
   const held = await create("held", "col_backlog", [dep.id]);
+  const free = await create("free");
   await flow("fast-forward/on");
-  await quiet(200);
+  // The fast forward pass that takes the free card would take a ready "held" too: once it is out, "held" was skipped.
+  await waitFor(async () => (await find(free.id)).columnId !== "col_backlog");
   expect((await find(held.id)).columnId).toBe("col_backlog");
   await move(dep.id, "col_done");
   await waitFor(async () => (await find(held.id)).columnId !== "col_backlog");
@@ -142,8 +155,10 @@ test("pause lets the running agent finish but holds the next run", async () => {
   const { id } = await create("slow p", "col_grill");
   await waitFor(async () => (await snap()).live[id] === "running");
   expect((await (await flow("pause")).json()).flow.paused).toBe(true);
+  release("slow p");
   await waitFor(async () => (await find(id)).columnId === "col_impl");
-  await quiet(300);
+  // No wait: the scheduler runs in a microtask after each change, before the server answers the next request, and it
+  // uses the same waitsForPlay as the "paused" status (orchestrator.ts liveStatuses and tick): shown paused, never started.
   expect((await snap()).live[id]).toBe("paused");
   expect(await starts(id)).toBe(1);
   await flow("play");
@@ -156,7 +171,8 @@ test("pause holds manual moves but not explicit actions", async () => {
   await flow("pause");
   const { id } = await create("ask q");
   await move(id, "col_grill");
-  await quiet(400);
+  // No wait: the scheduler pass of the move ran in a microtask before this request, and a card shown paused never
+  // starts (waitsForPlay, orchestrator.ts).
   expect((await snap()).live[id]).toBe("paused");
   expect(await starts(id)).toBe(0);
 
@@ -176,7 +192,8 @@ test("pause stops fast forward feeding", async () => {
   await flow("pause");
   await flow("fast-forward/on");
   const { id } = await create("waiting");
-  await quiet(300);
+  // No wait: the fast forward pass of the creation ran in a microtask before this request (Flow.schedule, flow.ts),
+  // and it returns at once while paused (Flow.reconcile).
   expect((await find(id)).columnId).toBe("col_backlog");
   await flow("play");
   await waitFor(async () => (await find(id)).columnId !== "col_backlog");
@@ -226,6 +243,7 @@ test("a retry moved elsewhere waits for play again", async () => {
   await waitFor(async () => (await snap()).live[id] === "queued", 8000, state);
   await move(id, "col_impl");
   await waitFor(async () => (await snap()).live[id] === "paused", 8000, state);
+  release("slow busy");
 });
 
 test("turning fast forward on reruns a cancelled card", async () => {
@@ -237,6 +255,7 @@ test("turning fast forward on reruns a cancelled card", async () => {
   await waitFor(async () => (await find(card.id)).lastRun?.status === "cancelled");
   await flow("fast-forward/on");
   await waitFor(async () => (await starts(card.id)) === 2);
+  release("slow cancel");
   const after = await find(card.id);
   expect(after.history.some((h) => h.text === "Fast forward: retry of cancelled run")).toBe(true);
   await waitFor(async () => (await find(card.id)).columnId !== "col_grill");

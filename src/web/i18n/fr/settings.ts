@@ -15,6 +15,11 @@ export const settings: Record<keyof typeof enSettings, string> = {
   "settings.projectParallel.label": "Agents en parallèle dans ce projet",
   "settings.projectParallel.help": "Enregistré dans le nightshift.json de ce projet. Chaque colonne a aussi sa propre limite.",
   "settings.sound.label": "Sons de notification",
+  "settings.cpu.label": "Limiter le lancement d'agents selon la charge CPU",
+  "settings.cpu.help":
+    "Tant que la charge CPU de la machine est au-dessus du seuil, aucun nouvel agent de carte ne démarre. Les agents déjà lancés ne sont jamais arrêtés.",
+  "settings.cpuLimit.label": "Seuil CPU (%)",
+  "settings.cpuLimit.help": "Entier de 10 à 100, moyenné sur 10 secondes. Les exécutions rapides l'ignorent.",
   "settings.sound.help":
     "Joue un son quand une carte a besoin de vous (colonne inerte, question, erreur). Le navigateur exige un premier clic sur la page.",
   "settings.carryTokens.label": "Contexte porté max (tokens)",

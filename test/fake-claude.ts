@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 // Stand-in for the `claude` CLI: emits stream-json events and a structured result.
-// FAKE_DELAY_MS controls run duration; a card titled "fail" produces an error result,
+// FAKE_DELAY_MS controls run duration; FAKE_HOLD_FILE, when set, replaces that final wait of card runs: the run ends only
+// once that file exists (30 s at most), so a test reads the live run then releases it. A card titled "fail" produces an error result,
 // "slow" sleeps FAKE_SLOW_MS (5000 by default) before the normal result, "stay" returns move "stay",
 // "progress" emits a TodoWrite, a progress marker, then another TodoWrite; "progress-todo" only a TodoWrite,
 // "progress-none" only a Bash tool_use with a description, "progress-marker-after-tool" a tool_use, a marker, a tool_use,
@@ -30,7 +31,7 @@
 // a topic: one question per card (options A/B, A recommended), or ready at once when a title contains "no-questions";
 // "brief-fail" fails it, "brief-slow" sleeps FAKE_SLOW_MS first. Later turns: ready with a decision per answer and an
 // Acceptance note per card, unless the owner's message contains FAKE_BRIEF_ASK (one more question) or FAKE_BRIEF_FAIL.
-import { appendFileSync } from "node:fs";
+import { appendFileSync, existsSync } from "node:fs";
 
 // Nightshift sends the prompt on stdin (never argv).
 const prompt = await new Response(Bun.stdin.stream()).text();
@@ -287,15 +288,16 @@ if (quick && instruction.includes("FAKE_QUICK_PROGRESS")) {
     message: { content: [{ type: "tool_use", name: "Bash", input: { command: "ls", description } }] },
   });
   emit(tool("First tool"));
+  // The test reads the state before the next event in this window: no later event exists to wait on.
   await Bun.sleep(500);
   emit({ type: "assistant", message: { content: [{ type: "text", text: "[nightshift-progress] 1/3 A" }] } });
-  await Bun.sleep(500);
   emit(tool("Last tool")); // after a marker: must not revert to activity
 } else if (title === "progress-activity-subagent") {
   emit({
     type: "assistant",
     message: { content: [{ type: "tool_use", name: "Bash", input: { command: "ls", description: "Main tool" } }] },
   });
+  // The test reads the state before the next event in this window: no later event exists to wait on.
   await Bun.sleep(500);
   emit({
     type: "assistant",
@@ -321,9 +323,16 @@ if (title === "realbg" || title === "realbg-exit") {
   // "realbg-exit" outlives one tracker tick of the run registry first, like a claude that ran for a while.
   await Bun.sleep(title === "realbg" ? slowDelay : Number(process.env.FAKE_BG_LINGER_MS ?? 2500));
 }
-await Bun.sleep(
-  title === "slow" || (quick && instruction.includes("FAKE_QUICK_SLOW")) || (resumed && prompt.includes("FAKE_SLOW")) ? slowDelay : delay,
-);
+const holdFile = process.env.FAKE_HOLD_FILE;
+if (holdFile && !quick) {
+  // Held: the run stays live until the test creates the file (30 s at most, so a broken test leaks no process).
+  const end = Date.now() + 30_000;
+  while (!existsSync(holdFile) && Date.now() < end) await Bun.sleep(20);
+} else {
+  await Bun.sleep(
+    title === "slow" || (quick && instruction.includes("FAKE_QUICK_SLOW")) || (resumed && prompt.includes("FAKE_SLOW")) ? slowDelay : delay,
+  );
+}
 if (quick) {
   if (instruction.includes("FAKE_QUICK_ERROR")) {
     emit({ type: "result", is_error: false, session_id: "sess-q", structured_output: { status: "error", summary: "fake quick failure" } });

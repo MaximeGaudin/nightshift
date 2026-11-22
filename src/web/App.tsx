@@ -11,6 +11,7 @@ import { BriefingView, ViewSwitch } from "./BriefingView.tsx";
 import { CardModal } from "./CardModal.tsx";
 import { ColumnsEditor } from "./ColumnsEditor.tsx";
 import { CommandPalette } from "./CommandPalette.tsx";
+import { CpuThrottlePill } from "./CpuThrottlePill.tsx";
 import { buildCommands, type CommandAction, quickRunInstruction } from "./commands.ts";
 import { AppDialog } from "./components/app-dialog.tsx";
 import { IconButton } from "./components/icon-button.tsx";
@@ -354,6 +355,7 @@ export function App() {
               {t("board.app.agentsActive", { running, max })}
               {queued > 0 && <span> · {t("board.app.queued", { count: queued })}</span>}
             </span>
+            <CpuThrottlePill throttle={snap.cpuThrottle} />
             {questions > 0 && <span className="questions-pill">{tn("board.app.questions", questions)}</span>}
           </div>
           <ViewSwitch view={view} yourTurn={briefing ? briefingCounts(briefing).yourTurn : 0} onChange={setView} />

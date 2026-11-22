@@ -360,7 +360,15 @@ export interface Settings {
   teamclaudeEnabled: boolean;
   /** Base URL of the teamclaude proxy, http(s), stored without a trailing slash. */
   teamclaudeUrl: string;
+  /** Hold back new card agents while the machine's CPU load is at or above `cpuThrottleMaxPercent`. */
+  cpuThrottleEnabled: boolean;
+  /** CPU load (percent of the whole machine, integer 10-100) from which no new card agent starts. */
+  cpuThrottleMaxPercent: number;
 }
+
+export const DEFAULT_CPU_THROTTLE_PERCENT = 85;
+export const MIN_CPU_THROTTLE_PERCENT = 10;
+export const MAX_CPU_THROTTLE_PERCENT = 100;
 
 /** Why an agent launch through teamclaude is blocked. */
 export type TeamclaudeFailure = { kind: "not-found" } | { kind: "env-failed"; detail: string } | { kind: "no-response"; url: string };
@@ -492,6 +500,8 @@ export interface ProjectSnapshot {
   issueSources?: Record<string, IssueSourceStatus>;
   /** Cards of this project whose run waits for the teamclaude proxy. */
   proxyWaiting: string[];
+  /** Present only while this project's ready cards wait because the CPU load reached the limit. */
+  cpuThrottle?: { load: number; limit: number };
   /** CI status of the pull request of each card (by card id); a card absent from it has no known status. */
   ci?: Record<string, PrCiStatus>;
 }

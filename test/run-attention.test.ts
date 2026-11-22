@@ -5,9 +5,11 @@ import type { Card } from "../src/shared/types.ts";
 import { removeTempDirs, restoreEnvAfterAll, tempDir, waitFor } from "./helpers.ts";
 
 // Same setup as card-models-run.test.ts: settings.ts and skills.ts capture their paths at the first import.
-restoreEnvAfterAll("NIGHTSHIFT_HOME", "NIGHTSHIFT_USER_SKILLS");
+restoreEnvAfterAll("NIGHTSHIFT_HOME", "NIGHTSHIFT_USER_SKILLS", "FAKE_DELAY_MS");
 process.env.NIGHTSHIFT_HOME = tempDir("ns-home-");
 process.env.NIGHTSHIFT_USER_SKILLS = tempDir("ns-skills-");
+// No test here acts while a run is live: the fake runs as short as it can.
+process.env.FAKE_DELAY_MS = "50";
 const argsLog = join(tempDir("ns-args-"), "args.jsonl");
 const prevArgsLog = process.env.FAKE_ARGS_LOG;
 process.env.FAKE_ARGS_LOG = argsLog;
@@ -74,7 +76,10 @@ test("run-stay-attention: stay without questions needs attention, keeps its sect
     expect(c.description).toContain("## Result\n\ntests not finished");
     expect(c.history.some((h) => h.kind === "run" && h.text.startsWith("Work: needs attention (Stopped in Work"))).toBe(true);
     const before = launches("stay").length;
-    await Bun.sleep(1000);
+    // A second card through the same column: the ticks scheduled when its run starts and ends would have relaunched
+    // "stay" if it were eligible.
+    const control = await post("/api/cards", { project: dir, columnId: work.id, title: "control" });
+    await waitFor(async () => (await card(control.id)).lastRun?.status === "success");
     expect(launches("stay").length).toBe(before);
     expect((await card(id)).lastRun?.status).toBe("attention");
   } finally {
