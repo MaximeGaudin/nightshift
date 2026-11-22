@@ -72,7 +72,7 @@ export const settings: Record<keyof typeof enSettings, string> = {
   "settings.mergeMethod.rebase": "Rebase",
   "settings.autoMerge.label": "Auto-merge",
   "settings.autoMerge.help":
-    "Si des checks requis sont encore en cours au moment du merge, programme l'auto-merge GitHub au lieu d'attendre une relance manuelle. Un check en échec renvoie la carte en Review.",
+    "Si des checks sont encore en cours au moment du merge, merge dès qu'ils sont tous verts au lieu d'attendre une relance manuelle (par l'auto-merge GitHub quand la base exige des checks, par Nightshift sinon). Un check en échec renvoie la carte en Review.",
   "settings.recent.title": "Projets récents",
   "settings.recent.description": "Projets ouverts récemment. Ouvrir l'un d'eux remplace le tableau affiché.",
   "settings.recent.empty": "Aucun projet récent pour le moment.",

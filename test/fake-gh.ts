@@ -6,6 +6,8 @@
 //          defaultChecks?, defaultMergeable? (given to created PRs),
 //          prs: [{ number, url, head, base, title, body, state, mergeable, checks?, autoMerge?, mergeCommit?, isDraft? }] }
 //        draftError? (makes `pr create --draft` fail)
+//        requiredChecks?: true | false | "error" (`gh api` on the base's protection and rules: one required check "ci",
+//        none (404 / empty rules), or an HTTP 500)
 // `pr merge` on a mergeable PR simulates GitHub on the bare `remote`: the base ref moves to the head sha and,
 // with --delete-branch, the head ref is deleted.
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -37,6 +39,8 @@ interface State {
   /** Given to each PR `pr create` opens. */
   defaultChecks?: FakePr["checks"];
   defaultMergeable?: string;
+  /** Answer of `gh api` on branch protection / rules: true = one required check, "error" = HTTP 500. */
+  requiredChecks?: boolean | "error";
   prs: FakePr[];
 }
 
@@ -70,6 +74,13 @@ const git = (...a: string[]) => {
   return r.stdout.toString().trim();
 };
 
+/** Sha of the PR head on the bare remote, when there is one and the branch still exists. */
+const headSha = (p: FakePr): string | undefined => {
+  if (!state.remote) return undefined;
+  const r = Bun.spawnSync(["git", "-C", state.remote, "rev-parse", "--verify", "-q", `refs/heads/${p.head}`]);
+  return r.exitCode === 0 ? r.stdout.toString().trim() : undefined;
+};
+
 const [cmd, sub] = args;
 if (cmd === "--version") {
   out("gh version 2.99.0 (fake)");
@@ -94,6 +105,7 @@ if (cmd === "pr" && sub === "view") {
       mergeCommit: p.mergeCommit ? { oid: p.mergeCommit } : null,
       baseRefName: p.base,
       isDraft: p.isDraft === true,
+      ...(headSha(p) ? { headRefOid: headSha(p) } : {}),
     }),
   );
   process.exit(0);
@@ -177,6 +189,19 @@ if (cmd === "pr" && sub === "merge") {
   save();
   out(`Merged pull request o/r#${pr.number}`);
   process.exit(0);
+}
+if (cmd === "api") {
+  const path = sub ?? "";
+  if (state.requiredChecks === "error") fail("gh: Server Error (HTTP 500)");
+  if (/\/protection\/required_status_checks$/.test(path)) {
+    if (state.requiredChecks !== true) fail("gh: Branch not protected (HTTP 404)");
+    out(JSON.stringify({ strict: false, contexts: ["ci"], checks: [{ context: "ci", app_id: null }] }));
+    process.exit(0);
+  }
+  if (/\/rules\/branches\//.test(path)) {
+    out("[]");
+    process.exit(0);
+  }
 }
 if (cmd === "run" && sub === "view") {
   const log = state.runLogs?.[args[2]];

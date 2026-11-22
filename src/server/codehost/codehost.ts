@@ -17,6 +17,8 @@ export interface PrInfo {
   baseRefName: string;
   /** Draft pull request: GitHub refuses to merge it until it is marked ready. */
   isDraft: boolean;
+  /** Full sha of the PR head commit, when the host reports it. */
+  headSha?: string;
 }
 
 export interface FailedCheck {
@@ -24,7 +26,7 @@ export interface FailedCheck {
   link: string;
 }
 
-/** Required checks of a PR: `none` when the repository requires none. */
+/** Checks of a PR (the required ones or all of them, as asked): `none` when none has reported. */
 export interface ChecksSummary {
   state: "none" | "pending" | "pass" | "fail";
   failed: FailedCheck[];
@@ -48,6 +50,11 @@ export interface CodeHost {
   prState(cwd: string, url: string): Promise<PrInfo | null>;
   /** Checks of a PR: the required ones by default, every reported check with `all: true`. */
   checks(cwd: string, url: string, opts?: { all?: boolean }): Promise<ChecksSummary>;
+  /**
+   * The base branch requires at least one status check (branch protection or ruleset). Never throws: an unreadable
+   * answer is `false`, so Nightshift waits for the checks itself instead of trusting the host's auto-merge.
+   */
+  requiredChecks(cwd: string, base: string): Promise<boolean>;
   mergePr(cwd: string, url: string, opts: { method: MergeMethod; auto: boolean }): Promise<MergeResult>;
   disableAutoMerge(cwd: string, url: string): Promise<void>;
   /** Log excerpt of a failed check (its last `maxLines` lines); empty when the link is not a CI run. */

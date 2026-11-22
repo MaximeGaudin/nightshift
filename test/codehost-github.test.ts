@@ -107,6 +107,39 @@ test("checks all vs required: a failing non-required check", async () => {
   fake.setState(saved);
 });
 
+test("requiredChecks: classic protection, none, error", async () => {
+  const saved = fake.state();
+  fake.setState({ ...saved, requiredChecks: true });
+  expect(await github.requiredChecks(cwd, "main")).toBe(true);
+  expect(fake.calls().at(-1)?.args).toEqual(["api", "repos/{owner}/{repo}/branches/main/protection/required_status_checks"]);
+  fake.setState({ ...saved, requiredChecks: false });
+  expect(await github.requiredChecks(cwd, "main")).toBe(false);
+  expect(fake.calls().at(-1)?.args).toEqual(["api", "repos/{owner}/{repo}/rules/branches/main"]);
+  fake.setState({ ...saved, requiredChecks: "error" });
+  expect(await github.requiredChecks(cwd, "main")).toBe(false);
+  fake.setState(saved);
+});
+
+test("prState: headSha is the PR head on the remote", async () => {
+  const saved = fake.state();
+  const remote = tempDir("ns-codehost-remote-");
+  const git = (...a: string[]) => {
+    const r = Bun.spawnSync(["git", "-C", remote, ...a], {
+      env: { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@e", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@e" },
+    });
+    if (r.exitCode !== 0) throw new Error(r.stderr.toString());
+    return r.stdout.toString().trim();
+  };
+  git("init", "-q", "-b", "nightshift/h1");
+  git("commit", "-q", "--allow-empty", "-m", "x");
+  const sha = git("rev-parse", "HEAD");
+  const url = "https://github.com/o/r/pull/7";
+  fake.setState({ remote, prs: [{ number: 7, url, head: "nightshift/h1", base: "main", title: "T", body: "", state: "OPEN" }] });
+  expect((await github.prState(cwd, url))?.headSha).toBe(sha);
+  fake.setState(saved);
+  expect((await github.prState(cwd, saved.prs[0].url))?.headSha).toBeUndefined();
+});
+
 test("merge: method flags, auto, conflict, protected", async () => {
   const url = "https://github.com/o/r/pull/1";
   const s = fake.state();

@@ -1,9 +1,11 @@
 // CI watcher: follows the cards waiting in Merge on their pull request (`checks en attente`, `auto-merge programmé`).
-// A failed required check writes `## CI` and sends the card back to Review; a PR merged by GitHub's auto-merge is
-// cleaned up and the card moves on; green checks without auto-merge mark the card ready. Polls each open project.
+// Any failed check (required or not) writes `## CI` and sends the card back to Review; a PR merged by GitHub's
+// auto-merge is cleaned up and the card moves on; green checks mark the card ready, or, with the board's auto-merge on
+// and a base that requires no check (GitHub's auto-merge would not wait), Nightshift merges itself. Polls each project.
 
 import { parseMergeStatus, writeMergeStatus } from "../shared/pullRequests.ts";
 import type { LogLine } from "../shared/types.ts";
+import type { PrInfo } from "./codehost/codehost.ts";
 import { ciSection, type PrFlow, prEligibility } from "./prFlow.ts";
 import type { PrMode } from "./prMode.ts";
 import { applySections } from "./sections.ts";
@@ -103,22 +105,7 @@ export class CiWatcher {
     const pr = await host.prState(p.path, url);
     if (!pr) return;
     if (pr.state === "MERGED") {
-      const el = await prEligibility(p.path, cardId, first.card.description);
-      if (!el.ok) {
-        this.writeStatus(p, cardId, url, "merged", pr.mergeCommit?.slice(0, 7));
-        return;
-      }
-      const o = await this.hooks.prFlow.finishMerged(p, cardId, el, pr, () => this.hooks.stopTest(p, cardId));
-      if (o.kind !== "merged" || !still()) return;
-      p.mutate((board) => {
-        const card = board.cards.find((c) => c.id === cardId);
-        if (!card) return;
-        card.description = applySections(card.description, [{ heading: "Merge", op: "replace", content: o.merge }]).text;
-        card.updatedAt = new Date().toISOString();
-        const next = p.nextColumnFor(card);
-        if (next) p.moveCard(board, cardId, next.id, undefined, "CI");
-      });
-      this.hooks.log(p, cardId, "info", o.summary);
+      await this.finishAndAdvance(p, cardId, url, pr, still);
       return;
     }
     if (pr.state === "CLOSED") {
@@ -126,8 +113,9 @@ export class CiWatcher {
       this.hooks.log(p, cardId, "info", `PR fermée sans merge : ${url}`);
       return;
     }
-    const checks = await host.checks(p.path, url);
-    if (checks.state === "fail") {
+    // Every check counts, required or not; no check at all waits while the repository has CI workflows (grace).
+    const verdict = await this.hooks.prFlow.ciGate(p, cardId, `nightshift/${cardId}`, pr, host);
+    if (verdict.state === "fail") {
       if (status === "auto") {
         try {
           await host.disableAutoMerge(p.path, url);
@@ -135,7 +123,7 @@ export class CiWatcher {
           this.hooks.log(p, cardId, "error", `auto-merge non désactivé : ${(e as Error).message}`);
         }
       }
-      const ci = await ciSection(host, p.path, checks.failed);
+      const ci = await ciSection(host, p.path, verdict.failed);
       if (!still()) return;
       const review = p.board.columns.find((c) => c.skill === REVIEW_SKILL);
       p.mutate((board) => {
@@ -145,14 +133,47 @@ export class CiWatcher {
         card.updatedAt = new Date().toISOString();
         if (review) p.moveCard(board, cardId, review.id, undefined, "CI");
       });
-      this.hooks.log(p, cardId, "info", `CI en échec (${checks.failed.map((c) => c.name).join(", ")}) : retour en review`);
+      this.hooks.log(p, cardId, "info", `CI en échec (${verdict.failed.map((c) => c.name).join(", ")}) : retour en review`);
       return;
     }
-    // `none` here means the required checks have not reported yet (a PR without required checks never waits).
-    if (checks.state === "pass" && status === "pending") {
+    // Green with `auto`: GitHub merges (the next pass sees MERGED). Green with `pending` and the board's auto-merge on:
+    // the base requires no check, so GitHub's auto-merge would not have waited; Nightshift merges itself.
+    if (verdict.state !== "pass" || status !== "pending") return;
+    if (!mode.autoMerge) {
       this.writeStatus(p, cardId, url, "ready");
       this.hooks.log(p, cardId, "info", `checks verts, prêt à merger : ${url}`);
+      return;
     }
+    if (!still()) return;
+    const r = await host.mergePr(p.path, url, { method: mode.mergeMethod, auto: false });
+    if (!r.ok) {
+      if (!still()) return;
+      this.writeStatus(p, cardId, url, "ready");
+      this.hooks.log(p, cardId, "error", `merge par Nightshift refusé : ${r.message.slice(0, 300)}`);
+      return;
+    }
+    const merged = (await host.prState(p.path, url)) ?? pr;
+    await this.finishAndAdvance(p, cardId, url, { ...merged, state: "MERGED" }, still);
+  }
+
+  /** A merged PR: local cleanup, `## Merge`, and the card moves on (when it is still where the watcher left it). */
+  private async finishAndAdvance(p: Project, cardId: string, url: string, pr: PrInfo, still: () => unknown) {
+    const el = await prEligibility(p.path, cardId, p.card(cardId)?.description ?? "");
+    if (!el.ok) {
+      this.writeStatus(p, cardId, url, "merged", pr.mergeCommit?.slice(0, 7));
+      return;
+    }
+    const o = await this.hooks.prFlow.finishMerged(p, cardId, el, pr, () => this.hooks.stopTest(p, cardId));
+    if (o.kind !== "merged" || !still()) return;
+    p.mutate((board) => {
+      const card = board.cards.find((c) => c.id === cardId);
+      if (!card) return;
+      card.description = applySections(card.description, [{ heading: "Merge", op: "replace", content: o.merge }]).text;
+      card.updatedAt = new Date().toISOString();
+      const next = p.nextColumnFor(card);
+      if (next) p.moveCard(board, cardId, next.id, undefined, "CI");
+    });
+    this.hooks.log(p, cardId, "info", o.summary);
   }
 
   private writeStatus(p: Project, cardId: string, url: string, status: "ready" | "closed" | "merged", sha?: string) {
