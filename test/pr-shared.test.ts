@@ -3,6 +3,8 @@ import { expect, test } from "bun:test";
 import {
   autoMergeOf,
   buildPrBody,
+  buildPrTitle,
+  MAX_PR_BODY,
   mergeMethodOf,
   parseMergeStatus,
   prUrlOf,
@@ -71,4 +73,41 @@ test("buildPrBody has the summary, DoD, review, card ref and keeps the screensho
   expect(body).toContain("Nightshift card: #7 (card_x)");
   expect(body.endsWith(shots)).toBe(true);
   expect(body).not.toContain("old text");
+});
+
+test("buildPrTitle and buildPrBody use the review's ## Pull request section when the card has one", () => {
+  const card = {
+    id: "card_y",
+    number: 8,
+    title: "Logs: events without customer_id",
+    description:
+      "# T\n\n## Result\n\n- Tests: ok\n\n## Review\n\n- Findings: none\n\n## Pull request\n\nTitle: `fix(archiver): name the customer`\n\n### Summary\n\nNow named.\n\n### How to test\n\n```bash\nmise dev\n```\n",
+  };
+  const shots = `${SCREENSHOTS_START}\n![a](https://x/a.png)\n${SCREENSHOTS_END}`;
+  expect(buildPrTitle(card)).toBe("fix(archiver): name the customer");
+  const body = buildPrBody(card, `old\n\n${shots}`);
+  expect(body.startsWith("### Summary\n\nNow named.\n\n### How to test")).toBe(true);
+  expect(body).not.toContain("Title:");
+  expect(body).not.toContain("- Findings: none");
+  expect(body).toContain("Nightshift card: #8 (card_y)");
+  expect(body.endsWith(shots)).toBe(true);
+});
+
+test("without a ## Pull request section, or with a title only, the card title and generated body stay", () => {
+  const plain = { id: "c", number: 1, title: "Card", description: "## Result\n\n- Tests: ok\n" };
+  expect(buildPrTitle(plain)).toBe("Card");
+  expect(buildPrBody(plain)).toContain("## Summary\n\n- Tests: ok");
+  const titleOnly = { ...plain, description: `${plain.description}\n## Pull request\n\nTitle: feat: x\n` };
+  expect(buildPrTitle(titleOnly)).toBe("feat: x");
+  expect(buildPrBody(titleOnly)).toContain("## Summary\n\n- Tests: ok");
+  const bodyOnly = { ...plain, description: `${plain.description}\n## Pull request\n\n### Summary\n\nown\n` };
+  expect(buildPrTitle(bodyOnly)).toBe("Card");
+  expect(buildPrBody(bodyOnly).startsWith("### Summary\n\nown")).toBe(true);
+});
+
+test("a ## Pull request body over the limit is cut, keeping the card reference", () => {
+  const card = { id: "c", number: 2, description: `## Pull request\n\n${"x".repeat(MAX_PR_BODY + 10)}\n` };
+  const body = buildPrBody(card);
+  expect(body.length).toBeLessThanOrEqual(MAX_PR_BODY);
+  expect(body.endsWith("Nightshift card: #2 (c)")).toBe(true);
 });

@@ -153,11 +153,45 @@ export function screenshotsBlock(body: string): string | undefined {
 const RESULT_PLUMBING = /^\s*[-*]\s*(Worktree|Branch|Base|Commits|Shared checkout)\s*:/i;
 
 /**
- * Body Nightshift writes on the card's pull request: summary (`## Result` without its git plumbing lines),
- * Definition of done, `## Review`, the card reference, then the screenshots block of the previous body, verbatim.
+ * A project whose pull requests follow its own rules (title format, required sections) has its review agent write
+ * `## Pull request`: an optional first line `Title: <title>`, then the body, with `###` headings so the section
+ * stays one section of the note. Nightshift then uses them instead of the card title and the generated body.
+ */
+export const PR_SECTION = "Pull request";
+const PR_TITLE_LINE = /^\s*Title\s*:\s*(.+?)\s*$/i;
+
+/** The `## Pull request` section split into its title line and its body; undefined parts are absent or empty. */
+function prSection(description: string): { title?: string; body?: string } {
+  const raw = section(description, PR_SECTION);
+  if (raw === undefined) return {};
+  const lines = raw.split("\n");
+  const first = lines.findIndex((l) => l.trim() !== "");
+  const m = first >= 0 ? lines[first].match(PR_TITLE_LINE) : null;
+  if (m) lines.splice(first, 1);
+  const body = lines.join("\n").trim();
+  return { title: m?.[1].replace(/`/g, "").trim() || undefined, body: body || undefined };
+}
+
+/** Title of the card's pull request: the `Title:` line of `## Pull request`, else the card title. */
+export function buildPrTitle(card: { title: string; description: string }): string {
+  return prSection(card.description).title ?? card.title;
+}
+
+/**
+ * Body Nightshift writes on the card's pull request: the body of `## Pull request` when the review wrote one,
+ * else summary (`## Result` without its git plumbing lines), Definition of done and `## Review`; then the card
+ * reference and the screenshots block of the previous body, verbatim.
  */
 export function buildPrBody(card: { id: string; number: number; description: string }, previousBody = ""): string {
   const d = card.description;
+  const own = prSection(d).body;
+  if (own !== undefined) {
+    const shots = screenshotsBlock(previousBody);
+    const tail = [`Nightshift card: #${card.number} (${card.id})`, ...(shots ? [shots] : [])].join("\n\n");
+    const room = MAX_PR_BODY - tail.length - 4;
+    const kept = own.length > room ? `${own.slice(0, Math.max(0, room - 2))}\n…` : own;
+    return `${kept}\n\n${tail}`.slice(0, MAX_PR_BODY);
+  }
   const parts: { heading: string; body: string }[] = [];
   const result = section(d, "Result");
   if (result !== undefined) {
