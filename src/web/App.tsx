@@ -1,4 +1,4 @@
-import { Columns3, FastForward, Info, Pause, Play, Settings as SettingsIcon, Sparkles, TriangleAlert } from "lucide-react";
+import { Columns3, FastForward, Info, Pause, Play, RotateCcw, Settings as SettingsIcon, Sparkles, TriangleAlert } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { briefingCounts } from "../shared/briefing.ts";
@@ -489,13 +489,33 @@ export function pausedCount(snap: Pick<ProjectSnapshot, "live">): number {
   return Object.values(snap.live).filter((s) => s === "paused").length;
 }
 
+/** Cards whose run Nightshift interrupted (shutdown or crash), still in the column they ran in and not running again. */
+export function interruptedCount(snap: Pick<ProjectSnapshot, "board" | "live">): number {
+  return snap.board.cards.filter((c) => c.lastRun?.interrupted && c.lastRun.columnId === c.columnId && !snap.live[c.id]).length;
+}
+
 /** Fast forward toggle and play/pause button of the board header. */
 export function FlowButtons({ snap, guard }: { snap: ProjectSnapshot; guard: (p: Promise<unknown>) => void }) {
   const { t, tn } = useT();
   const { fastForward, paused } = snap.flow;
   const disabled = snap.agentsDisabled || !!snap.lockedBy;
+  const interrupted = interruptedCount(snap);
   return (
     <>
+      {interrupted > 0 && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="resume-interrupted text-warn"
+          title={t("board.flow.resumeInterruptedHint")}
+          disabled={disabled}
+          onClick={() => guard(api.resumeInterrupted(snap.path))}
+        >
+          <RotateCcw aria-hidden="true" />
+          {tn("board.flow.resumeInterrupted", interrupted)}
+        </Button>
+      )}
       <IconButton
         className={cn("fast-forward-toggle", fastForward && "bg-accent text-primary")}
         label={fastForward ? t("board.flow.fastForwardOn") : t("board.flow.fastForwardOff")}

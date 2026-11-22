@@ -118,7 +118,9 @@ export const api = {
   setTest: (project: string, id: string, command: string, url: string) => call("PUT", `/api/cards/${id}/test`, { project, command, url }),
   startTest: (project: string, id: string) => call("POST", `/api/cards/${id}/test/start`, { project }),
   stopTest: (project: string, id: string) => call("POST", `/api/cards/${id}/test/stop`, { project }),
-  cancel: (project: string, id: string) => call("POST", `/api/cards/${id}/cancel`, { project }),
+  cancel: (project: string, id: string) =>
+    call<{ cancelled: boolean; was?: "running" | "queued" }>("POST", `/api/cards/${id}/cancel`, { project }),
+  resumeInterrupted: (project: string) => call<{ resumed: number }>("POST", "/api/resume-interrupted", { project }),
   log: (project: string, id: string) => call<LogLine[]>("GET", `/api/cards/${id}/log?${q(project)}`),
   fastForward: (project: string, on: boolean) =>
     call<{ flow: FlowState }>("POST", `/api/flow/fast-forward/${on ? "on" : "off"}`, { project }),

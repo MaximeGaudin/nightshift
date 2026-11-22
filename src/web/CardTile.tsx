@@ -86,7 +86,7 @@ export function CardTile({
   const prCi = ciOf(card, ci);
   const ciText = useCiText();
   const lr = card.lastRun?.columnId === card.columnId ? card.lastRun : undefined;
-  const status = live ?? lr?.status;
+  const status = live ?? (lr?.status === "cancelled" && lr.interrupted ? "interrupted" : lr?.status);
   const excerpt = card.description ? toPlainText(card.description).slice(0, 160) : "";
   const label: Record<string, string> = {
     running: t("board.status.running"),
@@ -95,13 +95,14 @@ export function CardTile({
     success: t("board.status.success"),
     error: t("board.status.error"),
     cancelled: t("board.status.cancelled"),
+    interrupted: t("board.status.interrupted"),
     question: t("board.status.question"),
     attention: t("board.status.attention"),
   };
   const statusColor =
     status === "error" || status === "attention"
       ? "text-err"
-      : status === "question" || status === "paused"
+      : status === "question" || status === "paused" || status === "interrupted"
         ? "text-warn"
         : status === "running"
           ? "text-foreground"

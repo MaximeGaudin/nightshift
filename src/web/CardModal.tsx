@@ -322,9 +322,9 @@ export function CardModalFooter({
         {t("common.delete")}
       </Button>
       <div className="flex-1" />
-      {live === "running" && (
+      {(live === "running" || live === "queued" || live === "paused") && (
         <Button type="button" variant="outline" onClick={() => guard(api.cancel(project, card.id))}>
-          {t("card.stopAgent")}
+          {live === "running" ? t("card.stopAgent") : t("card.removeFromQueue")}
         </Button>
       )}
       {column?.type === "skill" &&
