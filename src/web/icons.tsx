@@ -8,6 +8,7 @@ import {
   CircleDot,
   CirclePause,
   CircleQuestionMark,
+  CircleStop,
   CircleX,
   Coffee,
   LoaderCircle,
@@ -17,7 +18,8 @@ import {
 import type { ReactElement } from "react";
 import { type Column, columnEmoji, type LiveStatus, type RunStatus } from "../shared/types.ts";
 
-type Status = RunStatus | LiveStatus;
+/** "interrupted": a cancelled run that Nightshift itself stopped (shutdown or crash). */
+type Status = RunStatus | LiveStatus | "interrupted";
 
 const STATUS_ICONS: Record<Status, LucideIcon> = {
   queued: CircleDashed,
@@ -26,6 +28,7 @@ const STATUS_ICONS: Record<Status, LucideIcon> = {
   success: CircleCheck,
   error: CircleX,
   cancelled: Ban,
+  interrupted: CircleStop,
   question: CircleQuestionMark,
   attention: CircleAlert,
 };

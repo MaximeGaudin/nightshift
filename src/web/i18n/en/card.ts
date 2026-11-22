@@ -25,6 +25,7 @@ export const card = {
   "card.saveFailed": "Saving the card failed: {message}",
   "card.confirmDelete": "Delete this card?",
   "card.stopAgent": "Stop the agent",
+  "card.removeFromQueue": "Remove from queue",
   "card.resumeHint": "Resumes the same Claude session: the agent checks where it left off and finishes, without starting over.",
   "card.resume": "Resume session",
   "card.rerun": "Rerun",

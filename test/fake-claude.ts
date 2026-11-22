@@ -22,6 +22,9 @@
 // Background commands: "bg-open" starts a Bash command in the background and returns move "next" without waiting, on every
 // launch (resumed too); "bg-open-once" does it only at the first launch; "bg-closed" starts it and gets its
 // <task-notification> before the result; "bg-subagent" starts it from a subagent (parent_tool_use_id set).
+// Real background processes: "realbg" starts, each detached in its own process group like Claude Code's Bash commands,
+// a bun child and a `/bin/sh` running `sleep`, appends their pids (bun, sh, sleep) to FAKE_BG_PID_FILE, then sleeps
+// FAKE_SLOW_MS before its result; "realbg-exit" waits FAKE_BG_LINGER_MS (2500), returns its result and leaves them running.
 // A card title containing FAKE_KEEP_DESC leaves the description alone; FAKE_SECTIONS adds a "Result" section instead.
 // Briefing calls (prompt starting with <nightshift-briefing-…>) write { kind, argv, prompt } to FAKE_BRIEFING_LOG. Triage: a card
 // whose title contains "easy" is easy, cards sharing a "[group]" tag form one topic, "triage-fail" fails the call. First turn of
@@ -303,6 +306,22 @@ if (quick && instruction.includes("FAKE_QUICK_PROGRESS")) {
   });
 } else if (title === "progress-todo") {
   emit(todos("in_progress", "pending"));
+}
+if (title === "realbg" || title === "realbg-exit") {
+  const pidFile = process.env.FAKE_BG_PID_FILE ?? "/dev/null";
+  const child = Bun.spawn([process.execPath, "-e", "setInterval(() => {}, 1000)"], {
+    detached: true,
+    stdio: ["ignore", "ignore", "ignore"],
+  });
+  appendFileSync(pidFile, `${child.pid}\n`);
+  const shell = Bun.spawn(["/bin/sh", "-c", `echo $$ >> '${pidFile}'; sleep 999 & echo $! >> '${pidFile}'; wait`], {
+    detached: true,
+    stdio: ["ignore", "ignore", "ignore"],
+  });
+  child.unref();
+  shell.unref();
+  // "realbg-exit" outlives one tracker tick of the run registry first, like a claude that ran for a while.
+  await Bun.sleep(title === "realbg" ? slowDelay : Number(process.env.FAKE_BG_LINGER_MS ?? 2500));
 }
 const holdFile = process.env.FAKE_HOLD_FILE;
 if (holdFile && !quick) {

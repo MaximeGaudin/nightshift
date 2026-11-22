@@ -66,6 +66,8 @@ export interface LastRun {
   contextTokens?: number;
   /** Skill name applied in the session; needed so a second feedback in an inert column keeps the reference skill. */
   skill?: string;
+  /** Set when Nightshift stopped (shutdown or crash) during the run: such a run is never started again automatically. */
+  interrupted?: boolean;
 }
 
 export interface HistoryEntry {

@@ -27,6 +27,7 @@ export const card: Record<keyof typeof enCard, string> = {
   "card.saveFailed": "Enregistrement de la fiche échoué : {message}",
   "card.confirmDelete": "Supprimer cette fiche ?",
   "card.stopAgent": "Arrêter l'agent",
+  "card.removeFromQueue": "Retirer de la file",
   "card.resumeHint": "Reprend la même session Claude : l'agent vérifie où il en était et termine, sans tout recommencer.",
   "card.resume": "Reprendre la session",
   "card.rerun": "Relancer",
