@@ -45,7 +45,11 @@ export interface Column {
   fastMergeTestCommand?: string;
 }
 
-export type RunStatus = "success" | "error" | "cancelled" | "question";
+/**
+ * Outcome of an agent run. "attention": the agent returned its structured output but the work is not finished
+ * (it stayed without questions, or returned while a background command it started was still running).
+ */
+export type RunStatus = "success" | "error" | "cancelled" | "question" | "attention";
 
 /** Outcome of the last agent run on a card. Persisted so a processed card is not re-run. */
 export interface LastRun {

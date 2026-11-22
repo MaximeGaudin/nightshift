@@ -340,6 +340,25 @@ export function descriptionBlock(description: string, seen?: string): string {
   return `<description-changes>\n${changes}\n</description-changes>`;
 }
 
+/** The column an agent's `move` resolves to: "next", a column id or name; undefined for "stay" or an unknown target. */
+function moveTarget(p: Project, card: Card, move: unknown): Column | undefined {
+  const m = String(move ?? "stay").trim();
+  if (m === "next") return p.nextColumnFor(card);
+  if (m === "stay") return undefined;
+  return p.board.columns.find((c) => c.id === m || c.name === m);
+}
+
+/**
+ * True when an agent's `move` keeps the card where it is: missing, "stay", or the card's own column (id or name).
+ * A "next" with no next column, or an unknown column, is not a stay: the agent meant to move on.
+ */
+export function isStayMove(p: Project, card: Card, move: unknown): boolean {
+  const m = String(move ?? "stay").trim();
+  if (m === "stay") return true;
+  if (m === "next") return false;
+  return moveTarget(p, card, m)?.id === card.columnId;
+}
+
 export function buildPrompt(
   board: Board,
   card: Card,
@@ -1820,7 +1839,9 @@ export class Orchestrator {
     }
     if (data.error) this.log(p, job.cardId, "error", data.error);
     // Decided inside the mutation, broadcast only once it has been applied.
-    let attention: AttentionKind | undefined = status === "error" ? "error" : status === "question" ? "question" : undefined;
+    // A run that needs attention rings like an error: same sound, same notification.
+    let attention: AttentionKind | undefined =
+      status === "error" || status === "attention" ? "error" : status === "question" ? "question" : undefined;
     p.mutate((board) => {
       const now = new Date().toISOString();
       const out = data.output;
@@ -1850,7 +1871,9 @@ export class Orchestrator {
           ? `${colName}: ${out?.summary ?? "done"}`
           : status === "question"
             ? `${colName}: ${out?.questions.length ?? 0} question(s) for the user`
-            : `${colName}: ${status}${data.error ? ` (${data.error.slice(0, 200)})` : ""}`,
+            : status === "attention"
+              ? `${colName}: needs attention${data.error ? ` (${data.error.slice(0, 200)})` : ""}`
+              : `${colName}: ${status}${data.error ? ` (${data.error.slice(0, 200)})` : ""}`,
       );
       // The description as this session believes it is: what it saw at launch (or last time, for a resume without
       // the description), plus its own edits. Not card.description: a human edit made during the run was never seen.
@@ -1860,7 +1883,7 @@ export class Orchestrator {
       const rememberSeen = () => {
         if (sessionId && seenText !== undefined) card.seenDescription = { sessionId, text: seenText };
       };
-      if ((status !== "success" && status !== "question") || !out) return rememberSeen();
+      if ((status !== "success" && status !== "question" && status !== "attention") || !out) return rememberSeen();
       if (typeof out.title === "string" && out.title.trim()) card.title = out.title.trim();
       if (typeof out.description === "string") {
         card.description = persistScreenshots(card.id, out.description);
@@ -1902,11 +1925,10 @@ export class Orchestrator {
         });
         return;
       }
+      // Not finished: the output is applied, but the card never leaves its column.
+      if (status === "attention") return;
       this.log(p, job.cardId, "info", `Done: ${out.summary ?? ""}`);
-      const move = String(out.move ?? "stay").trim();
-      let target: Column | undefined;
-      if (move === "next") target = p.nextColumnFor(card);
-      else if (move !== "stay") target = board.columns.find((c) => c.id === move || c.name === move);
+      const target = moveTarget(p, card, out.move);
       if (target && target.id !== card.columnId) {
         p.moveCard(board, card.id, target.id, undefined, "Agent");
         this.log(p, job.cardId, "info", `Moved to "${target.name}".`);
