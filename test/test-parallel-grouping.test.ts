@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { ciGroups, planGroups } from "../scripts/test-parallel";
+import { bunVersionError, ciGroups, planGroups } from "../scripts/test-parallel";
 
 const files = ["test/f0.test.ts", "test/f1.test.ts", "test/f2.test.ts", "test/f3.test.ts", "test/f4.test.ts", "test/f5.test.ts"];
 const plan = (over: Partial<Parameters<typeof planGroups>[0]> = {}) =>
@@ -54,4 +54,17 @@ test("path filters apply before grouping", () => {
   const p = plan({ args: ["f1", "f2"] });
   expect(p.filters).toEqual(["f1", "f2"]);
   expect(p.groups).toEqual([["test/f1.test.ts"], ["test/f2.test.ts"]]);
+});
+
+test("a Bun older than package.json asks for stops the run with the upgrade command", () => {
+  expect(bunVersionError("1.2.15", ">=1.4.2")).toBe(
+    "test:parallel: Bun 1.2.15 is too old, package.json asks for >=1.4.2. Upgrade it: bun upgrade",
+  );
+  expect(bunVersionError("1.4.2", ">=1.4.2")).toBeNull();
+  expect(bunVersionError("1.5.0", ">=1.4.2")).toBeNull();
+  expect(bunVersionError("1.2.15", undefined)).toBeNull();
+});
+
+test("the tests run without the variables that make bun test print its short agent report", () => {
+  for (const k of ["CLAUDECODE", "AGENT", "REPL_ID"]) expect(process.env[k]).toBeUndefined();
 });

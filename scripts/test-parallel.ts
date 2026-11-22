@@ -93,7 +93,22 @@ export function parseJunit(xml: string): { file: string; ms: number; failures: n
 
 const count = (text: string, word: string) => Number(text.match(new RegExp(`^\\s*(\\d+) ${word}\\s*$`, "m"))?.[1] ?? 0);
 
+/**
+ * The message to stop on when this Bun is older than package.json asks for, else null. Bun 1.2.x never ends a
+ * `bun test` run when a test that timed out fails later, during another test: the check then hangs with no output.
+ */
+export function bunVersionError(version: string, range: string | undefined): string | null {
+  if (!range || Bun.semver.satisfies(version, range)) return null;
+  return `test:parallel: Bun ${version} is too old, package.json asks for ${range}. Upgrade it: bun upgrade`;
+}
+
 async function main() {
+  const pkg = (await Bun.file(join(ROOT, "package.json")).json()) as { engines?: { bun?: string } };
+  const tooOld = bunVersionError(Bun.version, pkg.engines?.bun);
+  if (tooOld) {
+    console.error(tooOld);
+    process.exit(1);
+  }
   const all = [...new Glob("test/**/*.test.{ts,tsx}").scanSync({ cwd: ROOT })].sort(byCodeUnit);
   let timings: Timings = {};
   try {

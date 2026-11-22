@@ -18,6 +18,9 @@ process.env.NIGHTSHIFT_USER_SKILLS ??= fresh("ns-test-skills-");
 // tests that assert "no proxy variable" would measure the ambient environment instead of what Nightshift injects.
 for (const k of ["HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "https_proxy", "http_proxy", "no_proxy", "ALL_PROXY", "all_proxy"])
   delete process.env[k];
+// Under an AI agent (these variables), `bun test` prints a short report without the "(pass) name" lines. Agents run
+// this suite, and the tests that start `bun test` in a child process read those lines: children get a plain environment.
+for (const k of ["CLAUDECODE", "AGENT", "REPL_ID"]) delete process.env[k];
 // Do not leave these two folders in /tmp after every run.
 process.on("exit", () => {
   for (const dir of created) rmSync(dir, { recursive: true, force: true });
