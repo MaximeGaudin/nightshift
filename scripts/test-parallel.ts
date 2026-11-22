@@ -1,9 +1,12 @@
 /**
  * Runs the test suite as N parallel `bun test` processes, one group of files each, and prints one summary.
  *
- * Usage: bun scripts/test-parallel.ts [--jobs N] [path-substring ...]
- *   TEST_JOBS=N          number of groups (default: min(cores, 8))
- *   .test-timings.json   per-file durations (ms) of the previous run, git-ignored, used to balance the groups
+ * Usage: bun scripts/test-parallel.ts [--fast] [--jobs N] [path-substring ...]
+ *   (default)            CI grouping: CI_JOBS groups, files sorted by code unit and dealt round-robin. Independent of
+ *                        the machine and of .test-timings.json: same files, same order as the CI job.
+ *   --fast               fast grouping: min(cores, 8) groups balanced with .test-timings.json (not the CI's)
+ *   --jobs N, TEST_JOBS=N  fast grouping with N groups
+ *   .test-timings.json   per-file durations (ms) of the previous run, git-ignored, used by the fast grouping
  *
  * Files are passed as `./path`: a bare `test/a.test.ts` is a substring filter and would also run `test/a.test.tsx`.
  * Each process loads test/preload.ts (bunfig.toml), so each has its own NIGHTSHIFT_HOME and skills folder.
@@ -20,6 +23,7 @@ const ROOT = join(import.meta.dir, "..");
 const TIMINGS = join(ROOT, ".test-timings.json");
 const MAX_JOBS = 8;
 const DEFAULT_MS = 1000;
+export const CI_JOBS = 4;
 
 export type Timings = Record<string, number>;
 
@@ -37,6 +41,47 @@ export function balance(files: string[], timings: Timings, jobs: number): string
   return groups.map((g) => g.files).filter((g) => g.length > 0);
 }
 
+/** Code-unit order: never `localeCompare`, whose result depends on the locale. */
+const byCodeUnit = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
+/** CI grouping: files sorted by code unit, file i goes to group i % jobs. Depends on nothing but the file list. */
+export function ciGroups(files: string[], jobs: number = CI_JOBS): string[][] {
+  const groups: string[][] = Array.from({ length: Math.max(1, Math.min(jobs, files.length)) }, () => []);
+  for (const [i, f] of [...files].sort(byCodeUnit).entries()) groups[i % groups.length].push(f);
+  return groups.filter((g) => g.length > 0);
+}
+
+export type Plan = { mode: "ci" | "fast"; groups: string[][]; filters: string[] };
+
+/** Chooses the grouping from the arguments and the environment. Pure: main() does the I/O. */
+export function planGroups(opts: {
+  files: string[];
+  args: string[];
+  env: Record<string, string | undefined>;
+  cores: number;
+  timings: Timings;
+}): Plan {
+  let fast = false;
+  let jobs = Number(opts.env.TEST_JOBS) || 0;
+  if (jobs) fast = true;
+  const filters: string[] = [];
+  const { args } = opts;
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === "--fast") fast = true;
+    else if (args[i] === "--jobs") {
+      fast = true;
+      jobs = Number(args[++i]) || jobs;
+    } else if (args[i].startsWith("--jobs=")) {
+      fast = true;
+      jobs = Number(args[i].slice(7)) || jobs;
+    } else filters.push(args[i]);
+  }
+  const files = filters.length ? opts.files.filter((f) => filters.some((x) => f.includes(x))) : opts.files;
+  if (!fast) return { mode: "ci", groups: ciGroups(files), filters };
+  jobs = Math.max(1, Math.floor(jobs || Math.min(opts.cores, MAX_JOBS)));
+  return { mode: "fast", groups: balance(files, opts.timings, jobs), filters };
+}
+
 /** Per-file duration (ms) and failure count from a bun junit report. */
 export function parseJunit(xml: string): { file: string; ms: number; failures: number; tests: number }[] {
   const out: { file: string; ms: number; failures: number; tests: number }[] = [];
@@ -49,31 +94,29 @@ export function parseJunit(xml: string): { file: string; ms: number; failures: n
 const count = (text: string, word: string) => Number(text.match(new RegExp(`^\\s*(\\d+) ${word}\\s*$`, "m"))?.[1] ?? 0);
 
 async function main() {
-  const args = process.argv.slice(2);
-  let jobs = Number(process.env.TEST_JOBS) || Math.min(availableParallelism(), MAX_JOBS);
-  const filters: string[] = [];
-  for (let i = 0; i < args.length; i++) {
-    if (args[i] === "--jobs") jobs = Number(args[++i]) || jobs;
-    else if (args[i].startsWith("--jobs=")) jobs = Number(args[i].slice(7)) || jobs;
-    else filters.push(args[i]);
-  }
-  jobs = Math.max(1, Math.floor(jobs));
-
-  const all = [...new Glob("test/**/*.test.{ts,tsx}").scanSync({ cwd: ROOT })].sort();
-  const files = filters.length ? all.filter((f) => filters.some((x) => f.includes(x))) : all;
-  if (files.length === 0) {
-    console.error("test:parallel: no test file matches", filters.join(" "));
-    process.exit(1);
-  }
+  const all = [...new Glob("test/**/*.test.{ts,tsx}").scanSync({ cwd: ROOT })].sort(byCodeUnit);
   let timings: Timings = {};
   try {
     timings = await Bun.file(TIMINGS).json();
   } catch {}
 
-  const groups = balance(files, timings, jobs);
+  const { mode, groups, filters } = planGroups({
+    files: all,
+    args: process.argv.slice(2),
+    env: process.env,
+    cores: availableParallelism(),
+    timings,
+  });
+  const files = groups.flat();
+  if (files.length === 0) {
+    console.error("test:parallel: no test file matches", filters.join(" "));
+    process.exit(1);
+  }
   const tmp = mkdtempSync(join(tmpdir(), "ns-test-parallel-"));
   const start = performance.now();
-  console.log(`test:parallel: ${files.length} files, ${groups.length} groups`);
+  const label =
+    mode === "ci" ? (filters.length ? "CI grouping of the filtered files, not the CI's" : "CI grouping") : "fast grouping, not the CI's";
+  console.log(`test:parallel: ${files.length} files, ${groups.length} groups (${label})`);
 
   const results = await Promise.all(
     groups.map(async (group, i) => {
@@ -111,6 +154,7 @@ async function main() {
       `\n${"=".repeat(70)}\nGroup ${r.i + 1} FAILED (exit ${r.code}${r.crashed ? ", no summary: crashed?" : ""}), ${r.group.length} files\n${"=".repeat(70)}`,
     );
     console.log(r.output.trimEnd());
+    console.log(`\nReplay this group alone:\n  bun test ${r.group.map((f) => `./${f}`).join(" ")}`);
   }
 
   const failedFiles = results.flatMap((r) => r.suites.filter((s) => s.failures > 0).map((s) => s.file));

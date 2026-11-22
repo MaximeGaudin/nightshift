@@ -20,6 +20,8 @@ Run the full check. It runs Biome, the TypeScript compiler and the tests, and CI
 bun run check
 ```
 
+Run it before every push. It splits the test files into 4 groups, sorted by name and ignoring `.test-timings.json`, so the groups are the same on any machine and in CI: a test that depends on the order of files fails locally too. `bun run test:fast` (groups balanced by the previous run's timings) is for iterating and does not match the CI.
+
 Use `bun run format` to fix formatting. Keep pull requests focused, and add or update tests for behavior changes.
 
 ## Commit style
