@@ -1014,7 +1014,7 @@ export class Orchestrator {
       // The per-column limit only concerns skill columns; a job in an inert column (feedback) only counts for its project.
       if (column.type === "skill" && this.runningIn(p, card.columnId) >= columnMaxParallel(column)) continue;
       // The CPU only holds back cards that the project and column caps would have let start.
-      if (cpuFull) {
+      if (cpuFull && !column.ignoreCpuThrottle) {
         held.add(p.path);
         continue;
       }

@@ -64,6 +64,11 @@ export function lockModelPatch(checked: boolean): Partial<Column> {
   return { lockModel: checked ? true : undefined };
 }
 
+/** Checkbox state → column patch: `ignoreCpuThrottle` is stored as `true` and omitted when off. */
+export function ignoreCpuThrottlePatch(checked: boolean): Partial<Column> {
+  return { ignoreCpuThrottle: checked ? true : undefined };
+}
+
 /** How a skill column treats the card's Claude session: continue it, always start a new one, or decide per run. */
 export const SESSION_MODES = ["continue", "fresh", "auto"] as const;
 export type SessionMode = (typeof SESSION_MODES)[number];
@@ -311,6 +316,14 @@ function SortableColumnRow({ col, skills, skillsLoading, cardCount, reducedMotio
                 <label className="lock-model flex items-center gap-2 text-xs" title={t("columns.lockModelHint")}>
                   <input type="checkbox" checked={col.lockModel === true} onChange={(e) => onPatch(lockModelPatch(e.target.checked))} />
                   {t("columns.lockModel")}
+                </label>
+                <label className="ignore-cpu flex items-center gap-2 text-xs" title={t("columns.ignoreCpuHint")}>
+                  <input
+                    type="checkbox"
+                    checked={col.ignoreCpuThrottle === true}
+                    onChange={(e) => onPatch(ignoreCpuThrottlePatch(e.target.checked))}
+                  />
+                  {t("columns.ignoreCpu")}
                 </label>
                 <div className="fresh-session flex items-center gap-2 text-xs" title={t("columns.freshSessionHint")}>
                   <Label htmlFor={`session-${col.key}`}>{t("columns.freshSession")}</Label>

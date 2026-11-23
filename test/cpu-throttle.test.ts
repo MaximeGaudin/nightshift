@@ -101,3 +101,61 @@ test("cpu-throttle-cap-not-cpu: a card held by the project cap is not reported a
   expect(s.cpuThrottle).toBeUndefined();
   await setLoad(null);
 }, 30000);
+
+/** Two columns on one project: "Free" ignores the CPU limit, "Work" does not. */
+async function exemptProject(freeCap = 5) {
+  const dir = mkdtempSync(join(srv.tmp, "proj-"));
+  await json("/api/projects/open", { path: dir });
+  const res = await json(
+    "/api/board",
+    {
+      project: dir,
+      maxParallel: 5,
+      columns: [
+        { name: "Free", type: "skill", skill: "enrich", maxParallel: freeCap, ignoreCpuThrottle: true },
+        { name: "Work", type: "skill", skill: "enrich", maxParallel: 5 },
+      ],
+    },
+    "PUT",
+  );
+  const col = (name: string) => res.board.columns.find((c: { name: string }) => c.name === name);
+  expect(col("Free").ignoreCpuThrottle).toBe(true);
+  expect(col("Work").ignoreCpuThrottle).toBeUndefined();
+  const add = async (name: string): Promise<string> =>
+    (await json("/api/cards", { project: dir, columnId: col(name).id, title: "slow" })).id;
+  return { dir, add };
+}
+
+test("cpu-throttle-column-exempt: above the limit an exempt column starts, the other waits", async () => {
+  await setLoad(95);
+  const { dir, add } = await exemptProject();
+  const free = await add("Free");
+  const work = await add("Work");
+  await waitFor(async () => (await snapshot(dir)).live[free] === "running");
+  const s = await snapshot(dir);
+  expect(s.live[work]).toBe("queued");
+  expect(s.cpuThrottle?.load).toBe(95);
+  await setLoad(null);
+}, 30000);
+
+test("cpu-throttle-column-exempt-cap: an exempt column still obeys its own cap", async () => {
+  await setLoad(99);
+  const { dir, add } = await exemptProject(1);
+  const first = await add("Free");
+  await waitFor(async () => (await snapshot(dir)).live[first] === "running");
+  const second = await add("Free");
+  await Bun.sleep(500);
+  const s = await snapshot(dir);
+  expect(s.live[second]).toBe("queued");
+  expect(s.cpuThrottle).toBeUndefined();
+  await setLoad(null);
+}, 30000);
+
+test("cpu-throttle-column-exempt-pill: only exempt cards ready, no CPU pill", async () => {
+  await setLoad(99);
+  const { dir, add } = await exemptProject();
+  const id = await add("Free");
+  await waitFor(async () => (await snapshot(dir)).live[id] === "running");
+  expect((await snapshot(dir)).cpuThrottle).toBeUndefined();
+  await setLoad(null);
+}, 30000);

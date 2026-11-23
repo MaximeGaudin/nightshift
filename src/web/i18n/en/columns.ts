@@ -23,6 +23,8 @@ export const columns = {
   "columns.effortHint": "Empty = global setting. Economic default for this skill: {level}.",
   "columns.lockModel": "Always use this column's model",
   "columns.lockModelHint": "Ignore the card's own model for this column.",
+  "columns.ignoreCpu": "Ignore the CPU limit",
+  "columns.ignoreCpuHint": "Agents of this column start even when the CPU load is at or above the limit.",
   "columns.freshSession": "Session",
   "columns.freshSessionHint":
     "Continue: reuse the card's Claude session. Fresh: always start a new one (the next columns continue it). Auto: continue only while the carried context is small and the prompt cache is still warm (see Settings).",
