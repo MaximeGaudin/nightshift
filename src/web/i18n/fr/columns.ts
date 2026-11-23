@@ -26,6 +26,8 @@ export const columns: Record<keyof typeof enColumns, string> = {
   "columns.effortHint": "Vide = réglage global. Défaut économique de ce skill : {level}.",
   "columns.lockModel": "Toujours utiliser le modèle de cette colonne",
   "columns.lockModelHint": "Ignore le modèle propre à la fiche pour cette colonne.",
+  "columns.ignoreCpu": "Ignorer la limite CPU",
+  "columns.ignoreCpuHint": "Les agents de cette colonne démarrent même quand la charge CPU dépasse le seuil.",
   "columns.freshSession": "Session",
   "columns.freshSessionHint":
     "Continuer : reprend la session Claude de la fiche. Vierge : démarre toujours une nouvelle session (les colonnes suivantes la reprennent). Auto : reprend seulement tant que le contexte porté est petit et le cache du prompt encore chaud (voir Réglages).",

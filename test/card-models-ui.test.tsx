@@ -27,11 +27,11 @@ mock.module(new URL("../src/web/components/ui/collapsible.tsx", import.meta.url)
   CollapsibleContent: Passthrough,
 }));
 
-const { ColumnsEditor, lockModelPatch } = await import("../src/web/ColumnsEditor.tsx");
+const { ColumnsEditor, lockModelPatch, ignoreCpuThrottlePatch } = await import("../src/web/ColumnsEditor.tsx");
 
 const columns: Column[] = [
   { id: "col_backlog", name: "Backlog", type: "inert", emoji: "📥" },
-  { id: "col_plan", name: "Plan", type: "skill", skill: "plan", model: "opus", lockModel: true },
+  { id: "col_plan", name: "Plan", type: "skill", skill: "plan", model: "opus", lockModel: true, ignoreCpuThrottle: true },
   { id: "col_impl", name: "Implement", type: "skill", skill: "implement" },
   { id: "col_done", name: "Done", type: "inert" },
 ];
@@ -189,4 +189,13 @@ test("badge: absent when the column is locked, inert, or the card has no entry",
   expect(tile({ id: "col_impl", name: "Notes", type: "inert" })).not.toContain("model-badge");
   expect(tile({ id: "col_impl", name: "Review", type: "skill", skill: "review" })).not.toContain("model-badge");
   expect(cardModelOverride(undefined, null, overridden)).toBeNull();
+});
+
+test("columns-editor-ignore-cpu: checkbox only on skill columns, checked from the flag; patch omits false", () => {
+  const boxes = html.match(/class="ignore-cpu[^"]*"[^>]*><input[^>]*type="checkbox"[^>]*>/g) ?? [];
+  expect(boxes).toHaveLength(2);
+  expect(boxes[0]).toContain("checked");
+  expect(boxes[1]).not.toContain("checked");
+  expect(ignoreCpuThrottlePatch(true)).toEqual({ ignoreCpuThrottle: true });
+  expect(JSON.stringify({ ...columns[1], ...ignoreCpuThrottlePatch(false) })).not.toContain("ignoreCpuThrottle");
 });

@@ -382,6 +382,7 @@ export function startServer({ port, development, agents = true }: { port: number
                   ...(instructions ? { instructions } : {}),
                   ...(model ? { model } : {}),
                   ...(type === "skill" && c.lockModel === true ? { lockModel: true as const } : {}),
+                  ...(type === "skill" && c.ignoreCpuThrottle === true ? { ignoreCpuThrottle: true as const } : {}),
                   ...(type === "skill" && features.value ? { agentFeatures: features.value } : {}),
                   ...(type === "skill" && effort ? { effort: effort as EffortLevel } : {}),
                   ...(type === "skill" && typeof c.smartMode === "boolean" ? { smartMode: c.smartMode } : {}),

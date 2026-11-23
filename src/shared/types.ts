@@ -22,6 +22,8 @@ export interface Column {
   model?: string;
   /** Skill columns only: the column model wins over the card's per-skill model. Never stored as false. */
   lockModel?: true;
+  /** Skill columns only: agents of this column start even when the CPU load reaches the limit. Never stored as false. */
+  ignoreCpuThrottle?: true;
   /** Skill columns only: agent features set for this column; a missing key inherits. Never `{}`. */
   agentFeatures?: AgentFeaturesOverride;
   /** Skill columns only: niveau d'effort (`--effort`) des runs de cette colonne ; absent = réglage global. */
@@ -273,6 +275,7 @@ export function ensureDoneColumn(columns: Column[]): Column[] {
   delete done.model;
   delete done.effort;
   delete done.lockModel;
+  delete done.ignoreCpuThrottle;
   delete done.maxParallel;
   return [...columns.filter((c) => !isDoneColumn(c)), done];
 }
@@ -318,6 +321,7 @@ export function ensureBacklogColumn(columns: Column[]): { columns: Column[]; ren
   delete backlog.model;
   delete backlog.effort;
   delete backlog.lockModel;
+  delete backlog.ignoreCpuThrottle;
   delete backlog.maxParallel;
   const rest = columns.filter((c) => c !== source && !isBacklogColumn(c));
   return { columns: [backlog, ...rest], ...(renamedFrom !== undefined ? { renamedFrom } : {}) };

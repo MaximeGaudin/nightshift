@@ -121,6 +121,7 @@ export const COLUMN_KEYS = [
   "instructions",
   "model",
   "lockModel",
+  "ignoreCpuThrottle",
   "agentFeatures",
   "effort",
   "smartMode",
@@ -281,6 +282,7 @@ export function normalizeBoard(raw: unknown, fallbackName: string): Board {
             ...(c.instructions ? { instructions: String(c.instructions) } : {}),
             ...(typeof c.model === "string" && c.model.trim() ? { model: c.model.trim() } : {}),
             ...(type === "skill" && c.lockModel === true ? { lockModel: true as const } : {}),
+            ...(type === "skill" && c.ignoreCpuThrottle === true ? { ignoreCpuThrottle: true as const } : {}),
             ...(type === "skill" && sanitizeAgentFeatures(c.agentFeatures)
               ? { agentFeatures: sanitizeAgentFeatures(c.agentFeatures) }
               : {}),
