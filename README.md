@@ -14,12 +14,17 @@
 - **Briefing**: a working session on your Backlog. The easy cards start at once, the others are decided with an agent, oldest first.
 - **Fast forward and pause**: one button sends every ready Backlog card through the board in parallel, another pauses automatic runs.
 - **Dependencies**: a card can wait in Backlog until other cards are done, then start on its own.
+- **Pull requests and CI**: on a GitHub repository with `gh` logged in, cards go through a draft PR, wait for every CI check and merge through the PR.
+- **Issue sources**: import GitHub or Gitea issues into the Backlog, and close them when their card reaches Done.
+- **Agent tuning**: effort, agent features (MCP, Chrome, hooks, user settings) and model per column or per card, with a smart mode that picks them for each run.
+- **Machine friendly**: new agents wait while the CPU is busy, and every process an agent starts is stopped when its run ends.
+- **Crash safe**: runs cut by a stop or a crash are marked interrupted and resumed in one click.
 - **Project tabs**: keep several projects open in one browser tab and switch with a click or ⌥1–9.
 - **One committable file**: the whole board is a single `nightshift.json`.
 - **Template skills shipped**: grill, plan, implement, review and merge, copied into new projects.
 - **Local only**: the server listens on `127.0.0.1` only.
 
-[Quick start](#quick-start) · [Concepts](#concepts) · [Configuration](#configuration) · [Development](#development)
+[Quick start](#quick-start) · [Concepts](#concepts) · [Pull requests](#pull-requests-and-ci) · [Issue sources](#issue-sources) · [Agent settings](#agent-settings) · [Configuration](#configuration) · [Development](#development)
 
 ## Prerequisites
 
@@ -55,7 +60,12 @@ bun start ~/code/my-project                                  # open a board for 
 - **Session per card**: a column continues the card's Claude session (`claude --resume`) unless it has "Fresh session" ticked, which starts a new session there (the columns after it continue that new one). New skill columns, and the default board, have "Fresh session" ticked: the card description carries what each skill needs, and the context does not grow from column to column. Untick it on a column to keep the earlier context. Boards already on disk keep their columns as they are. If the card's session cannot be resumed (deleted, or created on another machine), the step starts a new one.
 - **Questions**: when an agent is blocked on human decisions, it returns all its `questions` at once and the card waits in its column. Answering in the card resumes the same Claude session (`claude --resume`) with every Q/A pair. `AskUserQuestion` is disabled for agents.
 - **Needs attention**: a run whose agent returns `move: "stay"` without questions in a skill column (every bundled skill does so when it stops unfinished: failed tests, timeout, missing branch), or returns while a background command it started is still running, is shown as "Needs attention" instead of done. Its output is applied but the card does not move, and it is not re-run on its own: use Retry or Resume. A run that returns before its background command ends is first resumed once with a prompt telling the agent to run the command again and wait for it. Agents are told to start any command longer than 2 minutes with `run_in_background: true` and an explicit `timeout` (up to 2 h), and to wait for it inside their turn: `claude -p` asks for the structured output as soon as a turn ends.
-- **Project tabs**: the bar above the board lists the open projects (folder name, full path on hover, a counter of cards waiting for your answer). `+` opens the project picker; picking a project already open activates its tab. Click a tab, or press ⌘1–9 / Ctrl+1–9 / ⌥1–9, to switch without reloading the page. Closing a tab only hides it: the project and its agents keep running on the server. The open tabs are kept in the browser (`localStorage`), not in `nightshift.json`; a tab whose folder no longer opens stays and shows the error.
+- **Interrupted runs**: every agent and test command runs in its own process group, tracked in `~/.nightshift/runs/`; when a run ends, Nightshift stops everything it started, background commands included (SIGTERM, then SIGKILL after 5 s). Stopping Nightshift marks the running cards "Interrupted"; after a crash, the next start stops the dead server's processes and marks its cards the same way. Interrupted cards are never restarted on their own: the **Resume interrupted (N)** button resumes each card's session (or retries the card when it has none). Cancelling a queued card takes it out of the queue and keeps its session.
+- **Resumed sessions** get only what changed in the card description since the session last saw it (changed sections, removed headings), or the full description when the diff would be longer.
+- **Drafts**: a Backlog card can be marked as a draft (checkbox in the new card dialog and the Backlog quick add, toggle in the card detail, `draft` in the API). A draft stays in Backlog: fast forward, dependency release and the briefing leave it alone. The flag is cleared when the card leaves Backlog.
+- **Attachments**: paste or drop files into a card description, an answer or a feedback. Images (PNG, JPEG, GIF, WebP, 8 MB max) are saved in `~/.nightshift/screenshots/<card>/`, other files (20 MB max) in `~/.nightshift/attachments/<card>/`, and the text gets a link to the absolute path so the agent can read them. Files dropped in the new card dialog are sent with Create. They are deleted with the card.
+- **Header**: the top bar holds the project tabs, the card and agent counters, the questions waiting for you, the Board / Briefing switch, the Claude quota (5 h and 7 d usage with reset times, read from the agents' `rate_limit_info` and kept in `~/.nightshift/usage.json`), fast forward, pause, the columns editor, skills, settings and search.
+- **Project tabs**: the bar above the board lists the open projects (folder name, full path on hover, a counter of cards waiting for your answer, a badge for cards waiting in an inert column such as To Test). `+` opens the project picker; picking a project already open activates its tab. Click a tab, or press ⌘1–9 / Ctrl+1–9 / ⌥1–9, to switch without reloading the page. Closing a tab only hides it: the project and its agents keep running on the server. The open tabs are kept in the browser (`localStorage`), not in `nightshift.json`; a tab whose folder no longer opens stays and shows the error.
 - **Dependencies**: a card in Backlog can depend on other cards of the board (`dependsOn`), chosen in the new card dialog or the card's detail. While one of them is not in Done, the card is held in Backlog (its tile shows "waiting #12, #15"). As soon as they are all in Done, Nightshift moves it to the first column after Backlog that it does not skip, and the column's agent starts as for a manual move; the history records "Dependencies done (#12, #15): Backlog → Grill" and the list is cleared, so a dependency leaving Done afterwards changes nothing. Dependencies can be edited only while the card is in Backlog, and a change that would create a cycle is refused. Removing the last unmet dependency, or deleting the card it waited for (a deleted dependency counts as met and is recorded as "Dependency #12 deleted"), releases the card at once. A card dragged out of Backlog by hand keeps its list but is never moved by it. Only the instance that runs the project's agents releases cards when a dependency reaches Done (never a `--no-agents` one); on opening a project it releases the cards whose dependencies finished meanwhile. Fast forward skips held cards.
 - **Feedback**: from a card's detail, in any column (inert too), you can send free-text feedback to the agent. It resumes the card's last Claude session (`claude --resume`) with your text and the current card; the agent returns `move` (`stay`, `next` = the column after the card's current column, or a column id) and may ask questions as usual. A failed or cancelled run leaves the card in place and the feedback can be sent again.
 - A card is (re)run when it enters a skill column; the rerun button forces a new run. Moving or deleting a card during a run stops its agent.
@@ -123,6 +133,37 @@ An explicit action that starts during a pause still respects the parallel limits
 
 Both states are kept in memory (never in `nightshift.json`): after a restart, the project plays and fast forward is off. The routes are `POST /api/flow/fast-forward/on`, `/api/flow/fast-forward/off`, `/api/flow/pause` and `/api/flow/play` (`{project}`), each returning `{ flow: { fastForward, paused } }`, and rejected with 409 on an instance without agents or a project whose agents another process runs.
 
+## Pull requests and CI
+
+When the project's `origin` is on GitHub and `gh` is installed and logged in (`gh auth status`), Nightshift delivers cards through pull requests. Settings > This project > **Pull requests**: Automatic (default) or Off, the merge method (`merge` by default, `squash` or `rebase`) and **Auto-merge** (off by default). They are stored in `nightshift.json` (`pullRequests`, `mergeMethod`, `autoMerge`) only when they differ from the defaults, and set with `PUT /api/pull-requests`. A card uses the PR flow only when its `## Result` names a worktree and a base branch that exists on `origin`; otherwise it keeps the local merge.
+
+1. **Review starts**: the branch `nightshift/<card id>` is pushed and a draft PR is opened (an open PR goes back to draft). Its link is written under `## Review` and shown on the tile.
+2. **Review passes**: the PR title and body are updated and the PR is marked ready. The title is the `Title:` line of a `## Pull request` section in the card, else the card title; the body is the rest of that section, else a summary built from `## Result`, `## Definition of done` and `## Review`. The bundled skills do not write `## Pull request`: add it to your own review skill if you want to control the PR text.
+3. **Merge column**: Nightshift checks **every** CI check, not only the required ones. A failing check writes the failed checks and their logs into `## CI` and sends the card back to Review. Pending checks leave the card waiting (or schedule `gh pr merge --auto` when auto-merge is on and the base requires checks); a branch with workflows but no check reported yet waits up to 10 minutes. A conflict hands the card to the merge agent. Green checks merge the PR with `gh pr merge --delete-branch`, then the local base is fast-forwarded and the worktree removed.
+4. **CI watcher**: every 60 s, the instance that runs the agents looks at the cards waiting for checks. A merged PR moves its card to Done. A failed check sends it back to Review. When automatic merging can no longer happen (conflict, auto-merge cancelled by GitHub, merge refused), a new merge run starts, three times at most per entry in the column; after that the card needs attention.
+
+The tile shows the CI state of the card's PR (green, running, red, or a conflict warning), refreshed every 2 minutes and when the card is opened; the card detail lists the failed checks with links to their runs.
+
+**Fast merge.** In a `nightshift-merge` column, Nightshift first tries to merge without an agent: it takes the merge lock, merges the card branch, runs the tests if the base moved, fast-forwards the base, pushes (never forced) and removes the worktree. Any problem starts the merge agent with what happened. The columns editor sets it per column: **Merge without an agent when possible** (on by default), **When the base moved** (`test`: merge the base and run the test command, the default; `merge`: no tests; `agent`) and the **Test command**. In PR mode the same switch enables the PR merge above.
+
+## Issue sources
+
+Settings > This project > **Issue sources** imports issues as Backlog cards. A source has a provider (GitHub, or Gitea with its base URL), a repository (`owner/name`), optional labels (any of them matches) and, for GitHub, an optional search query. Sources are stored in `nightshift.json` (`issueSources`); access tokens are stored in `~/.nightshift/settings.json` (`issueTokens`) and never sent to the browser. **Test connection** counts the matching issues.
+
+- Every 5 minutes, and when the sources are saved, new open matching issues become Backlog cards (body plus a `Source:` link; the tile shows a link to the issue). An issue edited upstream updates its card, and an issue closed upstream deletes its card, as long as the card is still in Backlog. A card you delete is not imported again.
+- **Resync** also removes the Backlog cards that no longer match the filters, after a preview. The UI offers it after a filter change.
+- **Write-back**: when a card reaches Done, Nightshift comments `Done in Nightshift (#n).` with the last run summary and closes the issue. Without a token, write-back is disabled.
+- A header icon shows a sync in progress or a failed sync; the command palette has **Sync issues**. Only the instance that runs the agents syncs.
+
+## Agent settings
+
+Each run resolves its model, effort and agent features in layers, the first that answers wins: the card (models editor in the card detail, per skill), the column (columns editor), smart mode, the global settings, then the default.
+
+- **Effort** (`claude --effort`): `low`, `medium`, `high`, `xhigh` or `max`. The default is economic per skill: grill `medium`, plan `high`, implement `medium`, review `medium`, merge `low`, other skills `medium`. In Settings, "Inherit" passes no `--effort` at all.
+- **Agent features**: four switches, MCP servers (off by default), Chrome (off), hooks (off) and user skills and CLAUDE.md (on). A feature that is off becomes a `claude` flag (`--strict-mcp-config`, `--no-chrome`, `--settings {"disableAllHooks":true}`, `--setting-sources project,local`). The log's start line lists them.
+- **Smart mode** (on by default, per column: inherit, on or off): before a new run of a skill column, one short `claude -p --model haiku` call reads the card title and description and the names of your MCP servers, then picks the features and the effort (`low` to `high`) for what the card and column leave open. The choice is cached on the card until its title, description or skill change, reused when a session resumes, logged with its cost, and added to the run cost. If the call fails or takes more than 30 s, the run starts without it.
+- **CPU limit** (Settings > Agents, on by default, 85 %): while the machine's CPU load, averaged over about 10 s, is at or above the limit, new card agents wait; running agents are never stopped and quick runs ignore it. The header shows a CPU pill while cards wait. A skill column can tick **Ignore the CPU limit**.
+
 ## Language
 
 The interface is available in English and French. Choose it in Settings -> Language: Auto (follows the browser language), English or French. The choice is stored as `language` (`auto`, `en` or `fr`) in `~/.nightshift/settings.json` and applies immediately. Server messages, agent prompts and skills stay in English.
@@ -133,7 +174,7 @@ The interface is available in English and French. Choose it in Settings -> Langu
 bun start [project-dir] [--port 4545] [--no-open] [--no-agents]   # defaults to the current directory
 ```
 
-Options: `--port <n>` / `-p <n>` (0..65535, also read from the `PORT` environment variable, default 4545), `--no-open` (do not open the browser), `--no-agents` (never start agents), `--help`. Environment: `NIGHTSHIFT_HOME` (data directory, default `~/.nightshift`), `NIGHTSHIFT_USER_SKILLS` (user skills directory, default `~/.claude/skills`), `NIGHTSHIFT_NO_OPEN` (set to any value to skip opening the browser).
+Options: `--port <n>` / `-p <n>` (0..65535, also read from the `PORT` environment variable, default 4545), `--no-open` (do not open the browser), `--no-agents` (never start agents), `--help`. Environment: `NIGHTSHIFT_HOME` (data directory, default `~/.nightshift`), `NIGHTSHIFT_USER_SKILLS` (user skills directory, default `~/.claude/skills`), `NIGHTSHIFT_NO_OPEN` (set to any value to skip opening the browser), `NIGHTSHIFT_TEMPLATE_SKILLS` (folder of the template skills copied into new projects), `NIGHTSHIFT_SMART_TIMEOUT_MS` (smart mode timeout, default 30000).
 
 The server listens on `127.0.0.1` only, and rejects requests whose `Host` or `Origin` is not local or whose body is not `application/json`.
 
@@ -150,9 +191,12 @@ Then turn on **Run agents through teamclaude** in Settings (off by default) and 
 ## Files
 
 - `<project>/nightshift.json`: columns and cards. Commit it in your projects. This repository ignores it (`.gitignore`): it is the dogfooding board of Nightshift itself. External edits (e.g. `git pull`) are picked up live.
-- `~/.nightshift/settings.json`: global settings (permission mode, model, extra `claude` args, teamclaude, recent projects).
+- `~/.nightshift/settings.json`: global settings (permission mode, model, effort, agent features, smart mode, CPU limit, extra `claude` args, teamclaude, language, recent projects) and the issue source tokens.
 - `~/.nightshift/logs/`: last agent log per card (removed with the card).
-- `~/.nightshift/screenshots/`: card screenshots.
+- `~/.nightshift/screenshots/`: card screenshots and pasted images.
+- `~/.nightshift/attachments/`: other files attached to cards.
+- `~/.nightshift/usage.json`: last Claude quota seen in the agent streams.
+- `~/.nightshift/runs/`: one file per running server, listing the processes of each run (used to stop them after a crash).
 - `~/.nightshift/briefings/`: the briefing of each project (triage result and conversations).
 - `~/.nightshift/locks/`: one lock per open project folder.
 
@@ -174,7 +218,8 @@ Scripts: `bun run lint` (Biome), `bun run format`, `bun run typecheck`, `bun tes
 ## Layout
 
 - `bin/nightshift.ts`: CLI entry point.
-- `src/server/`: `store.ts` (board file), `orchestrator.ts` (queue, `claude` processes, questions), `briefing.ts` (backlog triage and decision conversations), `skills.ts`, `settings.ts`, `server.ts` (HTTP + WebSocket API, serves the UI).
+- `src/server/`: `store.ts` (board file), `orchestrator.ts` (queue, `claude` processes, questions), `briefing.ts` (backlog triage and decision conversations), `prFlow.ts`, `ciWatcher.ts`, `prStatus.ts` and `codehost/` (pull requests and CI), `fastMerge.ts`, `issues/` (issue sources), `smart.ts`, `cpuLoad.ts`, `runRegistry.ts` and `runProcesses.ts` (process tracking), `skills.ts`, `settings.ts`, `server.ts` (HTTP + WebSocket API, serves the UI).
+- `src/shared/`: types and logic shared by the server and the UI.
 - `src/web/`: React UI bundled by Bun.
 - `src/web/i18n/`: in-house translation layer, `en/` and `fr/` message files per namespace.
 - `.claude/skills/`: the skills Nightshift runs on its own board, also the templates copied into new projects.
