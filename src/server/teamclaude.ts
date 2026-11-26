@@ -141,10 +141,27 @@ export async function readTeamclaudeEnv(
   }
 }
 
-/** Probes the proxy, then reads `teamclaude env`: what a launch through teamclaude needs. */
-export async function prepareProxyEnv(url: string): Promise<{ ok: true; env: ProxyEnv } | { ok: false; failure: TeamclaudeFailure }> {
+/** The last `teamclaude env` read that worked, per proxy URL. */
+const lastGoodEnv = new Map<string, ProxyEnv>();
+
+/**
+ * Probes the proxy, then reads `teamclaude env`: what a launch through teamclaude needs. The proxy answering is what
+ * matters: when only the read fails (the CLI can take seconds to start on a busy machine), the last good read for
+ * this URL is used, or the read is tried once more when there is none. A missing binary is never retried.
+ */
+export async function prepareProxyEnv(
+  url: string,
+  envTimeoutMs = ENV_TIMEOUT_MS,
+): Promise<{ ok: true; env: ProxyEnv } | { ok: false; failure: TeamclaudeFailure }> {
   if (!(await probeProxy(url))) return { ok: false, failure: { kind: "no-response", url } };
-  return readTeamclaudeEnv();
+  let r = await readTeamclaudeEnv(envTimeoutMs);
+  if (!r.ok && r.failure.kind === "env-failed") {
+    const cached = lastGoodEnv.get(url);
+    if (cached) return { ok: true, env: cached };
+    r = await readTeamclaudeEnv(envTimeoutMs);
+  }
+  if (r.ok) lastGoodEnv.set(url, r.env);
+  return r;
 }
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
